@@ -9,6 +9,7 @@ export default function Home() {
   const supabase = useMemo(() => createSupabaseBrowserClient(), []);
   const [loading, setLoading] = useState(true);
   const [email, setEmail] = useState<string | null>(null);
+  const [accessToken, setAccessToken] = useState<string | null>(null);
   const [role, setRole] = useState<Role>("Consulta");
   const [page, setPage] = useState<AppPage>("Painel");
   const [accessReady, setAccessReady] = useState(false);
@@ -18,8 +19,8 @@ export default function Home() {
 
   useEffect(() => {
     if (!supabase) { setLoading(false); return; }
-    supabase.auth.getSession().then(({ data }) => { setEmail(data.session?.user.email ?? null);setNeedsPassword(data.session?.user.user_metadata?.needs_password===true); setLoading(false); });
-    const { data } = supabase.auth.onAuthStateChange((event, session) => {setEmail(session?.user.email ?? null);setNeedsPassword(session?.user.user_metadata?.needs_password===true);if(event==="PASSWORD_RECOVERY")setPasswordRecovery(true)});
+    supabase.auth.getSession().then(({ data }) => { setEmail(data.session?.user.email ?? null);setAccessToken(data.session?.access_token ?? null);setNeedsPassword(data.session?.user.user_metadata?.needs_password===true); setLoading(false); });
+    const { data } = supabase.auth.onAuthStateChange((event, session) => {setEmail(session?.user.email ?? null);setAccessToken(session?.access_token ?? null);setNeedsPassword(session?.user.user_metadata?.needs_password===true);if(event==="PASSWORD_RECOVERY")setPasswordRecovery(true)});
     return () => data.subscription.unsubscribe();
   }, [supabase]);
 
@@ -42,7 +43,7 @@ export default function Home() {
     if (error) throw error;
   }
 
-  async function signOut() { if (supabase) await supabase.auth.signOut(); localStorage.removeItem("jpi-demo-session"); setEmail(null); }
+  async function signOut() { if (supabase) await supabase.auth.signOut(); localStorage.removeItem("jpi-demo-session"); setAccessToken(null);setEmail(null); }
   async function requestPasswordReset(inputEmail:string){if(!supabase)throw new Error("Recuperação indisponível no modo de apresentação.");const {error}=await supabase.auth.resetPasswordForEmail(inputEmail.trim().toLowerCase(),{redirectTo:window.location.origin});if(error)throw error}
   async function definePassword(password:string){if(!supabase)return;const {error}=await supabase.auth.updateUser({password,data:{needs_password:false}});if(error)throw error;setNeedsPassword(false);setPasswordRecovery(false)}
 
@@ -51,5 +52,5 @@ export default function Home() {
   if (!email && !demoSession) return <Login onSignIn={signIn} onResetPassword={requestPasswordReset} configured={hasSupabaseConfig()} externalError={authError} />;
   if (email&&(needsPassword||passwordRecovery)) return <SetPassword onSave={definePassword} recovery={passwordRecovery}/>;
   if (email&&!accessReady) return <div className="splash"><div className="logo-mark">JPI</div><p>Verificando permissões…</p></div>;
-  return <AppShell email={email ?? "administrador@jpi.edu.br"} role={role} page={page} onPageChange={setPage} onSignOut={signOut} />;
+  return <AppShell email={email ?? "administrador@jpi.edu.br"} accessToken={accessToken} role={role} page={page} onPageChange={setPage} onSignOut={signOut} />;
 }

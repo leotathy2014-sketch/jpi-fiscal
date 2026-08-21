@@ -478,7 +478,7 @@ type CompanyConfig = {
   updated_at: string;
 };
 type Tab = "Empresa" | "Certificado A1" | "Integrações" | "Usuários e Permissões";
-export function SettingsPage() {
+export function SettingsPage({accessToken}:{accessToken:string|null}) {
   const [tab, setTab] = useState<Tab>("Empresa");
   return (
     <>
@@ -501,7 +501,7 @@ export function SettingsPage() {
           Usuários e Permissões
         </button>
       </div>
-      {tab === "Empresa" ? <CompanySettings /> : tab === "Certificado A1" ? <CertificateSettings /> : tab === "Integrações" ? <Integrations /> : <Permissions />}
+      {tab === "Empresa" ? <CompanySettings /> : tab === "Certificado A1" ? <CertificateSettings /> : tab === "Integrações" ? <Integrations accessToken={accessToken} /> : <Permissions />}
     </>
   );
 }
@@ -1045,7 +1045,7 @@ function CertificateSettings() {
     </div>
   );
 }
-function Integrations() {
+function Integrations({accessToken}:{accessToken:string|null}) {
   const supabase = useMemo(() => createSupabaseBrowserClient(), []);
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -1074,17 +1074,8 @@ function Integrations() {
     event.preventDefault();
     if (!supabase) return;
     setElapsed(0);setBusy(true);setError("");setMessage("");setConnectionStage("Preparando certificado A1…");
-    const sessionResult = await Promise.race([
-      supabase.auth.getSession(),
-      new Promise<never>((_, reject) => window.setTimeout(() => reject(new Error("SESSION_TIMEOUT")), 8000)),
-    ]).catch(sessionError => {
-      setError(sessionError instanceof Error && sessionError.message === "SESSION_TIMEOUT" ? "A sessão demorou para responder. Recarregue a página e entre novamente." : "Não foi possível recuperar sua sessão.");
-      return null;
-    });
-    if (!sessionResult) { setBusy(false);setConnectionStage("");return; }
-    const { data } = sessionResult;
-    const token = data.session?.access_token;
-    if (!token) { setError("Sessão expirada. Entre novamente.");setBusy(false);return; }
+    const token = accessToken;
+    if (!token) { setError("Sessão expirada. Saia do sistema e entre novamente.");setBusy(false);setConnectionStage("");return; }
     const form = new FormData(event.currentTarget);
     const controller = new AbortController();
     let timeout = 0;
