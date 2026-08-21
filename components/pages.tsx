@@ -1,6 +1,6 @@
 "use client";
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
-import { AlertCircle, ArrowUpRight, Building2, Check, CircleDollarSign, Clock3, FileCheck2, FilePlus2, Filter, KeyRound, Link2, MoreHorizontal, Plus, Search, ShieldCheck, SlidersHorizontal, UploadCloud, UserCog, UsersRound, WalletCards, X } from "lucide-react";
+import { AlertCircle, ArrowUpRight, Building2, Check, CircleDollarSign, Clock3, FileCheck2, FilePlus2, Filter, KeyRound, Link2, MoreHorizontal, Plus, Search, ShieldCheck, SlidersHorizontal, Trash2, UploadCloud, UserCog, UsersRound, WalletCards, X } from "lucide-react";
 import type { Role } from "./app-shell";
 import { createSupabaseBrowserClient } from "@/lib/supabase";
 
@@ -850,6 +850,54 @@ function CertificateSettings() {
     setBusy(false);
     await load();
   }
+  async function deleteCertificate() {
+    if (!supabase || items.length === 0) return;
+    const confirmed = window.confirm("EXCLUSÃO DEFINITIVA\n\nEsta ação apagará o certificado A1, todos os arquivos armazenados, o histórico e o aviso de validade. Deseja continuar?");
+    if (!confirmed) return;
+    setBusy(true);
+    setError("");
+    setMessage("");
+    const { data: storedFiles, error: listError } = await supabase.storage.from("certificados-a1").list("certificado-a1", { limit: 1000 });
+    if (listError) {
+      setError("Não foi possível conferir os arquivos privados antes da exclusão.");
+      setBusy(false);
+      return;
+    }
+    const paths = Array.from(
+      new Set([
+        ...items.map((item) => item.arquivo_caminho),
+        ...(storedFiles || []).filter((file) => file.name !== ".emptyFolderPlaceholder").map((file) => `certificado-a1/${file.name}`),
+      ]),
+    );
+    if (paths.length) {
+      const { error: storageError } = await supabase.storage.from("certificados-a1").remove(paths);
+      if (storageError) {
+        setError("A exclusão foi interrompida porque o arquivo privado não pôde ser removido.");
+        setBusy(false);
+        return;
+      }
+    }
+    const { error: rowsError } = await supabase.from("certificados_a1").delete().in(
+      "id",
+      items.map((item) => item.id),
+    );
+    if (rowsError) {
+      setError("O arquivo foi removido, mas o banco ainda precisa ser limpo. Tente excluir novamente.");
+      setBusy(false);
+      return;
+    }
+    const { error: alertError } = await supabase.from("certificado_a1_alerta").delete().eq("id", true);
+    if (alertError) {
+      setError("O certificado foi excluído, mas o aviso de validade ainda precisa ser removido. Tente novamente.");
+      setBusy(false);
+      return;
+    }
+    setItems([]);
+    setMetadata(null);
+    setMessage("Certificado, arquivos, histórico e aviso de validade excluídos definitivamente.");
+    window.dispatchEvent(new Event("jpi-certificate-updated"));
+    setBusy(false);
+  }
   const active = items.find((item) => item.status === "ATIVO");
   const days = active ? Math.ceil((new Date(`${active.validade}T23:59:59`).getTime() - Date.now()) / 86400000) : null;
   return (
@@ -926,6 +974,12 @@ function CertificateSettings() {
                 <KeyRound />
                 <span>Nenhum certificado anexado.</span>
               </div>
+            )}
+            {items.length > 0 && (
+              <button type="button" className="danger full certificate-delete" disabled={busy} onClick={deleteCertificate}>
+                <Trash2 size={17} />
+                {busy ? "Excluindo…" : "Excluir certificado completamente"}
+              </button>
             )}
           </article>
           <article className="panel">
