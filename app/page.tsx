@@ -3,42 +3,51 @@
 import { useEffect, useMemo, useState } from "react";
 import { createSupabaseBrowserClient, hasSupabaseConfig } from "@/lib/supabase";
 import { AppShell, type AppPage, type Role } from "@/components/app-shell";
-import { Login } from "@/components/login";
+import { Login, SetPassword } from "@/components/login";
 
 export default function Home() {
   const supabase = useMemo(() => createSupabaseBrowserClient(), []);
   const [loading, setLoading] = useState(true);
   const [email, setEmail] = useState<string | null>(null);
-  const [role, setRole] = useState<Role>("Administrador");
+  const [role, setRole] = useState<Role>("Consulta");
   const [page, setPage] = useState<AppPage>("Painel");
+  const [accessReady, setAccessReady] = useState(false);
+  const [needsPassword, setNeedsPassword] = useState(false);
+  const [authError, setAuthError] = useState("");
 
   useEffect(() => {
     if (!supabase) { setLoading(false); return; }
-    supabase.auth.getSession().then(({ data }) => { setEmail(data.session?.user.email ?? null); setLoading(false); });
-    const { data } = supabase.auth.onAuthStateChange((_event, session) => setEmail(session?.user.email ?? null));
+    supabase.auth.getSession().then(({ data }) => { setEmail(data.session?.user.email ?? null);setNeedsPassword(data.session?.user.user_metadata?.needs_password===true); setLoading(false); });
+    const { data } = supabase.auth.onAuthStateChange((_event, session) => {setEmail(session?.user.email ?? null);setNeedsPassword(session?.user.user_metadata?.needs_password===true)});
     return () => data.subscription.unsubscribe();
   }, [supabase]);
 
   useEffect(() => {
     if (!supabase || !email) return;
-    supabase.from("app_users").select("role").eq("email", email).eq("active", true).maybeSingle()
+    setAccessReady(false);
+    supabase.from("app_users").select("role,active").eq("email", email).maybeSingle()
       .then(({ data }) => {
         const roles: Record<string, Role> = { admin: "Administrador", financeiro: "Financeiro", secretaria: "Secretaria", consulta: "Consulta" };
-        if (data?.role && roles[data.role]) setRole(roles[data.role]);
+        if (!data?.active || !data.role || !roles[data.role]) {supabase.auth.signOut();setEmail(null);setAuthError("Seu acesso está bloqueado ou ainda não foi autorizado.");return}
+        setRole(roles[data.role]);setAccessReady(true);
       });
   }, [supabase, email]);
 
   async function signIn(inputEmail: string, password: string, remember: boolean) {
-    if (!supabase) { localStorage.setItem("jpi-demo-session", "1"); setEmail(inputEmail); return; }
+    setAuthError("");
+    if (!supabase) { localStorage.setItem("jpi-demo-session", "1");setRole("Administrador");setAccessReady(true); setEmail(inputEmail); return; }
     if (remember) localStorage.setItem("jpi-remembered-email", inputEmail); else localStorage.removeItem("jpi-remembered-email");
     const { error } = await supabase.auth.signInWithPassword({ email: inputEmail, password });
     if (error) throw error;
   }
 
   async function signOut() { if (supabase) await supabase.auth.signOut(); localStorage.removeItem("jpi-demo-session"); setEmail(null); }
+  async function definePassword(password:string){if(!supabase)return;const {error}=await supabase.auth.updateUser({password,data:{needs_password:false}});if(error)throw error;setNeedsPassword(false)}
 
   if (loading) return <div className="splash"><div className="logo-mark">JPI</div><p>Carregando sistema…</p></div>;
   const demoSession = typeof window !== "undefined" && localStorage.getItem("jpi-demo-session") === "1";
-  if (!email && !demoSession) return <Login onSignIn={signIn} configured={hasSupabaseConfig()} />;
+  if (!email && !demoSession) return <Login onSignIn={signIn} configured={hasSupabaseConfig()} externalError={authError} />;
+  if (email&&needsPassword) return <SetPassword onSave={definePassword}/>;
+  if (email&&!accessReady) return <div className="splash"><div className="logo-mark">JPI</div><p>Verificando permissões…</p></div>;
   return <AppShell email={email ?? "administrador@jpi.edu.br"} role={role} page={page} onPageChange={setPage} onSignOut={signOut} />;
 }

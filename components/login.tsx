@@ -2,7 +2,7 @@
 import { FormEvent, useState } from "react";
 import { Eye, EyeOff, LockKeyhole, Mail } from "lucide-react";
 
-export function Login({ onSignIn, configured }: { onSignIn: (email: string, password: string, remember: boolean) => Promise<void>; configured: boolean }) {
+export function Login({ onSignIn, configured, externalError="" }: { onSignIn: (email: string, password: string, remember: boolean) => Promise<void>; configured: boolean; externalError?:string }) {
   const [email, setEmail] = useState(() => typeof window === "undefined" ? "" : localStorage.getItem("jpi-remembered-email") ?? "");
   const [password, setPassword] = useState(""); const [remember, setRemember] = useState(true);
   const [show, setShow] = useState(false); const [busy, setBusy] = useState(false); const [error, setError] = useState("");
@@ -15,10 +15,12 @@ export function Login({ onSignIn, configured }: { onSignIn: (email: string, pass
       <label>E-mail<div className="input-wrap"><Mail size={18}/><input type="email" value={email} onChange={e=>setEmail(e.target.value)} placeholder="seu@email.com" required autoComplete="email"/></div></label>
       <label>Senha<div className="input-wrap"><LockKeyhole size={18}/><input type={show?"text":"password"} value={password} onChange={e=>setPassword(e.target.value)} placeholder="Sua senha" required={configured} autoComplete="current-password"/><button type="button" className="icon-button" onClick={()=>setShow(!show)} aria-label="Mostrar senha">{show?<EyeOff size={18}/>:<Eye size={18}/>}</button></div></label>
       <div className="login-options"><label className="check"><input type="checkbox" checked={remember} onChange={e=>setRemember(e.target.checked)}/> Lembrar meu e-mail</label><span>Sessão protegida</span></div>
-      {error && <div className="error-box">{error}</div>}
+      {(error||externalError) && <div className="error-box">{error||externalError}</div>}
       {!configured && <div className="demo-box">Ambiente de apresentação: use qualquer e-mail para visualizar o sistema.</div>}
       <button className="primary full" disabled={busy}>{busy?"Entrando…":"Entrar no sistema"}</button>
       <p className="privacy">Seus dados são tratados com segurança e conforme a LGPD.</p>
     </form></section>
   </main>;
 }
+
+export function SetPassword({onSave}:{onSave:(password:string)=>Promise<void>}){const [password,setPassword]=useState("");const [confirm,setConfirm]=useState("");const [busy,setBusy]=useState(false);const [error,setError]=useState("");async function submit(e:FormEvent){e.preventDefault();if(password.length<8){setError("A senha deve ter pelo menos 8 caracteres.");return}if(password!==confirm){setError("As senhas não são iguais.");return}setBusy(true);setError("");try{await onSave(password)}catch(err){setError(err instanceof Error?err.message:"Não foi possível definir a senha.")}finally{setBusy(false)}}return <main className="login-page"><section className="login-brand"><div><div className="brand-seal">JPI</div><h1>JPI Fiscal</h1><p>Primeiro acesso seguro.</p></div><small>Jardim Escola João Paulo I</small></section><section className="login-panel"><form className="login-card" onSubmit={submit}><div><span className="eyebrow">PRIMEIRO ACESSO</span><h2>Defina sua senha</h2><p className="muted">Crie uma senha pessoal com pelo menos 8 caracteres.</p></div><label>Nova senha<div className="input-wrap"><LockKeyhole size={18}/><input type="password" value={password} onChange={e=>setPassword(e.target.value)} minLength={8} required autoComplete="new-password"/></div></label><label>Confirmar senha<div className="input-wrap"><LockKeyhole size={18}/><input type="password" value={confirm} onChange={e=>setConfirm(e.target.value)} minLength={8} required autoComplete="new-password"/></div></label>{error&&<div className="error-box">{error}</div>}<button className="primary full" disabled={busy}>{busy?"Salvando…":"Salvar senha e entrar"}</button></form></section></main>}
