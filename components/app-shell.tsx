@@ -1,7 +1,8 @@
 "use client";
 import { useState } from "react";
 import { BarChart3, BookOpen, ChevronDown, FileText, GraduationCap, HelpCircle, LogOut, Menu, ReceiptText, Search, Settings, Users, WalletCards, X } from "lucide-react";
-import { Dashboard, Students, Payments, Invoices, SettingsPage } from "./pages";
+import { SettingsPage } from "./pages";
+import { LiveDashboard, LiveStudents, LivePayments, LiveInvoices } from "./live-pages";
 
 export type Role = "Administrador"|"Financeiro"|"Secretaria"|"Consulta";
 export type AppPage = "Painel"|"Alunos e Responsáveis"|"Mensalidades"|"NFS-e"|"Configurações";
@@ -14,7 +15,7 @@ const nav: {name:AppPage; icon: typeof BarChart3; roles:Role[]}[] = [
 ];
 export function AppShell({email,role,onRoleChange,page,onPageChange,onSignOut}:{email:string;role:Role;onRoleChange:(r:Role)=>void;page:AppPage;onPageChange:(p:AppPage)=>void;onSignOut:()=>void}) {
  const [open,setOpen]=useState(false); const visible=nav.filter(n=>n.roles.includes(role));
- const content = page==="Painel"?<Dashboard/>:page==="Alunos e Responsáveis"?<Students role={role}/>:page==="Mensalidades"?<Payments role={role}/>:page==="NFS-e"?<Invoices role={role}/>:<SettingsPage/>;
+ const content = page==="Painel"?<LiveDashboard/>:page==="Alunos e Responsáveis"?<LiveStudents role={role}/>:page==="Mensalidades"?<LivePayments role={role}/>:page==="NFS-e"?<LiveInvoices role={role}/>:<SettingsPage/>;
  return <div className="app-layout"><aside className={open?"sidebar open":"sidebar"}>
   <div className="sidebar-head"><div className="brand-seal small">JPI</div><div><strong>JPI Fiscal</strong><span>Gestão escolar</span></div><button className="close-mobile" onClick={()=>setOpen(false)}><X/></button></div>
   <nav><span className="nav-label">MENU PRINCIPAL</span>{visible.map(({name,icon:Icon})=><button key={name} className={page===name?"nav-item active":"nav-item"} onClick={()=>{onPageChange(name);setOpen(false)}}><Icon size={19}/>{name}</button>)}</nav>

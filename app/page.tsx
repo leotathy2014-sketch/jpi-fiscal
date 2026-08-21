@@ -19,6 +19,15 @@ export default function Home() {
     return () => data.subscription.unsubscribe();
   }, [supabase]);
 
+  useEffect(() => {
+    if (!supabase || !email) return;
+    supabase.from("app_users").select("role").eq("email", email).eq("active", true).maybeSingle()
+      .then(({ data }) => {
+        const roles: Record<string, Role> = { admin: "Administrador", financeiro: "Financeiro", secretaria: "Secretaria", consulta: "Consulta" };
+        if (data?.role && roles[data.role]) setRole(roles[data.role]);
+      });
+  }, [supabase, email]);
+
   async function signIn(inputEmail: string, password: string, remember: boolean) {
     if (!supabase) { localStorage.setItem("jpi-demo-session", "1"); setEmail(inputEmail); return; }
     if (remember) localStorage.setItem("jpi-remembered-email", inputEmail); else localStorage.removeItem("jpi-remembered-email");
