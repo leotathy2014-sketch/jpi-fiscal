@@ -1053,6 +1053,7 @@ function Integrations() {
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
   const [elapsed, setElapsed] = useState(0);
+  const [connectionStage, setConnectionStage] = useState("");
   useEffect(() => {
     if (!busy) return;
     const startedAt = Date.now() - elapsed * 1000;
@@ -1063,22 +1064,28 @@ function Integrations() {
   async function testHomologation(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!supabase) return;
-    setElapsed(0);setBusy(true);setError("");setMessage("");
+    setElapsed(0);setBusy(true);setError("");setMessage("");setConnectionStage("Preparando certificado A1…");
     const { data } = await supabase.auth.getSession();
     const token = data.session?.access_token;
     if (!token) { setError("Sessão expirada. Entre novamente.");setBusy(false);return; }
     const form = new FormData(event.currentTarget);
     const controller = new AbortController();
-    const timeout = window.setTimeout(() => controller.abort(), 25000);
+    let timeout = 0;
     try {
-      const response = await fetch("/api/nfse/homologation/test", { method: "POST", headers: { Authorization: `Bearer ${token}` }, body: form, signal: controller.signal });
+      setConnectionStage("Conectando ao Emissor Nacional de testes…");
+      const response = await Promise.race([
+        fetch("/api/nfse/homologation/test", { method: "POST", headers: { Authorization: `Bearer ${token}` }, body: form, signal: controller.signal }),
+        new Promise<never>((_, reject) => { timeout = window.setTimeout(() => reject(new Error("JPI_CONNECTION_TIMEOUT")), 25000); }),
+      ]);
       const result = await response.json() as { ok?:boolean;environment?:string;error?:string };
       if (!response.ok || !result.ok) { setError(result.error || "Não foi possível testar a integração.");return; }
       setTested(true);setMessage(`Conexão segura confirmada no ambiente de ${result.environment}. Nenhuma nota foi emitida.`);
     } catch (requestError) {
-      setError(requestError instanceof DOMException && requestError.name === "AbortError" ? "O ambiente nacional não respondeu em 25 segundos. Tente novamente mais tarde." : "A conexão foi interrompida. Confira sua internet e tente novamente.");
+      const timedOut = requestError instanceof Error && (requestError.message === "JPI_CONNECTION_TIMEOUT" || requestError.name === "AbortError");
+      if (timedOut) controller.abort();
+      setError(timedOut ? "A conexão foi encerrada após 25 segundos sem resposta. O ambiente nacional ou o acesso ao certificado não respondeu." : "A conexão foi interrompida. Confira sua internet e tente novamente.");
     } finally {
-      window.clearTimeout(timeout);setBusy(false);
+      if (timeout) window.clearTimeout(timeout);setBusy(false);setConnectionStage("");
     }
   }
   return (
@@ -1128,7 +1135,7 @@ function Integrations() {
         </div>
         <button className="secondary full">Configurar canais</button>
       </article>
-    </div>{open&&<div className="modal-backdrop"><div className="modal-card small-modal"><div className="modal-head"><h2>Testar ambiente de homologação</h2><button className="icon-button" onClick={()=>setOpen(false)}><X/></button></div><form className="data-form" onSubmit={testHomologation}>{error&&<div className="error-box">{error}</div>}{message&&<div className="success-box">{message}</div>}<div className="notice compact warning"><ShieldCheck/><span>Este teste usa o certificado A1 somente para autenticar a conexão com a produção restrita. Nenhuma DPS ou NFS-e será enviada.</span></div>{(busy||elapsed>0)&&<div className="connection-timer"><Clock3/><span>{busy?"Tempo de conexão":"Tempo da tentativa"}</span><strong>{elapsedLabel}</strong></div>}<label>Senha do certificado A1<input name="password" type="password" autoComplete="off" required/></label><div className="form-actions"><button type="button" className="secondary" onClick={()=>setOpen(false)}>Fechar</button><button className="primary" disabled={busy||tested}>{busy?`Conectando · ${elapsedLabel}`:tested?"Conexão confirmada":"Testar conexão"}</button></div></form></div></div>}</>
+    </div>{open&&<div className="modal-backdrop"><div className="modal-card small-modal"><div className="modal-head"><h2>Testar ambiente de homologação</h2><button className="icon-button" onClick={()=>setOpen(false)}><X/></button></div><form className="data-form" onSubmit={testHomologation}>{error&&<div className="error-box">{error}</div>}{message&&<div className="success-box">{message}</div>}<div className="notice compact warning"><ShieldCheck/><span>Este teste usa o certificado A1 somente para autenticar a conexão com a produção restrita. Nenhuma DPS ou NFS-e será enviada.</span></div>{(busy||elapsed>0)&&<div className="connection-timer"><Clock3/><span>{busy?(connectionStage||"Iniciando conexão…"):"Tempo da tentativa"}</span><strong>{elapsedLabel}</strong></div>}<label>Senha do certificado A1<input name="password" type="password" autoComplete="off" required disabled={busy}/></label><div className="form-actions"><button type="button" className="secondary" onClick={()=>setOpen(false)} disabled={busy}>Fechar</button><button className="primary" disabled={busy||tested}>{busy?`Conectando · ${elapsedLabel}`:tested?"Conexão confirmada":"Testar conexão"}</button></div></form></div></div>}</>
   );
 }
 type ManagedUser = {
