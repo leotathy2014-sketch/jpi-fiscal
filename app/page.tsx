@@ -40,5 +40,5 @@ export default function Home() {
   if (loading) return <div className="splash"><div className="logo-mark">JPI</div><p>Carregando sistema…</p></div>;
   const demoSession = typeof window !== "undefined" && localStorage.getItem("jpi-demo-session") === "1";
   if (!email && !demoSession) return <Login onSignIn={signIn} configured={hasSupabaseConfig()} />;
-  return <AppShell email={email ?? "administrador@jpi.edu.br"} role={role} onRoleChange={setRole} page={page} onPageChange={setPage} onSignOut={signOut} />;
+  return <AppShell email={email ?? "administrador@jpi.edu.br"} role={role} page={page} onPageChange={setPage} onSignOut={signOut} />;
 }
