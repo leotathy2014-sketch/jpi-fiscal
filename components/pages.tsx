@@ -1060,12 +1060,29 @@ function Integrations() {
     const timer = window.setInterval(() => setElapsed(Math.floor((Date.now() - startedAt) / 1000)), 250);
     return () => window.clearInterval(timer);
   }, [busy, elapsed]);
+  useEffect(() => {
+    if (!busy) return;
+    const watchdog = window.setTimeout(() => {
+      setBusy(false);
+      setConnectionStage("");
+      setError("A preparação da conexão foi encerrada após 25 segundos. Atualize a página e entre novamente se o problema continuar.");
+    }, 25000);
+    return () => window.clearTimeout(watchdog);
+  }, [busy]);
   const elapsedLabel = `${String(Math.floor(elapsed / 60)).padStart(2, "0")}:${String(elapsed % 60).padStart(2, "0")}`;
   async function testHomologation(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!supabase) return;
     setElapsed(0);setBusy(true);setError("");setMessage("");setConnectionStage("Preparando certificado A1…");
-    const { data } = await supabase.auth.getSession();
+    const sessionResult = await Promise.race([
+      supabase.auth.getSession(),
+      new Promise<never>((_, reject) => window.setTimeout(() => reject(new Error("SESSION_TIMEOUT")), 8000)),
+    ]).catch(sessionError => {
+      setError(sessionError instanceof Error && sessionError.message === "SESSION_TIMEOUT" ? "A sessão demorou para responder. Recarregue a página e entre novamente." : "Não foi possível recuperar sua sessão.");
+      return null;
+    });
+    if (!sessionResult) { setBusy(false);setConnectionStage("");return; }
+    const { data } = sessionResult;
     const token = data.session?.access_token;
     if (!token) { setError("Sessão expirada. Entre novamente.");setBusy(false);return; }
     const form = new FormData(event.currentTarget);
