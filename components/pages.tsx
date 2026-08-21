@@ -1060,11 +1060,18 @@ function Integrations() {
     const token = data.session?.access_token;
     if (!token) { setError("Sessão expirada. Entre novamente.");setBusy(false);return; }
     const form = new FormData(event.currentTarget);
-    const response = await fetch("/api/nfse/homologation/test", { method: "POST", headers: { Authorization: `Bearer ${token}` }, body: form });
-    const result = await response.json() as { ok?:boolean;environment?:string;error?:string };
-    setBusy(false);
-    if (!response.ok || !result.ok) { setError(result.error || "Não foi possível testar a integração.");return; }
-    setTested(true);setMessage(`Conexão segura confirmada no ambiente de ${result.environment}. Nenhuma nota foi emitida.`);
+    const controller = new AbortController();
+    const timeout = window.setTimeout(() => controller.abort(), 25000);
+    try {
+      const response = await fetch("/api/nfse/homologation/test", { method: "POST", headers: { Authorization: `Bearer ${token}` }, body: form, signal: controller.signal });
+      const result = await response.json() as { ok?:boolean;environment?:string;error?:string };
+      if (!response.ok || !result.ok) { setError(result.error || "Não foi possível testar a integração.");return; }
+      setTested(true);setMessage(`Conexão segura confirmada no ambiente de ${result.environment}. Nenhuma nota foi emitida.`);
+    } catch (requestError) {
+      setError(requestError instanceof DOMException && requestError.name === "AbortError" ? "O ambiente nacional não respondeu em 25 segundos. Tente novamente mais tarde." : "A conexão foi interrompida. Confira sua internet e tente novamente.");
+    } finally {
+      window.clearTimeout(timeout);setBusy(false);
+    }
   }
   return (
     <><div className="settings-grid">

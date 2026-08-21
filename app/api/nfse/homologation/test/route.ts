@@ -26,6 +26,8 @@ function testMutualTls(pfx: Buffer, passphrase: string) {
       },
     );
     request.on("timeout", () => request.destroy(new Error("Tempo esgotado ao acessar o ambiente nacional.")));
+    const hardTimeout = setTimeout(() => request.destroy(new Error("O ambiente nacional não respondeu no prazo de segurança.")), 18000);
+    request.on("close", () => clearTimeout(hardTimeout));
     request.on("error", reject);
     request.end();
   });
