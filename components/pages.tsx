@@ -716,7 +716,12 @@ type CertificateRow = {
   id: string;
   arquivo_nome: string;
   arquivo_caminho: string;
+  emissao: string | null;
   validade: string;
+  titular: string | null;
+  cnpj: string | null;
+  emissor: string | null;
+  numero_serie: string | null;
   status: string;
   created_at: string;
   substituido_at: string | null;
@@ -818,7 +823,12 @@ function CertificateSettings() {
     const { error: insertError } = await supabase.from("certificados_a1").insert({
       arquivo_nome: file.name,
       arquivo_caminho: path,
+      emissao: inspected.validFrom,
       validade,
+      titular: inspected.holder || null,
+      cnpj: inspected.cnpj || null,
+      emissor: inspected.issuer || null,
+      numero_serie: inspected.serialNumber || null,
       enviado_por: userData.user.id,
     });
     if (insertError) {
@@ -968,6 +978,18 @@ function CertificateSettings() {
                   <b>{new Date(`${active.validade}T12:00:00`).toLocaleDateString("pt-BR")}</b>
                   <small>{days !== null && days >= 0 ? `${days} dias restantes` : "Certificado vencido"}</small>
                 </div>
+                {active.titular ? (
+                  <div className="certificate-saved-data">
+                    <strong>Dados gravados no banco</strong>
+                    <span>Titular: {active.titular}</span>
+                    <span>CNPJ: {active.cnpj ? maskCnpj(active.cnpj) : "Não informado"}</span>
+                    <span>Emissão: {active.emissao ? new Date(`${active.emissao}T12:00:00`).toLocaleDateString("pt-BR") : "Não informada"}</span>
+                    <span>Emissor: {active.emissor || "Não informado"}</span>
+                    <small>Número de série: {active.numero_serie || "Não informado"}</small>
+                  </div>
+                ) : (
+                  <div className="notice compact warning"><AlertCircle /><span>Importe novamente este certificado para gravar permanentemente os dados detalhados.</span></div>
+                )}
               </>
             ) : (
               <div className="empty-certificate">
@@ -995,6 +1017,8 @@ function CertificateSettings() {
                   <div key={item.id}>
                     <Status>{item.status === "ATIVO" ? "Ativo" : "Substituído"}</Status>
                     <strong>{item.arquivo_nome}</strong>
+                    {item.titular && <span>{item.titular}</span>}
+                    {item.cnpj && <span>CNPJ: {maskCnpj(item.cnpj)}</span>}
                     <span>Validade: {new Date(`${item.validade}T12:00:00`).toLocaleDateString("pt-BR")}</span>
                     <small>Enviado em {new Date(item.created_at).toLocaleString("pt-BR")}</small>
                   </div>
