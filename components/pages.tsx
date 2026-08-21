@@ -1046,8 +1046,28 @@ function CertificateSettings() {
   );
 }
 function Integrations() {
+  const supabase = useMemo(() => createSupabaseBrowserClient(), []);
+  const [open, setOpen] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [tested, setTested] = useState(false);
+  const [error, setError] = useState("");
+  const [message, setMessage] = useState("");
+  async function testHomologation(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!supabase) return;
+    setBusy(true);setError("");setMessage("");
+    const { data } = await supabase.auth.getSession();
+    const token = data.session?.access_token;
+    if (!token) { setError("Sessão expirada. Entre novamente.");setBusy(false);return; }
+    const form = new FormData(event.currentTarget);
+    const response = await fetch("/api/nfse/homologation/test", { method: "POST", headers: { Authorization: `Bearer ${token}` }, body: form });
+    const result = await response.json() as { ok?:boolean;environment?:string;error?:string };
+    setBusy(false);
+    if (!response.ok || !result.ok) { setError(result.error || "Não foi possível testar a integração.");return; }
+    setTested(true);setMessage(`Conexão segura confirmada no ambiente de ${result.environment}. Nenhuma nota foi emitida.`);
+  }
   return (
-    <div className="settings-grid">
+    <><div className="settings-grid">
       <article className="integration-card">
         <div className="integration-head">
           <span className="integration-icon green">
@@ -1068,7 +1088,7 @@ function Integrations() {
           <span className="integration-icon blue">
             <FileCheck2 />
           </span>
-          <Status>Homologação</Status>
+          <Status>{tested ? "Conectado" : "Homologação"}</Status>
         </div>
         <h3>Provedor de NFS-e</h3>
         <p>Integração municipal preparada, sem envio fiscal real.</p>
@@ -1076,7 +1096,7 @@ function Integrations() {
           <span>Emissão real</span>
           <strong className="amber-text">Desativada</strong>
         </div>
-        <button className="secondary full">Configurar homologação</button>
+        <button className="secondary full" onClick={() => { setOpen(true);setError("");setMessage(""); }}>Testar conexão segura</button>
       </article>
       <article className="integration-card">
         <div className="integration-head">
@@ -1093,7 +1113,7 @@ function Integrations() {
         </div>
         <button className="secondary full">Configurar canais</button>
       </article>
-    </div>
+    </div>{open&&<div className="modal-backdrop"><div className="modal-card small-modal"><div className="modal-head"><h2>Testar ambiente de homologação</h2><button className="icon-button" onClick={()=>setOpen(false)}><X/></button></div><form className="data-form" onSubmit={testHomologation}>{error&&<div className="error-box">{error}</div>}{message&&<div className="success-box">{message}</div>}<div className="notice compact warning"><ShieldCheck/><span>Este teste usa o certificado A1 somente para autenticar a conexão com a produção restrita. Nenhuma DPS ou NFS-e será enviada.</span></div><label>Senha do certificado A1<input name="password" type="password" autoComplete="off" required/></label><div className="form-actions"><button type="button" className="secondary" onClick={()=>setOpen(false)}>Fechar</button><button className="primary" disabled={busy||tested}>{busy?"Conectando…":tested?"Conexão confirmada":"Testar conexão"}</button></div></form></div></div>}</>
   );
 }
 type ManagedUser = {
