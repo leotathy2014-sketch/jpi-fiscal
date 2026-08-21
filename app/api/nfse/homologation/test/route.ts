@@ -4,7 +4,8 @@ import { request as httpsRequest } from "node:https";
 
 export const runtime = "nodejs";
 
-const HOMOLOGATION_URL = "https://sefin.producaorestrita.nfse.gov.br/API/SefinNacional/docs/index";
+const RIO_IBGE_CODE = "3304557";
+const HOMOLOGATION_URL = `https://adn.producaorestrita.nfse.gov.br/parametrizacao/${RIO_IBGE_CODE}/convenio`;
 
 function testMutualTls(pfx: Buffer, passphrase: string) {
   return new Promise<{ status: number; server: string }>((resolve, reject) => {
@@ -71,7 +72,7 @@ export async function POST(request: NextRequest) {
   try {
     const result = await testMutualTls(Buffer.from(await file.arrayBuffer()), password);
     if (result.status < 200 || result.status >= 400) {
-      return NextResponse.json({ error: `O ambiente nacional respondeu com o código ${result.status}. Confira a habilitação do certificado na produção restrita.` }, { status: 502 });
+      return NextResponse.json({ error: `O serviço fiscal nacional respondeu com o código ${result.status}. ${result.status === 403 ? "O certificado precisa ser habilitado para a produção restrita." : "Tente novamente mais tarde."}` }, { status: 502 });
     }
     return NextResponse.json({ ok: true, environment: "Produção restrita", server: result.server, status: result.status });
   } catch (error) {
