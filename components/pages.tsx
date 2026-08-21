@@ -844,6 +844,7 @@ function CertificateSettings() {
       await load();
       return;
     }
+    window.dispatchEvent(new Event("jpi-certificate-updated"));
     form.reset();
     setMessage(active ? "Certificado lido e substituído com segurança." : "Certificado lido e anexado com segurança.");
     setBusy(false);
