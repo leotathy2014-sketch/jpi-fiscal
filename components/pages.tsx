@@ -1019,8 +1019,12 @@ function CertificateSettings() {
                     <strong>{item.arquivo_nome}</strong>
                     {item.titular && <span>{item.titular}</span>}
                     {item.cnpj && <span>CNPJ: {maskCnpj(item.cnpj)}</span>}
+                    {item.emissao && <span>Emissão: {new Date(`${item.emissao}T12:00:00`).toLocaleDateString("pt-BR")}</span>}
                     <span>Validade: {new Date(`${item.validade}T12:00:00`).toLocaleDateString("pt-BR")}</span>
+                    {item.emissor && <span>Emissor: {item.emissor}</span>}
+                    {item.numero_serie && <small>Número de série: {item.numero_serie}</small>}
                     <small>Enviado em {new Date(item.created_at).toLocaleString("pt-BR")}</small>
+                    {item.substituido_at && <small>Substituído em {new Date(item.substituido_at).toLocaleString("pt-BR")}</small>}
                   </div>
                 ))
               ) : (
