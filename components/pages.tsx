@@ -1052,10 +1052,18 @@ function Integrations() {
   const [tested, setTested] = useState(false);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
+  const [elapsed, setElapsed] = useState(0);
+  useEffect(() => {
+    if (!busy) return;
+    const startedAt = Date.now() - elapsed * 1000;
+    const timer = window.setInterval(() => setElapsed(Math.floor((Date.now() - startedAt) / 1000)), 250);
+    return () => window.clearInterval(timer);
+  }, [busy, elapsed]);
+  const elapsedLabel = `${String(Math.floor(elapsed / 60)).padStart(2, "0")}:${String(elapsed % 60).padStart(2, "0")}`;
   async function testHomologation(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!supabase) return;
-    setBusy(true);setError("");setMessage("");
+    setElapsed(0);setBusy(true);setError("");setMessage("");
     const { data } = await supabase.auth.getSession();
     const token = data.session?.access_token;
     if (!token) { setError("Sessão expirada. Entre novamente.");setBusy(false);return; }
@@ -1120,7 +1128,7 @@ function Integrations() {
         </div>
         <button className="secondary full">Configurar canais</button>
       </article>
-    </div>{open&&<div className="modal-backdrop"><div className="modal-card small-modal"><div className="modal-head"><h2>Testar ambiente de homologação</h2><button className="icon-button" onClick={()=>setOpen(false)}><X/></button></div><form className="data-form" onSubmit={testHomologation}>{error&&<div className="error-box">{error}</div>}{message&&<div className="success-box">{message}</div>}<div className="notice compact warning"><ShieldCheck/><span>Este teste usa o certificado A1 somente para autenticar a conexão com a produção restrita. Nenhuma DPS ou NFS-e será enviada.</span></div><label>Senha do certificado A1<input name="password" type="password" autoComplete="off" required/></label><div className="form-actions"><button type="button" className="secondary" onClick={()=>setOpen(false)}>Fechar</button><button className="primary" disabled={busy||tested}>{busy?"Conectando…":tested?"Conexão confirmada":"Testar conexão"}</button></div></form></div></div>}</>
+    </div>{open&&<div className="modal-backdrop"><div className="modal-card small-modal"><div className="modal-head"><h2>Testar ambiente de homologação</h2><button className="icon-button" onClick={()=>setOpen(false)}><X/></button></div><form className="data-form" onSubmit={testHomologation}>{error&&<div className="error-box">{error}</div>}{message&&<div className="success-box">{message}</div>}<div className="notice compact warning"><ShieldCheck/><span>Este teste usa o certificado A1 somente para autenticar a conexão com a produção restrita. Nenhuma DPS ou NFS-e será enviada.</span></div>{(busy||elapsed>0)&&<div className="connection-timer"><Clock3/><span>{busy?"Tempo de conexão":"Tempo da tentativa"}</span><strong>{elapsedLabel}</strong></div>}<label>Senha do certificado A1<input name="password" type="password" autoComplete="off" required/></label><div className="form-actions"><button type="button" className="secondary" onClick={()=>setOpen(false)}>Fechar</button><button className="primary" disabled={busy||tested}>{busy?`Conectando · ${elapsedLabel}`:tested?"Conexão confirmada":"Testar conexão"}</button></div></form></div></div>}</>
   );
 }
 type ManagedUser = {
