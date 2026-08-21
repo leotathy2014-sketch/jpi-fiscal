@@ -511,6 +511,7 @@ function CompanySettings() {
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
+  const [logoLoaded, setLogoLoaded] = useState(false);
   useEffect(() => {
     if (!supabase) return;
     supabase
@@ -581,6 +582,8 @@ function CompanySettings() {
     setMessage(logo?.size ? "Dados e logomarca salvos. Atualize a página para visualizar a nova identidade." : "Configurações da empresa salvas com sucesso.");
   }
   if (!config) return <div className="panel">{error || "Carregando dados da empresa…"}</div>;
+  const publicLogoUrl = supabase?.storage.from("logos-empresa").getPublicUrl("empresa/logo").data.publicUrl;
+  const currentLogoUrl = publicLogoUrl ? `${publicLogoUrl}?v=${encodeURIComponent(config.updated_at)}` : null;
   return (
     <div className="company-settings">
       <form className="panel data-form company-form" onSubmit={save} key={config.updated_at}>
@@ -594,6 +597,11 @@ function CompanySettings() {
         {message && <div className="success-box">{message}</div>}
         <label className="file-field">
           <span>Logomarca da empresa</span>
+          <div className={`company-logo-preview ${logoLoaded ? "loaded" : ""}`}>
+            <span className="company-logo-icon"><Building2 size={22} /></span>
+            {currentLogoUrl && <img src={currentLogoUrl} alt="Logomarca atualmente cadastrada" onLoad={() => setLogoLoaded(true)} onError={() => setLogoLoaded(false)} />}
+            <section><strong>Logomarca atual</strong><small>{logoLoaded ? "Imagem cadastrada no sistema" : "Nenhuma imagem encontrada"}</small></section>
+          </div>
           <div>
             <UploadCloud />
             <input name="logo" type="file" accept="image/png,image/jpeg,image/webp" />
