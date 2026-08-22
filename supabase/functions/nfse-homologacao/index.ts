@@ -28,6 +28,41 @@ type SefinResponse = {
   erros?: FiscalError[];
 };
 
+type HomologationStage =
+  | "validar_dados_fiscais"
+  | "armazenar_dps"
+  | "abrir_certificado"
+  | "assinar_dps"
+  | "armazenar_dps_assinada"
+  | "transmitir_sefin"
+  | "interpretar_retorno"
+  | "armazenar_nfse_autorizada"
+  | "atualizar_cadastro"
+  | "registrar_historico";
+
+const STAGE_ERRORS: Record<HomologationStage, { code: string; message: string }> = {
+  validar_dados_fiscais: { code: "NFSE_HML_VALIDAR_DADOS", message: "Não foi possível validar os dados fiscais para a nota de teste." },
+  armazenar_dps: { code: "NFSE_HML_ARMAZENAR_DPS", message: "Não foi possível guardar a DPS validada no ambiente seguro." },
+  abrir_certificado: { code: "NFSE_HML_ABRIR_A1", message: "O certificado A1 não pôde ser preparado para a assinatura. Confira a senha e tente novamente." },
+  assinar_dps: { code: "NFSE_HML_ASSINAR_DPS", message: "Não foi possível concluir a assinatura local da DPS com o certificado A1." },
+  armazenar_dps_assinada: { code: "NFSE_HML_ARMAZENAR_ASSINADA", message: "Não foi possível guardar a DPS assinada no ambiente seguro." },
+  transmitir_sefin: { code: "NFSE_HML_TRANSMITIR", message: "Não foi possível comunicar a nota de teste à produção restrita." },
+  interpretar_retorno: { code: "NFSE_HML_LER_RETORNO", message: "A produção restrita respondeu, mas o retorno não pôde ser interpretado." },
+  armazenar_nfse_autorizada: { code: "NFSE_HML_ARMAZENAR_NFSE", message: "A nota de teste foi gerada, mas o XML autorizado não pôde ser guardado." },
+  atualizar_cadastro: { code: "NFSE_HML_ATUALIZAR_CADASTRO", message: "A nota de teste foi gerada, mas o cadastro não pôde ser atualizado." },
+  registrar_historico: { code: "NFSE_HML_REGISTRAR_HISTORICO", message: "A nota de teste foi gerada, mas o histórico não pôde ser atualizado." },
+};
+
+function safeTechnicalError(error: unknown) {
+  const name = error instanceof Error ? error.name : "UnknownError";
+  const rawMessage = error instanceof Error ? error.message : String(error || "Falha sem mensagem.");
+  const message = rawMessage
+    .replace(/((?:password|senha)\s*[:=]\s*)[^\s,;]+/gi, "$1[REMOVIDO]")
+    .replace(/[\r\n\t]+/g, " ")
+    .slice(0, 500);
+  return { name: name.slice(0, 80), message };
+}
+
 function json(body: unknown, status = 200) {
   return Response.json(body, { status, headers: CORS_HEADERS });
 }
@@ -277,25 +312,32 @@ Deno.serve(async request => {
   const { data: pfxFile, error: pfxError } = await admin.storage.from(CERTIFICATE_BUCKET).download(certificate.arquivo_caminho);
   if (pfxError || !pfxFile) return json({ error: "Não foi possível acessar o certificado privado." }, 500);
 
+  let stage: HomologationStage = "validar_dados_fiscais";
   try {
     const draft = buildRestrictedDps(payment as unknown as DpsSource, company as CompanySource);
     const unsignedXml = draft.xml;
     const unsignedPath = `dps/${payment.id}/${draft.id}.xml`;
+    stage = "armazenar_dps";
     const { error: unsignedUploadError } = await admin.storage
       .from(XML_BUCKET)
       .upload(unsignedPath, new Blob([unsignedXml], { type: "application/xml" }), { contentType: "application/xml", upsert: true });
     if (unsignedUploadError) throw new Error("Não foi possível atualizar a DPS validada no backend.");
+    stage = "abrir_certificado";
     const keys = readCertificate(new Uint8Array(await pfxFile.arrayBuffer()), password);
     password = "";
+    stage = "assinar_dps";
     const signedXml = signDps(unsignedXml, keys.privateKeyPem, keys.certificatePem);
     const signedPath = `dps-assinada/${payment.id}/${draft.id}.xml`;
+    stage = "armazenar_dps_assinada";
     const { error: signedUploadError } = await admin.storage
       .from(XML_BUCKET)
       .upload(signedPath, new Blob([signedXml], { type: "application/xml" }), { contentType: "application/xml", upsert: true });
     if (signedUploadError) throw new Error("Não foi possível guardar a DPS assinada.");
 
     const payload = JSON.stringify({ dpsXmlGZipB64: bytesToBase64(gzip(new TextEncoder().encode(signedXml))) });
+    stage = "transmitir_sefin";
     const response = await postToRestrictedProduction(payload, keys.certificateChainPem, keys.privateKeyPem);
+    stage = "interpretar_retorno";
     let sefin: SefinResponse = {};
     try { sefin = await response.json(); } catch { sefin = {}; }
 
@@ -316,12 +358,14 @@ Deno.serve(async request => {
     const safeKey = sefin.chaveAcesso.replace(/[^A-Za-z0-9_-]/g, "").slice(0, 80);
     if (!safeKey) throw new Error("A produção restrita retornou uma chave de acesso inválida.");
     const nfsePath = `nfse-homologacao/${payment.id}/${safeKey}.xml`;
+    stage = "armazenar_nfse_autorizada";
     const { error: nfseUploadError } = await admin.storage
       .from(XML_BUCKET)
       .upload(nfsePath, new Blob([nfseXml], { type: "application/xml" }), { contentType: "application/xml", upsert: true });
     if (nfseUploadError) throw new Error("A nota de teste foi gerada, mas o XML retornado não pôde ser guardado.");
 
     const issuedAt = sefin.dataHoraProcessamento || new Date().toISOString();
+    stage = "atualizar_cadastro";
     const { error: updateError } = await admin.from("mensalidades").update({
       status_nfse: "NFS-e emitida em homologação",
       dps_xml_path: unsignedPath,
@@ -332,6 +376,7 @@ Deno.serve(async request => {
       homologacao_emitida_em: issuedAt,
     }).eq("id", payment.id);
     if (updateError) throw new Error("A nota de teste foi gerada, mas o cadastro não pôde ser atualizado.");
+    stage = "registrar_historico";
     await admin.from("historico_nfse").insert({
       mensalidade_id: payment.id,
       evento: "nfse_homologacao_emitida",
@@ -348,10 +393,21 @@ Deno.serve(async request => {
     });
   } catch (error) {
     password = "";
-    const message = error instanceof Error ? error.message : "Falha inesperada na homologação.";
-    const safeMessage = /password|senha|A1|assinatura|certificado|XML|produção restrita|nota de teste/i.test(message)
-      ? message
-      : "Não foi possível concluir a comunicação com a produção restrita.";
-    return json({ error: safeMessage }, 502);
+    const stageError = STAGE_ERRORS[stage];
+    console.error(JSON.stringify({
+      event: "nfse_homologacao_falhou",
+      monthlyId: payment.id,
+      stage,
+      diagnosticCode: stageError.code,
+      technicalError: safeTechnicalError(error),
+    }));
+    await admin.from("historico_nfse").insert({
+      mensalidade_id: payment.id,
+      evento: "nfse_homologacao_falhou",
+      valor_anterior: payment.valor_nfse,
+      valor_novo: payment.valor_nfse,
+      detalhes: `Falha técnica ${stageError.code} antes da conclusão da homologação. Nenhuma NFS-e com validade fiscal foi emitida.`,
+    });
+    return json({ error: stageError.message, diagnosticCode: stageError.code }, 502);
   }
 });
