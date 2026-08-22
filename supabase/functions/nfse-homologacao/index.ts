@@ -51,6 +51,69 @@ function base64ToBytes(value: string) {
   return bytes;
 }
 
+const digits = (value: unknown) => String(value || "").replace(/\D/g, "");
+const escapeXml = (value: unknown) => String(value || "").replace(/[<>&"']/g, character => ({
+  "<": "&lt;", ">": "&gt;", "&": "&amp;", '"': "&quot;", "'": "&apos;",
+}[character] || character));
+
+function competenceDate(value: string) {
+  const match = value.trim().match(/^(0[1-9]|1[0-2])\/(20\d{2})$/);
+  if (!match) throw new Error("A competência da mensalidade é inválida.");
+  return `${match[2]}-${match[1]}-01`;
+}
+
+function issueDateTime() {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "America/Sao_Paulo", year: "numeric", month: "2-digit", day: "2-digit",
+    hour: "2-digit", minute: "2-digit", second: "2-digit", hourCycle: "h23",
+  }).formatToParts(new Date());
+  const part = (type: Intl.DateTimeFormatPartTypes) => parts.find(item => item.type === type)?.value || "";
+  return `${part("year")}-${part("month")}-${part("day")}T${part("hour")}:${part("minute")}:${part("second")}-03:00`;
+}
+
+type DpsSource = {
+  id: number;
+  competencia: string;
+  valor_nfse: number;
+  descricao_servico: string | null;
+  alunos: { responsavel: string; cpf_cnpj: string | null; email: string | null; whatsapp: string | null; segmento: string } | null;
+};
+type CompanySource = { cnpj: string; inscricao_municipal: string | null; razao_social: string };
+
+function buildRestrictedDps(payment: DpsSource, company: CompanySource) {
+  const municipality = "3304557";
+  const providerCnpj = digits(company.cnpj);
+  const takerTaxId = digits(payment.alunos?.cpf_cnpj);
+  const description = String(payment.descricao_servico || "").trim();
+  const takerName = String(payment.alunos?.responsavel || "").trim();
+  const series = "70000";
+  const number = String(payment.id);
+  const normalizedSegment = String(payment.alunos?.segmento || "").toLocaleLowerCase("pt-BR");
+  const nbs = normalizedSegment.includes("médio") ? "122013000"
+    : normalizedSegment.includes("1º") || normalizedSegment.includes("6º") || normalizedSegment.includes("fundamental") ? "122012000"
+    : "122011200";
+  if (providerCnpj.length !== 14) throw new Error("O CNPJ do prestador é inválido.");
+  if (![11, 14].includes(takerTaxId.length)) throw new Error("O CPF/CNPJ do tomador é inválido.");
+  if (!takerName) throw new Error("O responsável financeiro do tomador não foi informado.");
+  if (!description || description.length > 2000) throw new Error("A descrição fiscal deve ter entre 1 e 2000 caracteres.");
+  if (!Number.isFinite(Number(payment.valor_nfse)) || Number(payment.valor_nfse) <= 0) throw new Error("O valor da NFS-e é inválido.");
+  const id = `DPS${municipality}2${providerCnpj}${series}${number.padStart(15, "0")}`;
+  const document = takerTaxId.length === 11 ? `<CPF>${takerTaxId}</CPF>` : `<CNPJ>${takerTaxId}</CNPJ>`;
+  const phone = digits(payment.alunos?.whatsapp);
+  return { id, xml: `<?xml version="1.0" encoding="UTF-8"?>
+<DPS xmlns="http://www.sped.fazenda.gov.br/nfse" versao="1.01">
+  <infDPS Id="${id}">
+    <tpAmb>2</tpAmb><dhEmi>${issueDateTime()}</dhEmi><verAplic>JPI-FISCAL-1.01</verAplic>
+    <serie>${series}</serie><nDPS>${number}</nDPS><dCompet>${competenceDate(payment.competencia)}</dCompet><tpEmit>1</tpEmit><cLocEmi>${municipality}</cLocEmi>
+    <prest><CNPJ>${providerCnpj}</CNPJ>${company.inscricao_municipal ? `<IM>${digits(company.inscricao_municipal)}</IM>` : ""}<xNome>${escapeXml(company.razao_social)}</xNome><regTrib><opSimpNac>1</opSimpNac><regEspTrib>0</regEspTrib></regTrib></prest>
+    <toma>${document}<xNome>${escapeXml(takerName)}</xNome>${phone.length >= 6 ? `<fone>${phone}</fone>` : ""}${payment.alunos?.email ? `<email>${escapeXml(payment.alunos.email.trim())}</email>` : ""}</toma>
+    <serv><locPrest><cLocPrestacao>${municipality}</cLocPrestacao></locPrest><cServ><cTribNac>080101</cTribNac><xDescServ>${escapeXml(description)}</xDescServ><cNBS>${nbs}</cNBS></cServ></serv>
+    <valores><vServPrest><vServ>${Number(payment.valor_nfse).toFixed(2)}</vServ></vServPrest><trib><tribMun><tribISSQN>1</tribISSQN><tpRetISSQN>1</tpRetISSQN><pAliq>5.00</pAliq></tribMun><totTrib><indTotTrib>0</indTotTrib></totTrib></trib></valores>
+    <IBSCBS><finNFSe>0</finNFSe><cIndOp>030101</cIndOp><indDest>0</indDest><valores><trib><gIBSCBS><CST>200</CST><cClassTrib>200028</cClassTrib></gIBSCBS></trib></valores></IBSCBS>
+  </infDPS>
+</DPS>` };
+}
+
 function sameRsaKey(certificate: ForgeCertificate, key: ForgePrivateKey) {
   const publicKey = certificate.publicKey as forge.pki.rsa.PublicKey;
   return Boolean(publicKey?.n && key?.n && publicKey.n.compareTo(key.n) === 0);
@@ -179,7 +242,7 @@ Deno.serve(async request => {
 
   const { data: payment, error: paymentError } = await userClient
     .from("mensalidades")
-    .select("id,valor_nfse,dps_xml_path,dps_xml_id,chave_nfse_homologacao,nfse_homologacao_xml_path,homologacao_emitida_em")
+    .select("id,competencia,valor_nfse,descricao_servico,dps_xml_path,dps_xml_id,chave_nfse_homologacao,nfse_homologacao_xml_path,homologacao_emitida_em,alunos(responsavel,cpf_cnpj,email,whatsapp,segmento)")
     .eq("id", monthlyId)
     .maybeSingle();
   if (paymentError || !payment) return json({ error: "Mensalidade não encontrada ou sem permissão de acesso." }, 404);
@@ -192,7 +255,14 @@ Deno.serve(async request => {
       issuedAt: payment.homologacao_emitida_em,
     });
   }
-  if (!payment.dps_xml_path || !payment.dps_xml_id) return json({ error: "Gere e guarde primeiro o XML da DPS." }, 400);
+  if (!payment.dps_xml_path || !payment.dps_xml_id) return json({ error: "Gere e guarde primeiro a prévia XML da DPS." }, 400);
+
+  const { data: company } = await admin
+    .from("configuracoes_empresa")
+    .select("cnpj,inscricao_municipal,razao_social")
+    .eq("id", true)
+    .maybeSingle();
+  if (!company) return json({ error: "Os dados fiscais da empresa não foram encontrados." }, 400);
 
   const { data: certificate } = await admin
     .from("certificados_a1")
@@ -204,20 +274,21 @@ Deno.serve(async request => {
   if (!certificate) return json({ error: "Certificado A1 ativo não encontrado." }, 400);
   if (new Date(`${certificate.validade}T23:59:59-03:00`).getTime() < Date.now()) return json({ error: "O certificado A1 está vencido." }, 400);
 
-  const [{ data: pfxFile, error: pfxError }, { data: xmlFile, error: xmlError }] = await Promise.all([
-    admin.storage.from(CERTIFICATE_BUCKET).download(certificate.arquivo_caminho),
-    admin.storage.from(XML_BUCKET).download(payment.dps_xml_path),
-  ]);
+  const { data: pfxFile, error: pfxError } = await admin.storage.from(CERTIFICATE_BUCKET).download(certificate.arquivo_caminho);
   if (pfxError || !pfxFile) return json({ error: "Não foi possível acessar o certificado privado." }, 500);
-  if (xmlError || !xmlFile) return json({ error: "Não foi possível acessar o XML privado da DPS." }, 500);
 
   try {
-    const unsignedXml = await xmlFile.text();
-    if (!unsignedXml.includes(`Id="${payment.dps_xml_id}"`)) return json({ error: "O identificador do XML não confere com o cadastro." }, 409);
+    const draft = buildRestrictedDps(payment as unknown as DpsSource, company as CompanySource);
+    const unsignedXml = draft.xml;
+    const unsignedPath = `dps/${payment.id}/${draft.id}.xml`;
+    const { error: unsignedUploadError } = await admin.storage
+      .from(XML_BUCKET)
+      .upload(unsignedPath, new Blob([unsignedXml], { type: "application/xml" }), { contentType: "application/xml", upsert: true });
+    if (unsignedUploadError) throw new Error("Não foi possível atualizar a DPS validada no backend.");
     const keys = readCertificate(new Uint8Array(await pfxFile.arrayBuffer()), password);
     password = "";
     const signedXml = signDps(unsignedXml, keys.privateKeyPem, keys.certificatePem);
-    const signedPath = `dps-assinada/${payment.id}/${payment.dps_xml_id}.xml`;
+    const signedPath = `dps-assinada/${payment.id}/${draft.id}.xml`;
     const { error: signedUploadError } = await admin.storage
       .from(XML_BUCKET)
       .upload(signedPath, new Blob([signedXml], { type: "application/xml" }), { contentType: "application/xml", upsert: true });
@@ -230,7 +301,7 @@ Deno.serve(async request => {
 
     if (!response.ok || !sefin.nfseXmlGZipB64 || !sefin.chaveAcesso) {
       const fiscalErrors = safeFiscalErrors(sefin);
-      await admin.from("mensalidades").update({ status_nfse: "Rejeitada em homologação", dps_assinada_xml_path: signedPath }).eq("id", payment.id);
+      await admin.from("mensalidades").update({ status_nfse: "Rejeitada em homologação", dps_xml_path: unsignedPath, dps_xml_id: draft.id, dps_assinada_xml_path: signedPath }).eq("id", payment.id);
       await admin.from("historico_nfse").insert({
         mensalidade_id: payment.id,
         evento: "nfse_homologacao_rejeitada",
@@ -253,6 +324,8 @@ Deno.serve(async request => {
     const issuedAt = sefin.dataHoraProcessamento || new Date().toISOString();
     const { error: updateError } = await admin.from("mensalidades").update({
       status_nfse: "NFS-e emitida em homologação",
+      dps_xml_path: unsignedPath,
+      dps_xml_id: draft.id,
       dps_assinada_xml_path: signedPath,
       nfse_homologacao_xml_path: nfsePath,
       chave_nfse_homologacao: sefin.chaveAcesso,
