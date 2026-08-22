@@ -154,6 +154,35 @@ function sameRsaKey(certificate: ForgeCertificate, key: ForgePrivateKey) {
   return Boolean(publicKey?.n && key?.n && publicKey.n.compareTo(key.n) === 0);
 }
 
+function verifiesCertificate(issuer: ForgeCertificate, certificate: ForgeCertificate) {
+  try {
+    return issuer.verify(certificate);
+  } catch {
+    return false;
+  }
+}
+
+function isSelfSigned(certificate: ForgeCertificate) {
+  return verifiesCertificate(certificate, certificate);
+}
+
+function orderedCertificateChainPem(leaf: ForgeCertificate, certificates: ForgeCertificate[]) {
+  const chain = [leaf];
+  const remaining = certificates.filter(certificate => certificate !== leaf);
+  let current = leaf;
+
+  while (remaining.length) {
+    const issuerIndex = remaining.findIndex(candidate => verifiesCertificate(candidate, current));
+    if (issuerIndex < 0) break;
+    const issuer = remaining.splice(issuerIndex, 1)[0];
+    if (isSelfSigned(issuer)) break;
+    chain.push(issuer);
+    current = issuer;
+  }
+
+  return chain.map(certificate => forge.pki.certificateToPem(certificate)).join("\n");
+}
+
 function readCertificate(pfx: Uint8Array, password: string) {
   let p12: forge.pkcs12.Pkcs12Pfx;
   try {
@@ -176,9 +205,7 @@ function readCertificate(pfx: Uint8Array, password: string) {
   const privateKeyInfo = forge.pki.wrapRsaPrivateKey(forge.pki.privateKeyToAsn1(key));
   const privateKeyPem = forge.pki.privateKeyInfoToPem(privateKeyInfo);
   const certificatePem = forge.pki.certificateToPem(leaf);
-  const certificateChainPem = [leaf, ...certificates.filter(certificate => certificate !== leaf)]
-    .map(certificate => forge.pki.certificateToPem(certificate))
-    .join("\n");
+  const certificateChainPem = orderedCertificateChainPem(leaf, certificates);
   return { privateKeyPem, certificatePem, certificateChainPem };
 }
 
@@ -333,6 +360,13 @@ Deno.serve(async request => {
       .from(XML_BUCKET)
       .upload(signedPath, new Blob([signedXml], { type: "application/xml" }), { contentType: "application/xml", upsert: true });
     if (signedUploadError) throw new Error("Não foi possível guardar a DPS assinada.");
+    const { error: signedPathUpdateError } = await admin.from("mensalidades").update({
+      status_nfse: "DPS assinada em homologação",
+      dps_xml_path: unsignedPath,
+      dps_xml_id: draft.id,
+      dps_assinada_xml_path: signedPath,
+    }).eq("id", payment.id);
+    if (signedPathUpdateError) throw new Error("A DPS foi assinada, mas o cadastro não pôde ser atualizado.");
 
     const payload = JSON.stringify({ dpsXmlGZipB64: bytesToBase64(gzip(new TextEncoder().encode(signedXml))) });
     stage = "transmitir_sefin";
@@ -411,3 +445,4 @@ Deno.serve(async request => {
     return json({ error: stageError.message, diagnosticCode: stageError.code }, 502);
   }
 });
+
