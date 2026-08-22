@@ -57,7 +57,10 @@ function safeTechnicalError(error: unknown) {
   const name = error instanceof Error ? error.name : "UnknownError";
   const rawMessage = error instanceof Error ? error.message : String(error || "Falha sem mensagem.");
   const message = rawMessage
+    .replace(/-----BEGIN [^-]+-----[\s\S]*?-----END [^-]+-----/g, "[CONTEUDO_CRIPTOGRAFICO_REMOVIDO]")
     .replace(/((?:password|senha)\s*[:=]\s*)[^\s,;]+/gi, "$1[REMOVIDO]")
+    .replace(/\b\d{11,14}\b/g, "[DOCUMENTO_REMOVIDO]")
+    .replace(/\b[A-Za-z0-9+/=]{64,}\b/g, "[DADO_LONGO_REMOVIDO]")
     .replace(/[\r\n\t]+/g, " ")
     .slice(0, 500);
   return { name: name.slice(0, 80), message };
@@ -428,19 +431,20 @@ Deno.serve(async request => {
   } catch (error) {
     password = "";
     const stageError = STAGE_ERRORS[stage];
+    const technicalError = safeTechnicalError(error);
     console.error(JSON.stringify({
       event: "nfse_homologacao_falhou",
       monthlyId: payment.id,
       stage,
       diagnosticCode: stageError.code,
-      technicalError: safeTechnicalError(error),
+      technicalError,
     }));
     await admin.from("historico_nfse").insert({
       mensalidade_id: payment.id,
       evento: "nfse_homologacao_falhou",
       valor_anterior: payment.valor_nfse,
       valor_novo: payment.valor_nfse,
-      detalhes: `Falha técnica ${stageError.code} antes da conclusão da homologação. Nenhuma NFS-e com validade fiscal foi emitida.`,
+      detalhes: `Falha técnica ${stageError.code} (${technicalError.name}: ${technicalError.message}) antes da conclusão da homologação. Nenhuma NFS-e com validade fiscal foi emitida.`.slice(0, 2000),
     });
     return json({ error: stageError.message, diagnosticCode: stageError.code }, 502);
   }
