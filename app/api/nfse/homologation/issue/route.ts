@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { DOMParser } from "@xmldom/xmldom";
 import forge from "node-forge";
-import { request as httpsRequest } from "node:https";
+import { request as httpsRequest, type RequestOptions } from "node:https";
+import type { ConnectionOptions } from "node:tls";
 import { gzipSync, gunzipSync } from "node:zlib";
 import { SignedXml } from "xml-crypto";
 
@@ -269,11 +270,7 @@ function postToRestrictedProduction(body: string, pfx: Buffer, passphrase: strin
   return new Promise<{ status: number; body: string }>((resolve, reject) => {
     const target = new URL(HOMOLOGATION_URL);
     const payload = Buffer.from(body, "utf8");
-    const request = httpsRequest({
-      protocol: target.protocol,
-      hostname: target.hostname,
-      port: 443,
-      path: `${target.pathname}${target.search}`,
+    const options: RequestOptions & ConnectionOptions = {
       method: "POST",
       pfx,
       passphrase,
@@ -288,7 +285,8 @@ function postToRestrictedProduction(body: string, pfx: Buffer, passphrase: strin
         "Content-Length": payload.byteLength,
         Connection: "close",
       },
-    }, response => {
+    };
+    const request = httpsRequest(target, options, response => {
       const chunks: Buffer[] = [];
       let size = 0;
       response.on("data", chunk => {
