@@ -252,7 +252,12 @@ function safeFiscalErrors(data: SefinResponse) {
 }
 
 async function postToRestrictedProduction(body: string, certificateChainPem: string, privateKeyPem: string) {
-  const client = Deno.createHttpClient({ cert: certificateChainPem, key: privateKeyPem, http1: true });
+  const client = Deno.createHttpClient({
+    cert: certificateChainPem,
+    key: privateKeyPem,
+    http1: true,
+    http2: false,
+  });
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 25000);
   try {
