@@ -155,5 +155,26 @@ test("preserva as letras das mensagens oficiais de rejeição", () => {
   assert.equal(edgeSource.includes(correctWhitespaceClass), true);
 });
 
+test("preserva XMLs de cada tentativa e bloqueia competência futura nos backends", () => {
+  const nodeSource = readFileSync(new URL("../app/api/nfse/homologation/issue/route.ts", import.meta.url), "utf8");
+  const edgeSource = readFileSync(new URL("../supabase/functions/nfse-homologacao/index.ts", import.meta.url), "utf8");
+  for (const source of [nodeSource, edgeSource]) {
+    assert.match(source, /const attemptBasePath = `tentativas\/\$\{payment\.id\}\/\$\{attemptId\}`/);
+    assert.match(source, /DPS assinada \$\{signedPath\}/);
+    assert.match(source, /não pode ser posterior ao mês atual/);
+    assert.match(source, /evento: "nfse_homologacao_rejeitada"/);
+  }
+});
+
+test("oferece correção obrigatória antes de reenviar uma rejeição", () => {
+  const uiSource = readFileSync(new URL("../components/live-pages.tsx", import.meta.url), "utf8");
+  assert.match(uiSource, /Corrigir para reenviar/);
+  assert.match(uiSource, /evento:"dados_nfse_corrigidos"/);
+  assert.match(uiSource, /status_nfse:"Revisada",dps_xml_path:null,dps_xml_id:null/);
+  assert.match(uiSource, /Nova validação obrigatória antes do reenvio/);
+  assert.match(uiSource, /max=\{currentCompetenceInput\(\)\}/);
+  assert.match(uiSource, /p\.status_nfse==="Rejeitada em homologação"[\s\S]*?Corrigir para reenviar/);
+});
+
 
 

@@ -127,7 +127,11 @@ function isValidCpfCnpj(value: string) {
 function competenceDate(value: string) {
   const match = value.trim().match(/^(0[1-9]|1[0-2])\/(20\d{2})$/);
   if (!match) throw new Error("A competência da mensalidade é inválida.");
-  return `${match[2]}-${match[1]}-01`;
+  const competence = `${match[2]}-${match[1]}-01`;
+  if (competence.slice(0, 7) > issueDateTime().slice(0, 7)) {
+    throw new Error("A competência da mensalidade não pode ser posterior ao mês atual.");
+  }
+  return competence;
 }
 
 function issueDateTime() {
@@ -452,7 +456,9 @@ Deno.serve(async request => {
   try {
     const draft = buildRestrictedDps(payment as unknown as DpsSource, company as CompanySource);
     const unsignedXml = draft.xml;
-    const unsignedPath = `dps/${payment.id}/${draft.id}.xml`;
+    const attemptId = `${new Date().toISOString().replace(/\D/g, "").slice(0, 17)}-${crypto.randomUUID().slice(0, 8)}`;
+    const attemptBasePath = `tentativas/${payment.id}/${attemptId}`;
+    const unsignedPath = `${attemptBasePath}/${draft.id}.xml`;
     stage = "armazenar_dps";
     const { error: unsignedUploadError } = await admin.storage
       .from(XML_BUCKET)
@@ -463,7 +469,7 @@ Deno.serve(async request => {
     password = "";
     stage = "assinar_dps";
     const signedXml = signDps(unsignedXml, keys.privateKeyPem, keys.certificatePem);
-    const signedPath = `dps-assinada/${payment.id}/${draft.id}.xml`;
+    const signedPath = `${attemptBasePath}/${draft.id}-assinada.xml`;
     stage = "armazenar_dps_assinada";
     const { error: signedUploadError } = await admin.storage
       .from(XML_BUCKET)
@@ -497,7 +503,7 @@ Deno.serve(async request => {
         evento: "nfse_homologacao_rejeitada",
         valor_anterior: payment.valor_nfse,
         valor_novo: payment.valor_nfse,
-        detalhes: `Produção restrita respondeu HTTP ${response.status}. ${formattedErrors.join(" | ")}`.slice(0, 2000),
+        detalhes: `Tentativa ${attemptId}. Produção restrita respondeu HTTP ${response.status}. ${formattedErrors.join(" | ")} DPS ${unsignedPath}; DPS assinada ${signedPath}.`.slice(0, 2000),
       });
       return json({ error: formattedErrors[0] || `A produção restrita respondeu com o código ${response.status}.`, errors: fiscalErrors }, 422);
     }
@@ -530,7 +536,7 @@ Deno.serve(async request => {
       evento: "nfse_homologacao_emitida",
       valor_anterior: payment.valor_nfse,
       valor_novo: payment.valor_nfse,
-      detalhes: `NFS-e gerada exclusivamente na produção restrita. Chave ${sefin.chaveAcesso}. Aplicativo ${sefin.versaoAplicativo || "não informado"}. XMLs guardados no repositório privado.`,
+      detalhes: `Tentativa ${attemptId}. NFS-e gerada exclusivamente na produção restrita. Chave ${sefin.chaveAcesso}. Aplicativo ${sefin.versaoAplicativo || "não informado"}. DPS ${unsignedPath}; DPS assinada ${signedPath}; NFS-e ${nfsePath}.`,
     });
     return json({
       ok: true,
@@ -561,6 +567,7 @@ Deno.serve(async request => {
     return json({ error: validationError || stageError.message, diagnosticCode: stageError.code }, validationError ? 422 : 502);
   }
 });
+
 
 
 
