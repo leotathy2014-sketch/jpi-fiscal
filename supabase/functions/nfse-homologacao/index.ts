@@ -4,7 +4,8 @@ import forge from "npm:node-forge@1.3.1";
 import { gzip, ungzip } from "npm:pako@2.1.0";
 import { SignedXml } from "npm:xml-crypto@6.1.2";
 
-const HOMOLOGATION_URL = "https://sefin.producaorestrita.nfse.gov.br/SefinNacional/nfse";
+// A Produção Restrita usa o prefixo /API; a produção real não usa esse prefixo.
+const HOMOLOGATION_URL = "https://sefin.producaorestrita.nfse.gov.br/API/SefinNacional/nfse";
 // Aplicativos próprios devem usar a faixa 00001-49999. A série 70000 é reservada ao Emissor Web.
 const OWN_APP_DPS_SERIES = "1";
 const XML_BUCKET = "documentos-nfse";

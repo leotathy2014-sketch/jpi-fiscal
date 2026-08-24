@@ -50,10 +50,10 @@ test("rejeita documento de tomador inválido antes de gerar XML", () => {
 });
 
 test("usa o endereço operacional publicado na especificação da produção restrita", () => {
-  assert.equal(NFSE_RESTRICTED_ENDPOINT, "https://sefin.producaorestrita.nfse.gov.br/SefinNacional/nfse");
+  assert.equal(NFSE_RESTRICTED_ENDPOINT, "https://sefin.producaorestrita.nfse.gov.br/API/SefinNacional/nfse");
   const edgeSource = readFileSync(new URL("../supabase/functions/nfse-homologacao/index.ts", import.meta.url), "utf8");
-  assert.match(edgeSource, /https:\/\/sefin\.producaorestrita\.nfse\.gov\.br\/SefinNacional\/nfse/);
-  assert.doesNotMatch(edgeSource, /\/API\/SefinNacional\/nfse/);
+  assert.match(edgeSource, /https:\/\/sefin\.producaorestrita\.nfse\.gov\.br\/API\/SefinNacional\/nfse/);
+  assert.doesNotMatch(edgeSource, /gov\.br\/SefinNacional\/nfse/);
 });
 
 test("usa série de aplicativo próprio e não a faixa reservada ao Emissor Web", () => {
