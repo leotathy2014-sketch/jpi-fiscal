@@ -277,7 +277,7 @@ function signDps(xml: string, privateKeyPem: string, certificatePem: string) {
 
 function shortText(value: unknown, maxLength: number) {
   if (typeof value !== "string" && typeof value !== "number") return "";
-  return String(value).replace(/[\\r\\n\\t]+/g, " ").trim().slice(0, maxLength);
+  return String(value).replace(/[\r\n\t]+/g, " ").trim().slice(0, maxLength);
 }
 
 function fiscalError(value: unknown, fallbackCode = ""): FiscalError | null {
@@ -543,5 +543,7 @@ Deno.serve(async request => {
     return json({ error: validationError || stageError.message, diagnosticCode: stageError.code }, validationError ? 422 : 502);
   }
 });
+
+
 
 

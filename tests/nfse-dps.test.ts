@@ -105,4 +105,15 @@ test("omite razão social do prestador quando ele próprio emite a DPS", () => {
   assert.doesNotMatch(edgeSource, /<prest><CNPJ>\$\{providerCnpj\}<\/CNPJ><xNome>/);
 });
 
+test("preserva as letras das mensagens oficiais de rejeição", () => {
+  const nodeSource = readFileSync(new URL("../app/api/nfse/homologation/issue/route.ts", import.meta.url), "utf8");
+  const edgeSource = readFileSync(new URL("../supabase/functions/nfse-homologacao/index.ts", import.meta.url), "utf8");
+  const brokenWhitespaceClass = String.raw`[\\r\\n\\t]`;
+  const correctWhitespaceClass = String.raw`[\r\n\t]`;
+  assert.equal(nodeSource.includes(brokenWhitespaceClass), false);
+  assert.equal(edgeSource.includes(brokenWhitespaceClass), false);
+  assert.equal(nodeSource.includes(correctWhitespaceClass), true);
+  assert.equal(edgeSource.includes(correctWhitespaceClass), true);
+});
+
 
