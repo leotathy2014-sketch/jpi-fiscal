@@ -34,6 +34,8 @@ export type DpsDraft = {
   version: "1.01";
 };
 
+export const NFSE_RESTRICTED_ENDPOINT = "https://sefin.producaorestrita.nfse.gov.br/SefinNacional/nfse";
+
 const digits = (value: string) => value.replace(/\D/g, "");
 const escapeXml = (value: string) => value.replace(/[<>&"']/g, character => ({
   "<": "&lt;",
@@ -71,7 +73,7 @@ function element(name: string, value?: string | null) {
   return value ? `<${name}>${escapeXml(value)}</${name}>` : "";
 }
 
-function hasValidCpf(value: string) {
+export function hasValidCpf(value: string) {
   if (!/^\d{11}$/.test(value) || /^(\d)\1+$/.test(value)) return false;
   const digit = (length: number) => {
     const sum = value.slice(0, length).split("").reduce((total, item, index) => total + Number(item) * (length + 1 - index), 0);
@@ -81,7 +83,7 @@ function hasValidCpf(value: string) {
   return digit(9) === Number(value[9]) && digit(10) === Number(value[10]);
 }
 
-function hasValidCnpj(value: string) {
+export function hasValidCnpj(value: string) {
   if (!/^\d{14}$/.test(value) || /^(\d)\1+$/.test(value)) return false;
   const digit = (base: string, weights: number[]) => {
     const sum = base.split("").reduce((total, item, index) => total + Number(item) * weights[index], 0);
@@ -91,6 +93,11 @@ function hasValidCnpj(value: string) {
   const first = digit(value.slice(0, 12), [5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2]);
   const second = digit(`${value.slice(0, 12)}${first}`, [6, 5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2]);
   return first === Number(value[12]) && second === Number(value[13]);
+}
+
+export function isValidCpfCnpj(value: string) {
+  const document = digits(value);
+  return document.length === 11 ? hasValidCpf(document) : hasValidCnpj(document);
 }
 
 export function buildDpsDraft(input: DpsDraftInput): DpsDraft {
@@ -106,7 +113,7 @@ export function buildDpsDraft(input: DpsDraftInput): DpsDraft {
 
   if (municipalityCode.length !== 7) throw new Error("Código IBGE do município emissor inválido.");
   if (!hasValidCnpj(providerCnpj)) throw new Error("CNPJ do prestador inválido.");
-  if (!(takerTaxId.length === 11 ? hasValidCpf(takerTaxId) : hasValidCnpj(takerTaxId))) throw new Error("CPF/CNPJ do tomador inválido.");
+  if (!isValidCpfCnpj(takerTaxId)) throw new Error("CPF/CNPJ do tomador inválido.");
   if (!takerName) throw new Error("Nome do tomador inválido.");
   if (!/^\d{1,5}$/.test(series)) throw new Error("Série da DPS inválida.");
   if (!/^[1-9]\d{0,14}$/.test(number)) throw new Error("Número da DPS inválido.");

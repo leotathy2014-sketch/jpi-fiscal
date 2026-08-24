@@ -6,11 +6,12 @@ import { request as httpsRequest, type RequestOptions } from "node:https";
 import type { ConnectionOptions } from "node:tls";
 import { gzipSync, gunzipSync } from "node:zlib";
 import { SignedXml } from "xml-crypto";
+import { hasValidCnpj, isValidCpfCnpj, NFSE_RESTRICTED_ENDPOINT } from "@/lib/nfse-dps";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
 
-const HOMOLOGATION_URL = "https://sefin.producaorestrita.nfse.gov.br/API/SefinNacional/nfse";
+const HOMOLOGATION_URL = NFSE_RESTRICTED_ENDPOINT;
 const XML_BUCKET = "documentos-nfse";
 const CERTIFICATE_BUCKET = "certificados-a1";
 const ICP_BRASIL_CNPJ_OID = "2.16.76.1.3.3";
@@ -41,7 +42,7 @@ type DpsSource = {
     segmento: string;
   } | null;
 };
-type CompanySource = { cnpj: string; inscricao_municipal: string | null; razao_social: string };
+type CompanySource = { cnpj: string; razao_social: string };
 type Asn1Node = { type: number; value: string | Asn1Node[] };
 type HomologationStage =
   | "validar_dados_fiscais"
@@ -123,8 +124,8 @@ function buildRestrictedDps(payment: DpsSource, company: CompanySource) {
   const nbs = normalizedSegment.includes("médio") ? "122013000"
     : normalizedSegment.includes("1º") || normalizedSegment.includes("6º") || normalizedSegment.includes("fundamental") ? "122012000"
     : "122011200";
-  if (providerCnpj.length !== 14) throw new Error("O CNPJ do prestador é inválido.");
-  if (![11, 14].includes(takerTaxId.length)) throw new Error("O CPF/CNPJ do tomador é inválido.");
+  if (!hasValidCnpj(providerCnpj)) throw new Error("O CNPJ do prestador é inválido.");
+  if (!isValidCpfCnpj(takerTaxId)) throw new Error("O CPF/CNPJ do tomador é inválido.");
   if (!takerName) throw new Error("O responsável financeiro do tomador não foi informado.");
   if (!description || description.length > 2000) throw new Error("A descrição fiscal deve ter entre 1 e 2000 caracteres.");
   if (!Number.isFinite(Number(payment.valor_nfse)) || Number(payment.valor_nfse) <= 0) throw new Error("O valor da NFS-e é inválido.");
@@ -136,7 +137,7 @@ function buildRestrictedDps(payment: DpsSource, company: CompanySource) {
   <infDPS Id="${id}">
     <tpAmb>2</tpAmb><dhEmi>${issueDateTime()}</dhEmi><verAplic>JPI-FISCAL-1.01</verAplic>
     <serie>${series}</serie><nDPS>${number}</nDPS><dCompet>${competenceDate(payment.competencia)}</dCompet><tpEmit>1</tpEmit><cLocEmi>${municipality}</cLocEmi>
-    <prest><CNPJ>${providerCnpj}</CNPJ>${company.inscricao_municipal ? `<IM>${digits(company.inscricao_municipal)}</IM>` : ""}<xNome>${escapeXml(company.razao_social)}</xNome><regTrib><opSimpNac>1</opSimpNac><regEspTrib>0</regEspTrib></regTrib></prest>
+    <prest><CNPJ>${providerCnpj}</CNPJ><xNome>${escapeXml(company.razao_social)}</xNome><regTrib><opSimpNac>1</opSimpNac><regEspTrib>0</regEspTrib></regTrib></prest>
     <toma>${document}<xNome>${escapeXml(takerName)}</xNome>${phone.length >= 6 ? `<fone>${phone}</fone>` : ""}${payment.alunos?.email ? `<email>${escapeXml(payment.alunos.email.trim())}</email>` : ""}</toma>
     <serv><locPrest><cLocPrestacao>${municipality}</cLocPrestacao></locPrest><cServ><cTribNac>080101</cTribNac><xDescServ>${escapeXml(description)}</xDescServ><cNBS>${nbs}</cNBS></cServ></serv>
     <valores><vServPrest><vServ>${Number(payment.valor_nfse).toFixed(2)}</vServ></vServPrest><trib><tribMun><tribISSQN>1</tribISSQN><tpRetISSQN>1</tpRetISSQN><pAliq>5.00</pAliq></tribMun><totTrib><vTotTrib><vTotTribFed>${Number(payment.valor_nfse).toFixed(2)}</vTotTribFed><vTotTribEst>0.00</vTotTribEst><vTotTribMun>0.00</vTotTribMun></vTotTrib></totTrib></trib></valores>
@@ -397,7 +398,7 @@ export async function POST(request: NextRequest) {
 
   const { data: company } = await supabase
     .from("configuracoes_empresa")
-    .select("cnpj,inscricao_municipal,razao_social")
+    .select("cnpj,razao_social")
     .eq("id", true)
     .maybeSingle();
   if (!company) return json({ error: "Os dados fiscais da empresa não foram encontrados." }, 400);
@@ -511,7 +512,8 @@ export async function POST(request: NextRequest) {
       valor_novo: payment.valor_nfse,
       detalhes: `Falha técnica ${stageError.code} (${technicalError.name}: ${technicalError.message}) antes da conclusão da homologação. Nenhuma NFS-e com validade fiscal foi emitida.`.slice(0, 2000),
     });
-    return json({ error: stageError.message, diagnosticCode: stageError.code }, 502);
+    const validationError = stage === "validar_dados_fiscais" && error instanceof Error ? error.message : "";
+    return json({ error: validationError || stageError.message, diagnosticCode: stageError.code }, validationError ? 422 : 502);
   }
 }
 
