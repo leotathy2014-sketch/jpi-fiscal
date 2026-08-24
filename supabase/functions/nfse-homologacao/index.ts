@@ -457,13 +457,13 @@ Deno.serve(async request => {
     const draft = buildRestrictedDps(payment as unknown as DpsSource, company as CompanySource);
     const unsignedXml = draft.xml;
     const attemptId = `${new Date().toISOString().replace(/\D/g, "").slice(0, 17)}-${crypto.randomUUID().slice(0, 8)}`;
-    const attemptBasePath = `tentativas/${payment.id}/${attemptId}`;
+    const attemptBasePath = `dps/${payment.id}/tentativas/${attemptId}`;
     const unsignedPath = `${attemptBasePath}/${draft.id}.xml`;
     stage = "armazenar_dps";
     const { error: unsignedUploadError } = await admin.storage
       .from(XML_BUCKET)
       .upload(unsignedPath, new Blob([unsignedXml], { type: "application/xml" }), { contentType: "application/xml", upsert: true });
-    if (unsignedUploadError) throw new Error("Não foi possível atualizar a DPS validada no backend.");
+    if (unsignedUploadError) throw new Error(`Não foi possível atualizar a DPS validada no backend: ${unsignedUploadError.message}`);
     stage = "abrir_certificado";
     const keys = readCertificate(new Uint8Array(await pfxFile.arrayBuffer()), password);
     password = "";
@@ -474,7 +474,7 @@ Deno.serve(async request => {
     const { error: signedUploadError } = await admin.storage
       .from(XML_BUCKET)
       .upload(signedPath, new Blob([signedXml], { type: "application/xml" }), { contentType: "application/xml", upsert: true });
-    if (signedUploadError) throw new Error("Não foi possível guardar a DPS assinada.");
+    if (signedUploadError) throw new Error(`Não foi possível guardar a DPS assinada: ${signedUploadError.message}`);
     const { error: signedPathUpdateError } = await admin.from("mensalidades").update({
       status_nfse: "DPS assinada em homologação",
       dps_xml_path: unsignedPath,

@@ -159,7 +159,7 @@ test("preserva XMLs de cada tentativa e bloqueia competência futura nos backend
   const nodeSource = readFileSync(new URL("../app/api/nfse/homologation/issue/route.ts", import.meta.url), "utf8");
   const edgeSource = readFileSync(new URL("../supabase/functions/nfse-homologacao/index.ts", import.meta.url), "utf8");
   for (const source of [nodeSource, edgeSource]) {
-    assert.match(source, /const attemptBasePath = `tentativas\/\$\{payment\.id\}\/\$\{attemptId\}`/);
+    assert.match(source, /const attemptBasePath = `dps\/\$\{payment\.id\}\/tentativas\/\$\{attemptId\}`/);
     assert.match(source, /DPS assinada \$\{signedPath\}/);
     assert.match(source, /não pode ser posterior ao mês atual/);
     assert.match(source, /evento: "nfse_homologacao_rejeitada"/);
