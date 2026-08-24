@@ -21,6 +21,12 @@ export type DpsDraftInput = {
     description: string;
     amount: number;
     issRate?: number;
+    federalTaxes?: {
+      cst: string;
+      pisRate: number;
+      cofinsRate: number;
+      withholdingType: number;
+    } | null;
     ibsCbs?: {
       operationIndicator: string;
       taxStatus: string;
@@ -75,6 +81,10 @@ function issueDateTime() {
 
 function element(name: string, value?: string | null) {
   return value ? `<${name}>${escapeXml(value)}</${name}>` : "";
+}
+
+function federalTaxValue(amount: number, rate: number) {
+  return (Math.round(amount * rate + 1e-8) / 100).toFixed(2);
 }
 
 export function hasValidCpf(value: string) {
@@ -133,6 +143,20 @@ export function buildDpsDraft(input: DpsDraftInput): DpsDraft {
     throw new Error("Alíquota do ISSQN inválida.");
   }
 
+  const federalTaxes = input.service.federalTaxes;
+  if (federalTaxes) {
+    if (!/^\d{2}$/.test(federalTaxes.cst)) throw new Error("CST do PIS/COFINS inválido.");
+    if (!Number.isFinite(federalTaxes.pisRate) || federalTaxes.pisRate < 0 || federalTaxes.pisRate > 100) {
+      throw new Error("Alíquota do PIS inválida.");
+    }
+    if (!Number.isFinite(federalTaxes.cofinsRate) || federalTaxes.cofinsRate < 0 || federalTaxes.cofinsRate > 100) {
+      throw new Error("Alíquota da COFINS inválida.");
+    }
+    if (!Number.isInteger(federalTaxes.withholdingType) || federalTaxes.withholdingType < 0 || federalTaxes.withholdingType > 9) {
+      throw new Error("Tipo de retenção do PIS/COFINS inválido.");
+    }
+  }
+
   const ibsCbs = input.service.ibsCbs;
   if (ibsCbs) {
     if (!/^\d{6}$/.test(ibsCbs.operationIndicator)) throw new Error("Indicador da operação IBS/CBS inválido.");
@@ -187,7 +211,18 @@ export function buildDpsDraft(input: DpsDraftInput): DpsDraft {
         <tribMun>
           <tribISSQN>1</tribISSQN>
           <tpRetISSQN>1</tpRetISSQN>
-        </tribMun>
+        </tribMun>${federalTaxes ? `
+        <tribFed>
+          <piscofins>
+            <CST>${federalTaxes.cst}</CST>
+            <vBCPisCofins>${input.service.amount.toFixed(2)}</vBCPisCofins>
+            <pAliqPis>${federalTaxes.pisRate.toFixed(2)}</pAliqPis>
+            <pAliqCofins>${federalTaxes.cofinsRate.toFixed(2)}</pAliqCofins>
+            <vPis>${federalTaxValue(input.service.amount, federalTaxes.pisRate)}</vPis>
+            <vCofins>${federalTaxValue(input.service.amount, federalTaxes.cofinsRate)}</vCofins>
+            <tpRetPisCofins>${federalTaxes.withholdingType}</tpRetPisCofins>
+          </piscofins>
+        </tribFed>` : ""}
         <totTrib>
           <vTotTrib>
             <vTotTribFed>${input.service.amount.toFixed(2)}</vTotTribFed>
@@ -216,5 +251,6 @@ export function buildDpsDraft(input: DpsDraftInput): DpsDraft {
 
   return { id, xml, version: "1.01" };
 }
+
 
 

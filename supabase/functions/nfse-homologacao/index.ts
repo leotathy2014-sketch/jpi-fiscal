@@ -96,6 +96,7 @@ const digits = (value: unknown) => String(value || "").replace(/\D/g, "");
 const escapeXml = (value: unknown) => String(value || "").replace(/[<>&"']/g, character => ({
   "<": "&lt;", ">": "&gt;", "&": "&amp;", '"': "&quot;", "'": "&apos;",
 }[character] || character));
+const federalTaxValue = (amount: number, rate: number) => (Math.round(amount * rate + 1e-8) / 100).toFixed(2);
 
 function hasValidCpf(value: string) {
   if (!/^\d{11}$/.test(value) || /^(\d)\1+$/.test(value)) return false;
@@ -145,7 +146,15 @@ type DpsSource = {
   descricao_servico: string | null;
   alunos: { responsavel: string; cpf_cnpj: string | null; email: string | null; whatsapp: string | null; segmento: string } | null;
 };
-type CompanySource = { cnpj: string; razao_social: string };
+type CompanySource = {
+  cnpj: string;
+  razao_social: string;
+  regime_tributario: string;
+  pis_aliquota: number;
+  cofins_aliquota: number;
+  pis_cofins_cst: string;
+  pis_cofins_retencao: number;
+};
 
 function buildRestrictedDps(payment: DpsSource, company: CompanySource) {
   const municipality = "3304557";
@@ -162,11 +171,20 @@ function buildRestrictedDps(payment: DpsSource, company: CompanySource) {
   const municipalTaxCode = normalizedSegment.includes("médio") ? "003"
     : normalizedSegment.includes("1º") || normalizedSegment.includes("6º") || normalizedSegment.includes("fundamental") ? "002"
     : "001";
+  const amount = Number(payment.valor_nfse);
+  const pisRate = Number(company.pis_aliquota);
+  const cofinsRate = Number(company.cofins_aliquota);
+  const withholdingType = Number(company.pis_cofins_retencao);
   if (!hasValidCnpj(providerCnpj)) throw new Error("O CNPJ do prestador é inválido.");
   if (!isValidCpfCnpj(takerTaxId)) throw new Error("O CPF/CNPJ do tomador é inválido.");
   if (!takerName) throw new Error("O responsável financeiro do tomador não foi informado.");
   if (!description || description.length > 1000) throw new Error("A descrição fiscal deve ter entre 1 e 1000 caracteres.");
-  if (!Number.isFinite(Number(payment.valor_nfse)) || Number(payment.valor_nfse) <= 0) throw new Error("O valor da NFS-e é inválido.");
+  if (!Number.isFinite(amount) || amount <= 0) throw new Error("O valor da NFS-e é inválido.");
+  if (company.regime_tributario !== "LUCRO PRESUMIDO") throw new Error("O regime tributário deve ser Lucro Presumido.");
+  if (!/^\d{2}$/.test(company.pis_cofins_cst)) throw new Error("O CST do PIS/COFINS é inválido.");
+  if (!Number.isFinite(pisRate) || pisRate < 0 || pisRate > 100) throw new Error("A alíquota do PIS é inválida.");
+  if (!Number.isFinite(cofinsRate) || cofinsRate < 0 || cofinsRate > 100) throw new Error("A alíquota da COFINS é inválida.");
+  if (!Number.isInteger(withholdingType) || withholdingType < 0 || withholdingType > 9) throw new Error("O tipo de retenção do PIS/COFINS é inválido.");
   const id = `DPS${municipality}2${providerCnpj}${series.padStart(5, "0")}${number.padStart(15, "0")}`;
   const document = takerTaxId.length === 11 ? `<CPF>${takerTaxId}</CPF>` : `<CNPJ>${takerTaxId}</CNPJ>`;
   const phone = digits(payment.alunos?.whatsapp);
@@ -178,7 +196,7 @@ function buildRestrictedDps(payment: DpsSource, company: CompanySource) {
     <prest><CNPJ>${providerCnpj}</CNPJ><regTrib><opSimpNac>1</opSimpNac><regEspTrib>0</regEspTrib></regTrib></prest>
     <toma>${document}<xNome>${escapeXml(takerName)}</xNome>${phone.length >= 6 ? `<fone>${phone}</fone>` : ""}${payment.alunos?.email ? `<email>${escapeXml(payment.alunos.email.trim())}</email>` : ""}</toma>
     <serv><locPrest><cLocPrestacao>${municipality}</cLocPrestacao></locPrest><cServ><cTribNac>080101</cTribNac><cTribMun>${municipalTaxCode}</cTribMun><xDescServ>${escapeXml(description)}</xDescServ><cNBS>${nbs}</cNBS></cServ></serv>
-    <valores><vServPrest><vServ>${Number(payment.valor_nfse).toFixed(2)}</vServ></vServPrest><trib><tribMun><tribISSQN>1</tribISSQN><tpRetISSQN>1</tpRetISSQN></tribMun><totTrib><vTotTrib><vTotTribFed>${Number(payment.valor_nfse).toFixed(2)}</vTotTribFed><vTotTribEst>0.00</vTotTribEst><vTotTribMun>0.00</vTotTribMun></vTotTrib></totTrib></trib></valores>
+    <valores><vServPrest><vServ>${amount.toFixed(2)}</vServ></vServPrest><trib><tribMun><tribISSQN>1</tribISSQN><tpRetISSQN>1</tpRetISSQN></tribMun><tribFed><piscofins><CST>${company.pis_cofins_cst}</CST><vBCPisCofins>${amount.toFixed(2)}</vBCPisCofins><pAliqPis>${pisRate.toFixed(2)}</pAliqPis><pAliqCofins>${cofinsRate.toFixed(2)}</pAliqCofins><vPis>${federalTaxValue(amount, pisRate)}</vPis><vCofins>${federalTaxValue(amount, cofinsRate)}</vCofins><tpRetPisCofins>${withholdingType}</tpRetPisCofins></piscofins></tribFed><totTrib><vTotTrib><vTotTribFed>${amount.toFixed(2)}</vTotTribFed><vTotTribEst>0.00</vTotTribEst><vTotTribMun>0.00</vTotTribMun></vTotTrib></totTrib></trib></valores>
     <IBSCBS><finNFSe>0</finNFSe><indFinal>1</indFinal><cIndOp>030101</cIndOp><indDest>0</indDest><valores><trib><gIBSCBS><CST>200</CST><cClassTrib>200028</cClassTrib></gIBSCBS></trib></valores></IBSCBS>
   </infDPS>
 </DPS>` };
@@ -412,7 +430,7 @@ Deno.serve(async request => {
 
   const { data: company } = await admin
     .from("configuracoes_empresa")
-    .select("cnpj,razao_social")
+    .select("cnpj,razao_social,regime_tributario,pis_aliquota,cofins_aliquota,pis_cofins_cst,pis_cofins_retencao")
     .eq("id", true)
     .maybeSingle();
   if (!company) return json({ error: "Os dados fiscais da empresa não foram encontrados." }, 400);
@@ -543,6 +561,7 @@ Deno.serve(async request => {
     return json({ error: validationError || stageError.message, diagnosticCode: stageError.code }, validationError ? 422 : 502);
   }
 });
+
 
 
 

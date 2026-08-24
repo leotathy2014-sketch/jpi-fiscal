@@ -25,6 +25,7 @@ const input = {
     description: "MENSALIDADE ESCOLAR - COMPETÊNCIA 08/2026",
     amount: 350,
     issRate: 5,
+    federalTaxes: { cst: "01", pisRate: 0.65, cofinsRate: 3, withholdingType: 0 },
     ibsCbs: { operationIndicator: "030101", taxStatus: "200", taxClassification: "200028" },
   },
 };
@@ -39,6 +40,11 @@ test("gera DPS 1.01 exclusivamente para homologação com IBS/CBS", () => {
   assert.match(draft.xml, /<IBSCBS>[\s\S]*<cIndOp>030101<\/cIndOp>/);
   assert.match(draft.xml, /<finNFSe>0<\/finNFSe>[\s\S]*<indFinal>1<\/indFinal>/);
   assert.match(draft.xml, /<CST>200<\/CST>[\s\S]*<cClassTrib>200028<\/cClassTrib>/);
+  assert.match(draft.xml, /<tribFed>[\s\S]*<piscofins>[\s\S]*<CST>01<\/CST>/);
+  assert.match(draft.xml, /<vBCPisCofins>350\.00<\/vBCPisCofins>/);
+  assert.match(draft.xml, /<pAliqPis>0\.65<\/pAliqPis>[\s\S]*<pAliqCofins>3\.00<\/pAliqCofins>/);
+  assert.match(draft.xml, /<vPis>2\.28<\/vPis>[\s\S]*<vCofins>10\.50<\/vCofins>/);
+  assert.match(draft.xml, /<tpRetPisCofins>0<\/tpRetPisCofins>/);
   assert.match(draft.xml, /<vTotTribFed>350\.00<\/vTotTribFed>[\s\S]*<vTotTribEst>0\.00<\/vTotTribEst>[\s\S]*<vTotTribMun>0\.00<\/vTotTribMun>/);
   assert.doesNotMatch(draft.xml, /<IM>/);
   assert.doesNotMatch(draft.xml, /<indTotTrib>/);
@@ -96,6 +102,29 @@ test("não informa alíquota para prestador não optante do Simples", () => {
   assert.doesNotMatch(edgeSource, /<pAliq>/);
 });
 
+test("rejeita configuração federal inválida antes de gerar o XML", () => {
+  assert.throws(
+    () => buildDpsDraft({ ...input, service: { ...input.service, federalTaxes: { ...input.service.federalTaxes, cst: "1" } } }),
+    /CST do PIS\/COFINS/,
+  );
+  assert.throws(
+    () => buildDpsDraft({ ...input, service: { ...input.service, federalTaxes: { ...input.service.federalTaxes, pisRate: 101 } } }),
+    /Alíquota do PIS/,
+  );
+});
+
+test("backends carregam o Lucro Presumido e geram o grupo federal", () => {
+  const nodeSource = readFileSync(new URL("../app/api/nfse/homologation/issue/route.ts", import.meta.url), "utf8");
+  const edgeSource = readFileSync(new URL("../supabase/functions/nfse-homologacao/index.ts", import.meta.url), "utf8");
+  for (const source of [nodeSource, edgeSource]) {
+    assert.match(source, /regime_tributario,pis_aliquota,cofins_aliquota,pis_cofins_cst,pis_cofins_retencao/);
+    assert.match(source, /company\.regime_tributario !== "LUCRO PRESUMIDO"/);
+    assert.match(source, /<tribFed><piscofins><CST>/);
+    assert.match(source, /<vBCPisCofins>/);
+    assert.match(source, /<tpRetPisCofins>/);
+  }
+});
+
 test("escapa conteúdo textual inserido no XML", () => {
   const draft = buildDpsDraft({ ...input, service: { ...input.service, description: "MENSALIDADE & MATERIAL <TESTE>" } });
   assert.match(draft.xml, /MENSALIDADE &amp; MATERIAL &lt;TESTE&gt;/);
@@ -125,5 +154,6 @@ test("preserva as letras das mensagens oficiais de rejeição", () => {
   assert.equal(nodeSource.includes(correctWhitespaceClass), true);
   assert.equal(edgeSource.includes(correctWhitespaceClass), true);
 });
+
 
 

@@ -457,6 +457,11 @@ type CompanyConfig = {
   razao_social: string;
   nome_fantasia: string | null;
   inscricao_municipal: string | null;
+  regime_tributario: string;
+  pis_aliquota: number;
+  cofins_aliquota: number;
+  pis_cofins_cst: string;
+  pis_cofins_retencao: number;
   email: string | null;
   telefone: string | null;
   whatsapp: string | null;
@@ -532,6 +537,13 @@ function CompanySettings() {
     setMessage("");
     const f = new FormData(e.currentTarget);
     const text = (name: string) => String(f.get(name) || "").trim();
+    const pisRate = Number(text("pis_aliquota").replace(",", "."));
+    const cofinsRate = Number(text("cofins_aliquota").replace(",", "."));
+    if (!Number.isFinite(pisRate) || pisRate < 0 || pisRate > 100 || !Number.isFinite(cofinsRate) || cofinsRate < 0 || cofinsRate > 100) {
+      setError("Informe alíquotas válidas de PIS e COFINS entre 0 e 100%.");
+      setBusy(false);
+      return;
+    }
     const logo = f.get("logo") as File;
     if (logo?.size) {
       if (!["image/png", "image/jpeg", "image/webp"].includes(logo.type)) {
@@ -560,6 +572,11 @@ function CompanySettings() {
       razao_social: text("razao_social").toLocaleUpperCase("pt-BR"),
       nome_fantasia: text("nome_fantasia").toLocaleUpperCase("pt-BR"),
       inscricao_municipal: onlyDigits(text("inscricao_municipal"), 20),
+      regime_tributario: text("regime_tributario").toLocaleUpperCase("pt-BR"),
+      pis_aliquota: pisRate,
+      cofins_aliquota: cofinsRate,
+      pis_cofins_cst: onlyDigits(text("pis_cofins_cst"), 2),
+      pis_cofins_retencao: Number(text("pis_cofins_retencao")),
       email: text("email").toLocaleLowerCase("pt-BR"),
       telefone: maskPhone(text("telefone")),
       whatsapp: maskPhone(text("whatsapp")),
@@ -626,6 +643,46 @@ function CompanySettings() {
           Nome fantasia
           <input name="nome_fantasia" defaultValue={config.nome_fantasia || ""} onInput={upperCompanyInput} />
         </label>
+        <div className="panel-title">
+          <div>
+            <h2>Configuração fiscal</h2>
+            <p>Tributação aplicada às próximas DPS de homologação.</p>
+          </div>
+        </div>
+        <label>
+          Regime tributário
+          <select name="regime_tributario" defaultValue={config.regime_tributario} required>
+            <option value="LUCRO PRESUMIDO">Lucro Presumido</option>
+          </select>
+        </label>
+        <div className="form-row">
+          <label>
+            Alíquota do PIS (%)
+            <input name="pis_aliquota" type="number" inputMode="decimal" min="0" max="100" step="0.01" defaultValue={Number(config.pis_aliquota)} required />
+          </label>
+          <label>
+            Alíquota da COFINS (%)
+            <input name="cofins_aliquota" type="number" inputMode="decimal" min="0" max="100" step="0.01" defaultValue={Number(config.cofins_aliquota)} required />
+          </label>
+        </div>
+        <div className="form-row">
+          <label>
+            CST do PIS/COFINS
+            <select name="pis_cofins_cst" defaultValue={config.pis_cofins_cst} required>
+              <option value="01">01 — Operação tributável com alíquota básica</option>
+            </select>
+          </label>
+          <label>
+            Retenção do PIS/COFINS/CSLL
+            <select name="pis_cofins_retencao" defaultValue={String(config.pis_cofins_retencao)} required>
+              <option value="0">0 — Não retidos</option>
+            </select>
+          </label>
+        </div>
+        <div className="notice compact">
+          <ShieldCheck />
+          <span>Configuração baseada na NFS-e real conferida: PIS 0,65%, COFINS 3,00%, apuração própria e sem retenção.</span>
+        </div>
         <div className="form-row">
           <label>
             E-mail
@@ -1345,3 +1402,4 @@ function Permissions() {
     </>
   );
 }
+
