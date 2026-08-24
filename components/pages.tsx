@@ -788,6 +788,8 @@ type CertificateRow = {
   emissor: string | null;
   numero_serie: string | null;
   status: string;
+  senha_configurada: boolean;
+  senha_configurada_em: string | null;
   created_at: string;
   substituido_at: string | null;
 };
@@ -799,6 +801,15 @@ type CertificateMetadata = {
   issuer: string;
   serialNumber: string;
 };
+async function savePasswordInVault(certificateId: string, password: string, accessToken: string) {
+  const response = await fetch("/api/certificates/password", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
+    body: JSON.stringify({ certificateId, password }),
+  });
+  const result = await response.json() as { ok?: boolean; error?: string };
+  if (!response.ok || !result.ok) throw new Error(result.error || "Não foi possível guardar a senha no cofre seguro.");
+}
 function CertificateSettings() {
   const supabase = useMemo(() => createSupabaseBrowserClient(), []);
   const [items, setItems] = useState<CertificateRow[]>([]);
@@ -885,7 +896,7 @@ function CertificateSettings() {
       setBusy(false);
       return;
     }
-    const { error: insertError } = await supabase.from("certificados_a1").insert({
+    const { data: inserted, error: insertError } = await supabase.from("certificados_a1").insert({
       arquivo_nome: file.name,
       arquivo_caminho: path,
       emissao: inspected.validFrom,
@@ -895,10 +906,19 @@ function CertificateSettings() {
       emissor: inspected.issuer || null,
       numero_serie: inspected.serialNumber || null,
       enviado_por: userData.user.id,
-    });
-    if (insertError) {
+    }).select("id").single();
+    if (insertError || !inserted) {
       await supabase.storage.from("certificados-a1").remove([path]);
-      setError(insertError.message);
+      setError(insertError?.message || "Não foi possível registrar o certificado.");
+      setBusy(false);
+      return;
+    }
+    try {
+      await savePasswordInVault(inserted.id, password, accessToken);
+    } catch (vaultError) {
+      await supabase.from("certificados_a1").delete().eq("id", inserted.id);
+      await supabase.storage.from("certificados-a1").remove([path]);
+      setError(vaultError instanceof Error ? vaultError.message : "Não foi possível proteger a senha do certificado.");
       setBusy(false);
       return;
     }
@@ -921,9 +941,39 @@ function CertificateSettings() {
     }
     window.dispatchEvent(new Event("jpi-certificate-updated"));
     form.reset();
-    setMessage(active ? "Certificado lido e substituído com segurança." : "Certificado lido e anexado com segurança.");
+    setMessage(active ? "Certificado substituído e senha protegida no cofre seguro." : "Certificado anexado e senha protegida no cofre seguro.");
     setBusy(false);
     await load();
+  }
+  async function saveCurrentPassword(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!supabase || !active) return;
+    const form = event.currentTarget;
+    const password = String(new FormData(form).get("senha_atual") || "");
+    if (!password) {
+      setError("Informe a senha do certificado A1 atual.");
+      return;
+    }
+    setBusy(true);
+    setError("");
+    setMessage("");
+    const { data: sessionData } = await supabase.auth.getSession();
+    const accessToken = sessionData.session?.access_token;
+    if (!accessToken) {
+      setError("Sessão expirada. Entre novamente para guardar a senha.");
+      setBusy(false);
+      return;
+    }
+    try {
+      await savePasswordInVault(active.id, password, accessToken);
+      form.reset();
+      setMessage("Senha conferida e guardada no cofre seguro. As próximas homologações não pedirão a senha.");
+      await load();
+    } catch (vaultError) {
+      setError(vaultError instanceof Error ? vaultError.message : "Não foi possível guardar a senha.");
+    } finally {
+      setBusy(false);
+    }
   }
   async function deleteCertificate() {
     if (!supabase || items.length === 0) return;
@@ -969,7 +1019,7 @@ function CertificateSettings() {
     }
     setItems([]);
     setMetadata(null);
-    setMessage("Certificado, arquivos, histórico e aviso de validade excluídos definitivamente.");
+    setMessage("Certificado, senha protegida, arquivos, histórico e aviso de validade excluídos definitivamente.");
     window.dispatchEvent(new Event("jpi-certificate-updated"));
     setBusy(false);
   }
@@ -1008,7 +1058,7 @@ function CertificateSettings() {
           </label>
           <div className="notice compact">
             <KeyRound />
-            <span>A validade e os dados do titular serão lidos automaticamente. A senha é usada somente durante a leitura e não será armazenada.</span>
+            <span>A validade e os dados do titular serão lidos automaticamente. A senha será criptografada no Supabase Vault e não ficará exposta no cadastro.</span>
           </div>
           {metadata && (
             <div className="certificate-metadata">
@@ -1055,6 +1105,22 @@ function CertificateSettings() {
                 ) : (
                   <div className="notice compact warning"><AlertCircle /><span>Importe novamente este certificado para gravar permanentemente os dados detalhados.</span></div>
                 )}
+                <div className={`notice compact ${active.senha_configurada ? "" : "warning"}`}>
+                  <KeyRound />
+                  <span>{active.senha_configurada
+                    ? `Senha protegida no cofre${active.senha_configurada_em ? ` desde ${new Date(active.senha_configurada_em).toLocaleString("pt-BR")}` : ""}. As homologações usarão o A1 automaticamente.`
+                    : "Senha automática ainda não configurada. Informe-a uma única vez abaixo para liberar as homologações sem nova digitação."}</span>
+                </div>
+                <form className="data-form certificate-password-form" onSubmit={saveCurrentPassword}>
+                  <label>
+                    {active.senha_configurada ? "Atualizar senha protegida" : "Guardar senha do certificado"}
+                    <input name="senha_atual" type="password" autoComplete="off" maxLength={256} placeholder="Informe a senha do A1 atual" required />
+                  </label>
+                  <button className="secondary full" disabled={busy}>
+                    <KeyRound size={17} />
+                    {busy ? "Protegendo…" : active.senha_configurada ? "Conferir e atualizar senha" : "Guardar senha com segurança"}
+                  </button>
+                </form>
               </>
             ) : (
               <div className="empty-certificate">
@@ -1133,13 +1199,12 @@ function Integrations({accessToken}:{accessToken:string|null}) {
     setElapsed(0);setBusy(true);setError("");setMessage("");setConnectionStage("Preparando certificado A1…");
     const token = accessToken;
     if (!token) { setError("Sessão expirada. Saia do sistema e entre novamente.");setBusy(false);setConnectionStage("");return; }
-    const form = new FormData(event.currentTarget);
     const controller = new AbortController();
     let timeout = 0;
     try {
       setConnectionStage("Conectando ao Emissor Nacional de testes…");
       const response = await Promise.race([
-        fetch("/api/nfse/homologation/test", { method: "POST", headers: { Authorization: `Bearer ${token}` }, body: form, signal: controller.signal }),
+        fetch("/api/nfse/homologation/test", { method: "POST", headers: { Authorization: `Bearer ${token}` }, signal: controller.signal }),
         new Promise<never>((_, reject) => { timeout = window.setTimeout(() => reject(new Error("JPI_CONNECTION_TIMEOUT")), 25000); }),
       ]);
       const result = await response.json() as { ok?:boolean;environment?:string;error?:string };
@@ -1200,7 +1265,7 @@ function Integrations({accessToken}:{accessToken:string|null}) {
         </div>
         <button className="secondary full">Configurar canais</button>
       </article>
-    </div>{open&&<div className="modal-backdrop"><div className="modal-card small-modal"><div className="modal-head"><h2>Testar ambiente de homologação</h2><button className="icon-button" onClick={()=>setOpen(false)}><X/></button></div><form className="data-form" onSubmit={testHomologation}>{error&&<div className="error-box">{error}</div>}{message&&<div className="success-box">{message}</div>}<div className="notice compact warning"><ShieldCheck/><span>Este teste usa o certificado A1 somente para autenticar a conexão com a produção restrita. Nenhuma DPS ou NFS-e será enviada.</span></div>{(busy||elapsed>0)&&<div className="connection-timer"><Clock3/><span>{busy?(connectionStage||"Iniciando conexão…"):"Tempo da tentativa"}</span><strong>{elapsedLabel}</strong></div>}<label>Senha do certificado A1<input name="password" type="password" autoComplete="off" required disabled={busy}/></label><div className="form-actions"><button type="button" className="secondary" onClick={()=>setOpen(false)} disabled={busy}>Fechar</button><button className="primary" disabled={busy||tested}>{busy?`Conectando · ${elapsedLabel}`:tested?"Conexão confirmada":"Testar conexão"}</button></div></form></div></div>}</>
+    </div>{open&&<div className="modal-backdrop"><div className="modal-card small-modal"><div className="modal-head"><h2>Testar ambiente de homologação</h2><button className="icon-button" onClick={()=>setOpen(false)}><X/></button></div><form className="data-form" onSubmit={testHomologation}>{error&&<div className="error-box">{error}</div>}{message&&<div className="success-box">{message}</div>}<div className="notice compact warning"><ShieldCheck/><span>Este teste usa o certificado A1 e a senha protegida no cofre somente para autenticar a conexão com a produção restrita. Nenhuma DPS ou NFS-e será enviada.</span></div>{(busy||elapsed>0)&&<div className="connection-timer"><Clock3/><span>{busy?(connectionStage||"Iniciando conexão…"):"Tempo da tentativa"}</span><strong>{elapsedLabel}</strong></div>}<div className="notice compact"><KeyRound/><span>A senha será recuperada somente pelo servidor e não será exibida no navegador.</span></div><div className="form-actions"><button type="button" className="secondary" onClick={()=>setOpen(false)} disabled={busy}>Fechar</button><button className="primary" disabled={busy||tested}>{busy?`Conectando · ${elapsedLabel}`:tested?"Conexão confirmada":"Testar conexão"}</button></div></form></div></div>}</>
   );
 }
 type ManagedUser = {
@@ -1402,4 +1467,5 @@ function Permissions() {
     </>
   );
 }
+
 

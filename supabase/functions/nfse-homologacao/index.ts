@@ -408,12 +408,10 @@ Deno.serve(async request => {
   try {
     const body = await request.json();
     monthlyId = Number(body.monthlyId);
-    password = String(body.password || "");
   } catch {
     return json({ error: "Dados da solicitação inválidos." }, 400);
   }
   if (!Number.isSafeInteger(monthlyId) || monthlyId <= 0) return json({ error: "Mensalidade inválida." }, 400);
-  if (!password || password.length > 256) return json({ error: "Informe a senha do certificado A1." }, 400);
 
   const { data: payment, error: paymentError } = await userClient
     .from("mensalidades")
@@ -441,16 +439,25 @@ Deno.serve(async request => {
 
   const { data: certificate } = await admin
     .from("certificados_a1")
-    .select("arquivo_caminho,validade")
+    .select("id,arquivo_caminho,validade,senha_configurada")
     .eq("status", "ATIVO")
     .order("created_at", { ascending: false })
     .limit(1)
     .maybeSingle();
   if (!certificate) return json({ error: "Certificado A1 ativo não encontrado." }, 400);
   if (new Date(`${certificate.validade}T23:59:59-03:00`).getTime() < Date.now()) return json({ error: "O certificado A1 está vencido." }, 400);
+  if (!certificate.senha_configurada) return json({ error: "Guarde primeiro a senha do certificado em Configurações > Certificado A1." }, 400);
+  const { data: storedPassword, error: passwordError } = await admin.rpc("get_certificate_password_service", {
+    p_certificate_id: certificate.id,
+  });
+  password = typeof storedPassword === "string" ? storedPassword : "";
+  if (passwordError || !password) return json({ error: "Não foi possível abrir a senha protegida do certificado." }, 500);
 
   const { data: pfxFile, error: pfxError } = await admin.storage.from(CERTIFICATE_BUCKET).download(certificate.arquivo_caminho);
-  if (pfxError || !pfxFile) return json({ error: "Não foi possível acessar o certificado privado." }, 500);
+  if (pfxError || !pfxFile) {
+    password = "";
+    return json({ error: "Não foi possível acessar o certificado privado." }, 500);
+  }
 
   let stage: HomologationStage = "validar_dados_fiscais";
   try {
@@ -567,6 +574,7 @@ Deno.serve(async request => {
     return json({ error: validationError || stageError.message, diagnosticCode: stageError.code }, validationError ? 422 : 502);
   }
 });
+
 
 
 

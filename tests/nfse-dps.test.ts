@@ -176,5 +176,35 @@ test("oferece correção obrigatória antes de reenviar uma rejeição", () => {
   assert.match(uiSource, /p\.status_nfse==="Rejeitada em homologação"[\s\S]*?Corrigir para reenviar/);
 });
 
+test("guarda a senha do A1 no Vault e não a solicita durante a homologação", () => {
+  const nodeSource = readFileSync(new URL("../app/api/nfse/homologation/issue/route.ts", import.meta.url), "utf8");
+  const testSource = readFileSync(new URL("../app/api/nfse/homologation/test/route.ts", import.meta.url), "utf8");
+  const edgeSource = readFileSync(new URL("../supabase/functions/nfse-homologacao/index.ts", import.meta.url), "utf8");
+  const passwordRoute = readFileSync(new URL("../app/api/certificates/password/route.ts", import.meta.url), "utf8");
+  const invoiceUi = readFileSync(new URL("../components/live-pages.tsx", import.meta.url), "utf8");
+  const settingsUi = readFileSync(new URL("../components/pages.tsx", import.meta.url), "utf8");
+  const migration = readFileSync(new URL("../supabase/migrations/20260824213229_armazenar_senha_certificado_vault.sql", import.meta.url), "utf8");
+  const securityMigration = readFileSync(new URL("../supabase/migrations/20260824214346_proteger_funcoes_senha_certificado.sql", import.meta.url), "utf8");
+
+  assert.match(migration, /vault\.create_secret/);
+  assert.match(migration, /vault\.decrypted_secrets/);
+  assert.match(migration, /revoke all on table private\.certificado_a1_secrets from public, anon, authenticated/);
+  assert.match(migration, /grant execute on function public\.get_certificate_password_service\(uuid\) to service_role/);
+  assert.match(securityMigration, /private\.store_certificate_password_internal/);
+  assert.match(securityMigration, /private\.get_certificate_password_internal/);
+  assert.match(securityMigration, /security invoker/);
+  assert.match(passwordRoute, /forge\.pkcs12\.pkcs12FromAsn1/);
+  assert.match(passwordRoute, /rpc\("store_certificate_password"/);
+  assert.match(nodeSource, /process\.env\.JPI_BACKEND_SECRET/);
+  assert.match(nodeSource, /rpc\("get_certificate_password"/);
+  assert.match(testSource, /rpc\("get_certificate_password"/);
+  assert.match(edgeSource, /rpc\("get_certificate_password_service"/);
+  assert.match(settingsUi, /savePasswordInVault/);
+  assert.match(invoiceUi, /JSON\.stringify\(\{monthlyId:homologationPayment\.id\}\)/);
+  assert.doesNotMatch(invoiceUi, /certificatePassword/);
+  assert.doesNotMatch(invoiceUi, /Senha do certificado A1<input/);
+});
+
+
 
 
