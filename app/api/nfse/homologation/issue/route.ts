@@ -129,7 +129,7 @@ function buildRestrictedDps(payment: DpsSource, company: CompanySource) {
   if (!takerName) throw new Error("O responsável financeiro do tomador não foi informado.");
   if (!description || description.length > 2000) throw new Error("A descrição fiscal deve ter entre 1 e 2000 caracteres.");
   if (!Number.isFinite(Number(payment.valor_nfse)) || Number(payment.valor_nfse) <= 0) throw new Error("O valor da NFS-e é inválido.");
-  const id = `DPS${municipality}2${providerCnpj}${series}${number.padStart(15, "0")}`;
+  const id = `DPS${municipality}2${providerCnpj}${series.padStart(5, "0")}${number.padStart(15, "0")}`;
   const document = takerTaxId.length === 11 ? `<CPF>${takerTaxId}</CPF>` : `<CNPJ>${takerTaxId}</CNPJ>`;
   const phone = digits(payment.alunos?.whatsapp);
   return { id, xml: `<?xml version="1.0" encoding="UTF-8"?>

@@ -58,9 +58,15 @@ test("usa o endereço operacional publicado na especificação da produção res
 
 test("usa série de aplicativo próprio e não a faixa reservada ao Emissor Web", () => {
   assert.equal(NFSE_OWN_APP_SERIES, "1");
-  assert.match(buildDpsDraft(input).xml, /<serie>1<\/serie>/);
-  assert.doesNotMatch(readFileSync(new URL("../app/api/nfse/homologation/issue/route.ts", import.meta.url), "utf8"), /const series = "70000"/);
-  assert.doesNotMatch(readFileSync(new URL("../supabase/functions/nfse-homologacao/index.ts", import.meta.url), "utf8"), /const series = "70000"/);
+  const draft = buildDpsDraft(input);
+  const nodeSource = readFileSync(new URL("../app/api/nfse/homologation/issue/route.ts", import.meta.url), "utf8");
+  const edgeSource = readFileSync(new URL("../supabase/functions/nfse-homologacao/index.ts", import.meta.url), "utf8");
+  assert.match(draft.xml, /<serie>1<\/serie>/);
+  assert.equal(draft.id, "DPS330455723004154500010700001000000000000001");
+  assert.doesNotMatch(nodeSource, /const series = "70000"/);
+  assert.doesNotMatch(edgeSource, /const series = "70000"/);
+  assert.match(nodeSource, /series\.padStart\(5, "0"\)/);
+  assert.match(edgeSource, /series\.padStart\(5, "0"\)/);
 });
 
 test("escapa conteúdo textual inserido no XML", () => {
