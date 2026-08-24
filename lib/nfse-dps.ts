@@ -143,7 +143,6 @@ export function buildDpsDraft(input: DpsDraftInput): DpsDraft {
   const id = `DPS${municipalityCode}2${providerCnpj}${series.padStart(5, "0")}${number.padStart(15, "0")}`;
   const takerDocument = takerTaxId.length === 11 ? element("CPF", takerTaxId) : element("CNPJ", takerTaxId);
   const phone = digits(input.taker.phone || "");
-  const issRate = input.service.issRate ?? 5;
   const xml = `<?xml version="1.0" encoding="UTF-8"?>
 <DPS xmlns="http://www.sped.fazenda.gov.br/nfse" versao="1.01">
   <infDPS Id="${id}">
@@ -188,7 +187,6 @@ export function buildDpsDraft(input: DpsDraftInput): DpsDraft {
         <tribMun>
           <tribISSQN>1</tribISSQN>
           <tpRetISSQN>1</tpRetISSQN>
-          <pAliq>${issRate.toFixed(2)}</pAliq>
         </tribMun>
         <totTrib>
           <vTotTrib>

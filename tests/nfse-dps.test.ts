@@ -42,6 +42,7 @@ test("gera DPS 1.01 exclusivamente para homologação com IBS/CBS", () => {
   assert.match(draft.xml, /<vTotTribFed>350\.00<\/vTotTribFed>[\s\S]*<vTotTribEst>0\.00<\/vTotTribEst>[\s\S]*<vTotTribMun>0\.00<\/vTotTribMun>/);
   assert.doesNotMatch(draft.xml, /<IM>/);
   assert.doesNotMatch(draft.xml, /<indTotTrib>/);
+  assert.doesNotMatch(draft.xml, /<pAliq>/);
   assert.doesNotMatch(draft.xml, /<tpAmb>1<\/tpAmb>/);
 });
 
@@ -84,6 +85,15 @@ test("usa série de aplicativo próprio e não a faixa reservada ao Emissor Web"
   assert.match(edgeSource, /record\.Descricao/);
   assert.match(nodeSource, /error\.complemento/);
   assert.match(edgeSource, /error\.complemento/);
+});
+
+test("não informa alíquota para prestador não optante do Simples", () => {
+  const draft = buildDpsDraft(input);
+  const nodeSource = readFileSync(new URL("../app/api/nfse/homologation/issue/route.ts", import.meta.url), "utf8");
+  const edgeSource = readFileSync(new URL("../supabase/functions/nfse-homologacao/index.ts", import.meta.url), "utf8");
+  assert.doesNotMatch(draft.xml, /<pAliq>/);
+  assert.doesNotMatch(nodeSource, /<pAliq>/);
+  assert.doesNotMatch(edgeSource, /<pAliq>/);
 });
 
 test("escapa conteúdo textual inserido no XML", () => {
