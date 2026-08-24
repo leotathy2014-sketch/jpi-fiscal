@@ -20,6 +20,7 @@ const input = {
   },
   service: {
     nationalTaxCode: "08.01.01",
+    municipalTaxCode: "002",
     nbs: "122012000",
     description: "MENSALIDADE ESCOLAR - COMPETÊNCIA 08/2026",
     amount: 350,
@@ -33,6 +34,7 @@ test("gera DPS 1.01 exclusivamente para homologação com IBS/CBS", () => {
   assert.equal(draft.id, "DPS330455723004154500010700001000000000000001");
   assert.match(draft.xml, /<tpAmb>2<\/tpAmb>/);
   assert.match(draft.xml, /<cTribNac>080101<\/cTribNac>/);
+  assert.match(draft.xml, /<cTribMun>002<\/cTribMun>/);
   assert.match(draft.xml, /<cNBS>122012000<\/cNBS>/);
   assert.match(draft.xml, /<IBSCBS>[\s\S]*<cIndOp>030101<\/cIndOp>/);
   assert.match(draft.xml, /<finNFSe>0<\/finNFSe>[\s\S]*<indFinal>1<\/indFinal>/);
@@ -56,6 +58,13 @@ test("usa o endereço operacional publicado na especificação da produção res
   assert.doesNotMatch(edgeSource, /gov\.br\/SefinNacional\/nfse/);
 });
 
+test("rejeita código municipal reservado antes de gerar XML", () => {
+  assert.throws(
+    () => buildDpsDraft({ ...input, service: { ...input.service, municipalTaxCode: "000" } }),
+    /tributação municipal/,
+  );
+});
+
 test("usa série de aplicativo próprio e não a faixa reservada ao Emissor Web", () => {
   assert.equal(NFSE_OWN_APP_SERIES, "1");
   const draft = buildDpsDraft(input);
@@ -67,6 +76,14 @@ test("usa série de aplicativo próprio e não a faixa reservada ao Emissor Web"
   assert.doesNotMatch(edgeSource, /const series = "70000"/);
   assert.match(nodeSource, /series\.padStart\(5, "0"\)/);
   assert.match(edgeSource, /series\.padStart\(5, "0"\)/);
+  assert.match(nodeSource, /<cTribMun>\$\{municipalTaxCode\}<\/cTribMun>/);
+  assert.match(edgeSource, /<cTribMun>\$\{municipalTaxCode\}<\/cTribMun>/);
+  assert.match(nodeSource, /record\.Codigo/);
+  assert.match(edgeSource, /record\.Codigo/);
+  assert.match(nodeSource, /record\.Descricao/);
+  assert.match(edgeSource, /record\.Descricao/);
+  assert.match(nodeSource, /error\.complemento/);
+  assert.match(edgeSource, /error\.complemento/);
 });
 
 test("escapa conteúdo textual inserido no XML", () => {

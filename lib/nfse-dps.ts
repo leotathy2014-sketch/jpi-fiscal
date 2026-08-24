@@ -16,6 +16,7 @@ export type DpsDraftInput = {
   };
   service: {
     nationalTaxCode: string;
+    municipalTaxCode?: string | null;
     nbs?: string | null;
     description: string;
     amount: number;
@@ -110,6 +111,7 @@ export function buildDpsDraft(input: DpsDraftInput): DpsDraft {
   const series = digits(input.series);
   const number = digits(input.number).replace(/^0+(?=\d)/, "");
   const nationalTaxCode = digits(input.service.nationalTaxCode);
+  const municipalTaxCode = digits(input.service.municipalTaxCode || "");
   const nbs = digits(input.service.nbs || "");
   const description = input.service.description.trim();
   const takerName = input.taker.name.trim();
@@ -121,8 +123,11 @@ export function buildDpsDraft(input: DpsDraftInput): DpsDraft {
   if (!/^\d{1,5}$/.test(series)) throw new Error("Série da DPS inválida.");
   if (!/^[1-9]\d{0,14}$/.test(number)) throw new Error("Número da DPS inválido.");
   if (nationalTaxCode.length !== 6) throw new Error("Código de tributação nacional inválido.");
+  if (municipalTaxCode && (!/^\d{3}$/.test(municipalTaxCode) || municipalTaxCode === "000")) {
+    throw new Error("Código de tributação municipal inválido.");
+  }
   if (nbs && nbs.length !== 9) throw new Error("Código NBS inválido.");
-  if (!description || description.length > 2000) throw new Error("A descrição do serviço deve ter entre 1 e 2000 caracteres.");
+  if (!description || description.length > 1000) throw new Error("A descrição do serviço deve ter entre 1 e 1000 caracteres.");
   if (!Number.isFinite(input.service.amount) || input.service.amount <= 0) throw new Error("Valor do serviço inválido.");
   if (input.service.issRate != null && (!Number.isFinite(input.service.issRate) || input.service.issRate < 0 || input.service.issRate > 100)) {
     throw new Error("Alíquota do ISSQN inválida.");
@@ -171,6 +176,7 @@ export function buildDpsDraft(input: DpsDraftInput): DpsDraft {
       </locPrest>
       <cServ>
         <cTribNac>${nationalTaxCode}</cTribNac>
+        ${municipalTaxCode ? element("cTribMun", municipalTaxCode) : ""}
         <xDescServ>${escapeXml(description)}</xDescServ>
         ${nbs ? element("cNBS", nbs) : ""}
       </cServ>

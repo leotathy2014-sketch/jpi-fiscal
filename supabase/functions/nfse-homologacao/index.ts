@@ -159,10 +159,13 @@ function buildRestrictedDps(payment: DpsSource, company: CompanySource) {
   const nbs = normalizedSegment.includes("médio") ? "122013000"
     : normalizedSegment.includes("1º") || normalizedSegment.includes("6º") || normalizedSegment.includes("fundamental") ? "122012000"
     : "122011200";
+  const municipalTaxCode = normalizedSegment.includes("médio") ? "003"
+    : normalizedSegment.includes("1º") || normalizedSegment.includes("6º") || normalizedSegment.includes("fundamental") ? "002"
+    : "001";
   if (!hasValidCnpj(providerCnpj)) throw new Error("O CNPJ do prestador é inválido.");
   if (!isValidCpfCnpj(takerTaxId)) throw new Error("O CPF/CNPJ do tomador é inválido.");
   if (!takerName) throw new Error("O responsável financeiro do tomador não foi informado.");
-  if (!description || description.length > 2000) throw new Error("A descrição fiscal deve ter entre 1 e 2000 caracteres.");
+  if (!description || description.length > 1000) throw new Error("A descrição fiscal deve ter entre 1 e 1000 caracteres.");
   if (!Number.isFinite(Number(payment.valor_nfse)) || Number(payment.valor_nfse) <= 0) throw new Error("O valor da NFS-e é inválido.");
   const id = `DPS${municipality}2${providerCnpj}${series.padStart(5, "0")}${number.padStart(15, "0")}`;
   const document = takerTaxId.length === 11 ? `<CPF>${takerTaxId}</CPF>` : `<CNPJ>${takerTaxId}</CNPJ>`;
@@ -174,7 +177,7 @@ function buildRestrictedDps(payment: DpsSource, company: CompanySource) {
     <serie>${series}</serie><nDPS>${number}</nDPS><dCompet>${competenceDate(payment.competencia)}</dCompet><tpEmit>1</tpEmit><cLocEmi>${municipality}</cLocEmi>
     <prest><CNPJ>${providerCnpj}</CNPJ><xNome>${escapeXml(company.razao_social)}</xNome><regTrib><opSimpNac>1</opSimpNac><regEspTrib>0</regEspTrib></regTrib></prest>
     <toma>${document}<xNome>${escapeXml(takerName)}</xNome>${phone.length >= 6 ? `<fone>${phone}</fone>` : ""}${payment.alunos?.email ? `<email>${escapeXml(payment.alunos.email.trim())}</email>` : ""}</toma>
-    <serv><locPrest><cLocPrestacao>${municipality}</cLocPrestacao></locPrest><cServ><cTribNac>080101</cTribNac><xDescServ>${escapeXml(description)}</xDescServ><cNBS>${nbs}</cNBS></cServ></serv>
+    <serv><locPrest><cLocPrestacao>${municipality}</cLocPrestacao></locPrest><cServ><cTribNac>080101</cTribNac><cTribMun>${municipalTaxCode}</cTribMun><xDescServ>${escapeXml(description)}</xDescServ><cNBS>${nbs}</cNBS></cServ></serv>
     <valores><vServPrest><vServ>${Number(payment.valor_nfse).toFixed(2)}</vServ></vServPrest><trib><tribMun><tribISSQN>1</tribISSQN><tpRetISSQN>1</tpRetISSQN><pAliq>5.00</pAliq></tribMun><totTrib><vTotTrib><vTotTribFed>${Number(payment.valor_nfse).toFixed(2)}</vTotTribFed><vTotTribEst>0.00</vTotTribEst><vTotTribMun>0.00</vTotTribMun></vTotTrib></totTrib></trib></valores>
     <IBSCBS><finNFSe>0</finNFSe><indFinal>1</indFinal><cIndOp>030101</cIndOp><indDest>0</indDest><valores><trib><gIBSCBS><CST>200</CST><cClassTrib>200028</cClassTrib></gIBSCBS></trib></valores></IBSCBS>
   </infDPS>
@@ -284,12 +287,17 @@ function fiscalError(value: unknown, fallbackCode = ""): FiscalError | null {
   }
   if (!value || typeof value !== "object" || Array.isArray(value)) return null;
   const record = value as Record<string, unknown>;
-  const codigo = shortText(record.codigo ?? record.code ?? record.status ?? fallbackCode, 30);
+  const codigo = shortText(record.codigo ?? record.Codigo ?? record.code ?? record.Code ?? record.status ?? fallbackCode, 30);
   const descricao = shortText(
-    record.descricao ?? record.description ?? record.mensagem ?? record.message ?? record.detail ?? record.title,
+    record.descricao ?? record.Descricao ?? record.description ?? record.Description ?? record.mensagem ?? record.Mensagem
+      ?? record.message ?? record.Message ?? record.detail ?? record.Detail ?? record.title ?? record.Title,
     500,
   );
-  const complemento = shortText(record.complemento ?? record.complement ?? record.campo ?? record.field, 500);
+  const complemento = shortText(
+    record.complemento ?? record.Complemento ?? record.complement ?? record.Complement ?? record.campo ?? record.Campo
+      ?? record.field ?? record.Field,
+    500,
+  );
   return codigo || descricao || complemento
     ? { codigo, descricao: descricao || "Rejeição sem descrição.", complemento }
     : null;
@@ -301,7 +309,7 @@ function safeFiscalErrors(data: unknown) {
     data.forEach(value => candidates.push({ value }));
   } else if (data && typeof data === "object") {
     const record = data as Record<string, unknown>;
-    for (const key of ["erros", "errors", "erro", "error", "violations", "mensagens", "messages"]) {
+    for (const key of ["erros", "Erros", "errors", "Errors", "erro", "Erro", "error", "Error", "violations", "Violations", "mensagens", "Mensagens", "messages", "Messages"]) {
       const group = record[key];
       if (Array.isArray(group)) {
         group.forEach(value => candidates.push({ value }));
@@ -464,15 +472,16 @@ Deno.serve(async request => {
 
     if (!response.ok || !sefin.nfseXmlGZipB64 || !sefin.chaveAcesso) {
       const fiscalErrors = safeFiscalErrors(sefinPayload);
+      const formattedErrors = fiscalErrors.map(error => [error.codigo, error.descricao, error.complemento].filter(Boolean).join(" - "));
       await admin.from("mensalidades").update({ status_nfse: "Rejeitada em homologação", dps_xml_path: unsignedPath, dps_xml_id: draft.id, dps_assinada_xml_path: signedPath }).eq("id", payment.id);
       await admin.from("historico_nfse").insert({
         mensalidade_id: payment.id,
         evento: "nfse_homologacao_rejeitada",
         valor_anterior: payment.valor_nfse,
         valor_novo: payment.valor_nfse,
-        detalhes: `Produção restrita respondeu HTTP ${response.status}. ${fiscalErrors.map(error => `${error.codigo}: ${error.descricao}`).join(" | ")}`.slice(0, 2000),
+        detalhes: `Produção restrita respondeu HTTP ${response.status}. ${formattedErrors.join(" | ")}`.slice(0, 2000),
       });
-      return json({ error: fiscalErrors[0]?.descricao || `A produção restrita respondeu com o código ${response.status}.`, errors: fiscalErrors }, 422);
+      return json({ error: formattedErrors[0] || `A produção restrita respondeu com o código ${response.status}.`, errors: fiscalErrors }, 422);
     }
 
     const nfseXml = new TextDecoder().decode(ungzip(base64ToBytes(sefin.nfseXmlGZipB64)));
