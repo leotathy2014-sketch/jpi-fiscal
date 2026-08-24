@@ -35,6 +35,8 @@ test("gera DPS 1.01 exclusivamente para homologação com IBS/CBS", () => {
   assert.match(draft.xml, /<cNBS>122012000<\/cNBS>/);
   assert.match(draft.xml, /<IBSCBS>[\s\S]*<cIndOp>030101<\/cIndOp>/);
   assert.match(draft.xml, /<CST>200<\/CST>[\s\S]*<cClassTrib>200028<\/cClassTrib>/);
+  assert.match(draft.xml, /<vTotTribFed>350\.00<\/vTotTribFed>[\s\S]*<vTotTribEst>0\.00<\/vTotTribEst>[\s\S]*<vTotTribMun>0\.00<\/vTotTribMun>/);
+  assert.doesNotMatch(draft.xml, /<indTotTrib>/);
   assert.doesNotMatch(draft.xml, /<tpAmb>1<\/tpAmb>/);
 });
 

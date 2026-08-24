@@ -176,7 +176,11 @@ export function buildDpsDraft(input: DpsDraftInput): DpsDraft {
           <pAliq>${issRate.toFixed(2)}</pAliq>
         </tribMun>
         <totTrib>
-          <indTotTrib>0</indTotTrib>
+          <vTotTrib>
+            <vTotTribFed>${input.service.amount.toFixed(2)}</vTotTribFed>
+            <vTotTribEst>0.00</vTotTribEst>
+            <vTotTribMun>0.00</vTotTribMun>
+          </vTotTrib>
         </totTrib>
       </trib>
     </valores>${ibsCbs ? `

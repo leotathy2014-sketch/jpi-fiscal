@@ -146,7 +146,7 @@ function buildRestrictedDps(payment: DpsSource, company: CompanySource) {
     <prest><CNPJ>${providerCnpj}</CNPJ>${company.inscricao_municipal ? `<IM>${digits(company.inscricao_municipal)}</IM>` : ""}<xNome>${escapeXml(company.razao_social)}</xNome><regTrib><opSimpNac>1</opSimpNac><regEspTrib>0</regEspTrib></regTrib></prest>
     <toma>${document}<xNome>${escapeXml(takerName)}</xNome>${phone.length >= 6 ? `<fone>${phone}</fone>` : ""}${payment.alunos?.email ? `<email>${escapeXml(payment.alunos.email.trim())}</email>` : ""}</toma>
     <serv><locPrest><cLocPrestacao>${municipality}</cLocPrestacao></locPrest><cServ><cTribNac>080101</cTribNac><xDescServ>${escapeXml(description)}</xDescServ><cNBS>${nbs}</cNBS></cServ></serv>
-    <valores><vServPrest><vServ>${Number(payment.valor_nfse).toFixed(2)}</vServ></vServPrest><trib><tribMun><tribISSQN>1</tribISSQN><tpRetISSQN>1</tpRetISSQN><pAliq>5.00</pAliq></tribMun><totTrib><indTotTrib>0</indTotTrib></totTrib></trib></valores>
+    <valores><vServPrest><vServ>${Number(payment.valor_nfse).toFixed(2)}</vServ></vServPrest><trib><tribMun><tribISSQN>1</tribISSQN><tpRetISSQN>1</tpRetISSQN><pAliq>5.00</pAliq></tribMun><totTrib><vTotTrib><vTotTribFed>${Number(payment.valor_nfse).toFixed(2)}</vTotTribFed><vTotTribEst>0.00</vTotTribEst><vTotTribMun>0.00</vTotTribMun></vTotTrib></totTrib></trib></valores>
     <IBSCBS><finNFSe>0</finNFSe><cIndOp>030101</cIndOp><indDest>0</indDest><valores><trib><gIBSCBS><CST>200</CST><cClassTrib>200028</cClassTrib></gIBSCBS></trib></valores></IBSCBS>
   </infDPS>
 </DPS>` };
@@ -243,12 +243,58 @@ function signDps(xml: string, privateKeyPem: string, certificatePem: string) {
   return signedXml;
 }
 
-function safeFiscalErrors(data: SefinResponse) {
-  return (data.erros || []).slice(0, 5).map(error => ({
-    codigo: String(error.codigo || "").slice(0, 30),
-    descricao: String(error.descricao || "Rejeição sem descrição.").slice(0, 500),
-    complemento: String(error.complemento || "").slice(0, 500),
-  }));
+function shortText(value: unknown, maxLength: number) {
+  if (typeof value !== "string" && typeof value !== "number") return "";
+  return String(value).replace(/[\\r\\n\\t]+/g, " ").trim().slice(0, maxLength);
+}
+
+function fiscalError(value: unknown, fallbackCode = ""): FiscalError | null {
+  if (typeof value === "string" || typeof value === "number") {
+    const descricao = shortText(value, 500);
+    return descricao ? { codigo: shortText(fallbackCode, 30), descricao } : null;
+  }
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const record = value as Record<string, unknown>;
+  const codigo = shortText(record.codigo ?? record.code ?? record.status ?? fallbackCode, 30);
+  const descricao = shortText(
+    record.descricao ?? record.description ?? record.mensagem ?? record.message ?? record.detail ?? record.title,
+    500,
+  );
+  const complemento = shortText(record.complemento ?? record.complement ?? record.campo ?? record.field, 500);
+  return codigo || descricao || complemento
+    ? { codigo, descricao: descricao || "Rejeição sem descrição.", complemento }
+    : null;
+}
+
+function safeFiscalErrors(data: unknown) {
+  const candidates: Array<{ value: unknown; code?: string }> = [];
+  if (Array.isArray(data)) {
+    data.forEach(value => candidates.push({ value }));
+  } else if (data && typeof data === "object") {
+    const record = data as Record<string, unknown>;
+    for (const key of ["erros", "errors", "erro", "error", "violations", "mensagens", "messages"]) {
+      const group = record[key];
+      if (Array.isArray(group)) {
+        group.forEach(value => candidates.push({ value }));
+      } else if (group && typeof group === "object") {
+        for (const [field, value] of Object.entries(group as Record<string, unknown>)) {
+          if (Array.isArray(value)) value.forEach(item => candidates.push({ value: item, code: field }));
+          else candidates.push({ value, code: field });
+        }
+      } else if (group !== undefined && group !== null) {
+        candidates.push({ value: group });
+      }
+    }
+    if (candidates.length === 0) candidates.push({ value: record });
+  } else if (data !== undefined && data !== null) {
+    candidates.push({ value: data });
+  }
+
+  const normalized = candidates
+    .map(candidate => fiscalError(candidate.value, candidate.code))
+    .filter((error): error is FiscalError => Boolean(error))
+    .slice(0, 5);
+  return normalized.length > 0 ? normalized : [{ codigo: "", descricao: "Rejeição sem descrição.", complemento: "" }];
 }
 
 async function postToRestrictedProduction(body: string, certificateChainPem: string, privateKeyPem: string) {
@@ -380,11 +426,15 @@ Deno.serve(async request => {
     stage = "transmitir_sefin";
     const response = await postToRestrictedProduction(payload, keys.certificateChainPem, keys.privateKeyPem);
     stage = "interpretar_retorno";
-    let sefin: SefinResponse = {};
-    try { sefin = await response.json(); } catch { sefin = {}; }
+    const responseText = await response.text();
+    let sefinPayload: unknown = {};
+    try { sefinPayload = responseText ? JSON.parse(responseText) : {}; } catch { sefinPayload = responseText; }
+    const sefin = sefinPayload && typeof sefinPayload === "object" && !Array.isArray(sefinPayload)
+      ? sefinPayload as SefinResponse
+      : {};
 
     if (!response.ok || !sefin.nfseXmlGZipB64 || !sefin.chaveAcesso) {
-      const fiscalErrors = safeFiscalErrors(sefin);
+      const fiscalErrors = safeFiscalErrors(sefinPayload);
       await admin.from("mensalidades").update({ status_nfse: "Rejeitada em homologação", dps_xml_path: unsignedPath, dps_xml_id: draft.id, dps_assinada_xml_path: signedPath }).eq("id", payment.id);
       await admin.from("historico_nfse").insert({
         mensalidade_id: payment.id,
@@ -454,4 +504,3 @@ Deno.serve(async request => {
     return json({ error: stageError.message, diagnosticCode: stageError.code }, 502);
   }
 });
-
