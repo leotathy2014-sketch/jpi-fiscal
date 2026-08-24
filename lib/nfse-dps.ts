@@ -35,6 +35,8 @@ export type DpsDraft = {
 };
 
 export const NFSE_RESTRICTED_ENDPOINT = "https://sefin.producaorestrita.nfse.gov.br/SefinNacional/nfse";
+// Aplicativos próprios devem usar a faixa 00001-49999. A série 70000 é reservada ao Emissor Web.
+export const NFSE_OWN_APP_SERIES = "1";
 
 const digits = (value: string) => value.replace(/\D/g, "");
 const escapeXml = (value: string) => value.replace(/[<>&"']/g, character => ({

@@ -6,7 +6,7 @@ import { request as httpsRequest, type RequestOptions } from "node:https";
 import type { ConnectionOptions } from "node:tls";
 import { gzipSync, gunzipSync } from "node:zlib";
 import { SignedXml } from "xml-crypto";
-import { hasValidCnpj, isValidCpfCnpj, NFSE_RESTRICTED_ENDPOINT } from "@/lib/nfse-dps";
+import { hasValidCnpj, isValidCpfCnpj, NFSE_OWN_APP_SERIES, NFSE_RESTRICTED_ENDPOINT } from "@/lib/nfse-dps";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -118,7 +118,7 @@ function buildRestrictedDps(payment: DpsSource, company: CompanySource) {
   const takerTaxId = digits(payment.alunos?.cpf_cnpj);
   const description = String(payment.descricao_servico || "").trim();
   const takerName = String(payment.alunos?.responsavel || "").trim();
-  const series = "70000";
+  const series = NFSE_OWN_APP_SERIES;
   const number = String(payment.id);
   const normalizedSegment = String(payment.alunos?.segmento || "").toLocaleLowerCase("pt-BR");
   const nbs = normalizedSegment.includes("médio") ? "122013000"

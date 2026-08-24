@@ -5,6 +5,8 @@ import { gzip, ungzip } from "npm:pako@2.1.0";
 import { SignedXml } from "npm:xml-crypto@6.1.2";
 
 const HOMOLOGATION_URL = "https://sefin.producaorestrita.nfse.gov.br/SefinNacional/nfse";
+// Aplicativos próprios devem usar a faixa 00001-49999. A série 70000 é reservada ao Emissor Web.
+const OWN_APP_DPS_SERIES = "1";
 const XML_BUCKET = "documentos-nfse";
 const CERTIFICATE_BUCKET = "certificados-a1";
 const CORS_HEADERS = {
@@ -150,7 +152,7 @@ function buildRestrictedDps(payment: DpsSource, company: CompanySource) {
   const takerTaxId = digits(payment.alunos?.cpf_cnpj);
   const description = String(payment.descricao_servico || "").trim();
   const takerName = String(payment.alunos?.responsavel || "").trim();
-  const series = "70000";
+  const series = OWN_APP_DPS_SERIES;
   const number = String(payment.id);
   const normalizedSegment = String(payment.alunos?.segmento || "").toLocaleLowerCase("pt-BR");
   const nbs = normalizedSegment.includes("médio") ? "122013000"

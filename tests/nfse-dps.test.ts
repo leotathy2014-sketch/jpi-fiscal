@@ -1,11 +1,11 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
-import { buildDpsDraft, isValidCpfCnpj, NFSE_RESTRICTED_ENDPOINT } from "../lib/nfse-dps.ts";
+import { buildDpsDraft, isValidCpfCnpj, NFSE_OWN_APP_SERIES, NFSE_RESTRICTED_ENDPOINT } from "../lib/nfse-dps.ts";
 
 const input = {
   municipalityCode: "3304557",
-  series: "70000",
+  series: NFSE_OWN_APP_SERIES,
   number: "1",
   competence: "08/2026",
   provider: {
@@ -30,7 +30,7 @@ const input = {
 
 test("gera DPS 1.01 exclusivamente para homologação com IBS/CBS", () => {
   const draft = buildDpsDraft(input);
-  assert.equal(draft.id, "DPS330455723004154500010770000000000000000001");
+  assert.equal(draft.id, "DPS330455723004154500010700001000000000000001");
   assert.match(draft.xml, /<tpAmb>2<\/tpAmb>/);
   assert.match(draft.xml, /<cTribNac>080101<\/cTribNac>/);
   assert.match(draft.xml, /<cNBS>122012000<\/cNBS>/);
@@ -54,6 +54,13 @@ test("usa o endereço operacional publicado na especificação da produção res
   const edgeSource = readFileSync(new URL("../supabase/functions/nfse-homologacao/index.ts", import.meta.url), "utf8");
   assert.match(edgeSource, /https:\/\/sefin\.producaorestrita\.nfse\.gov\.br\/SefinNacional\/nfse/);
   assert.doesNotMatch(edgeSource, /\/API\/SefinNacional\/nfse/);
+});
+
+test("usa série de aplicativo próprio e não a faixa reservada ao Emissor Web", () => {
+  assert.equal(NFSE_OWN_APP_SERIES, "1");
+  assert.match(buildDpsDraft(input).xml, /<serie>1<\/serie>/);
+  assert.doesNotMatch(readFileSync(new URL("../app/api/nfse/homologation/issue/route.ts", import.meta.url), "utf8"), /const series = "70000"/);
+  assert.doesNotMatch(readFileSync(new URL("../supabase/functions/nfse-homologacao/index.ts", import.meta.url), "utf8"), /const series = "70000"/);
 });
 
 test("escapa conteúdo textual inserido no XML", () => {
