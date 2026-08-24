@@ -90,3 +90,19 @@ test("escapa conteúdo textual inserido no XML", () => {
   const draft = buildDpsDraft({ ...input, service: { ...input.service, description: "MENSALIDADE & MATERIAL <TESTE>" } });
   assert.match(draft.xml, /MENSALIDADE &amp; MATERIAL &lt;TESTE&gt;/);
 });
+
+test("omite razão social do prestador quando ele próprio emite a DPS", () => {
+  const draft = buildDpsDraft(input);
+  const providerGroup = draft.xml.match(/<prest>[\s\S]*?<\/prest>/)?.[0];
+  assert.ok(providerGroup);
+  assert.match(providerGroup, /<CNPJ>30041545000107<\/CNPJ>/);
+  assert.doesNotMatch(providerGroup, /<xNome>/);
+  assert.match(draft.xml, /<toma>[\s\S]*?<xNome>RESPONSÁVEL DE TESTE<\/xNome>/);
+
+  const nodeSource = readFileSync(new URL("../app/api/nfse/homologation/issue/route.ts", import.meta.url), "utf8");
+  const edgeSource = readFileSync(new URL("../supabase/functions/nfse-homologacao/index.ts", import.meta.url), "utf8");
+  assert.doesNotMatch(nodeSource, /<prest><CNPJ>\$\{providerCnpj\}<\/CNPJ><xNome>/);
+  assert.doesNotMatch(edgeSource, /<prest><CNPJ>\$\{providerCnpj\}<\/CNPJ><xNome>/);
+});
+
+

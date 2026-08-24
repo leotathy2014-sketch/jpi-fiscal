@@ -140,7 +140,7 @@ function buildRestrictedDps(payment: DpsSource, company: CompanySource) {
   <infDPS Id="${id}">
     <tpAmb>2</tpAmb><dhEmi>${issueDateTime()}</dhEmi><verAplic>JPI-FISCAL-1.01</verAplic>
     <serie>${series}</serie><nDPS>${number}</nDPS><dCompet>${competenceDate(payment.competencia)}</dCompet><tpEmit>1</tpEmit><cLocEmi>${municipality}</cLocEmi>
-    <prest><CNPJ>${providerCnpj}</CNPJ><xNome>${escapeXml(company.razao_social)}</xNome><regTrib><opSimpNac>1</opSimpNac><regEspTrib>0</regEspTrib></regTrib></prest>
+    <prest><CNPJ>${providerCnpj}</CNPJ><regTrib><opSimpNac>1</opSimpNac><regEspTrib>0</regEspTrib></regTrib></prest>
     <toma>${document}<xNome>${escapeXml(takerName)}</xNome>${phone.length >= 6 ? `<fone>${phone}</fone>` : ""}${payment.alunos?.email ? `<email>${escapeXml(payment.alunos.email.trim())}</email>` : ""}</toma>
     <serv><locPrest><cLocPrestacao>${municipality}</cLocPrestacao></locPrest><cServ><cTribNac>080101</cTribNac><cTribMun>${municipalTaxCode}</cTribMun><xDescServ>${escapeXml(description)}</xDescServ><cNBS>${nbs}</cNBS></cServ></serv>
     <valores><vServPrest><vServ>${Number(payment.valor_nfse).toFixed(2)}</vServ></vServPrest><trib><tribMun><tribISSQN>1</tribISSQN><tpRetISSQN>1</tpRetISSQN><pAliq>5.00</pAliq></tribMun><totTrib><vTotTrib><vTotTribFed>${Number(payment.valor_nfse).toFixed(2)}</vTotTribFed><vTotTribEst>0.00</vTotTribEst><vTotTribMun>0.00</vTotTribMun></vTotTrib></totTrib></trib></valores>
@@ -525,4 +525,6 @@ export async function POST(request: NextRequest) {
     return json({ error: validationError || stageError.message, diagnosticCode: stageError.code }, validationError ? 422 : 502);
   }
 }
+
+
 

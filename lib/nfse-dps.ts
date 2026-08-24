@@ -158,7 +158,6 @@ export function buildDpsDraft(input: DpsDraftInput): DpsDraft {
     <prest>
       <CNPJ>${providerCnpj}</CNPJ>
       ${element("IM", digits(input.provider.municipalRegistration || ""))}
-      ${element("xNome", input.provider.name?.trim())}
       <regTrib>
         <opSimpNac>1</opSimpNac>
         <regEspTrib>0</regEspTrib>
@@ -219,3 +218,5 @@ export function buildDpsDraft(input: DpsDraftInput): DpsDraft {
 
   return { id, xml, version: "1.01" };
 }
+
+
