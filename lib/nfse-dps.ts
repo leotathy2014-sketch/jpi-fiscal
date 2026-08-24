@@ -186,6 +186,7 @@ export function buildDpsDraft(input: DpsDraftInput): DpsDraft {
     </valores>${ibsCbs ? `
     <IBSCBS>
       <finNFSe>0</finNFSe>
+      <indFinal>1</indFinal>
       <cIndOp>${ibsCbs.operationIndicator}</cIndOp>
       <indDest>0</indDest>
       <valores>
