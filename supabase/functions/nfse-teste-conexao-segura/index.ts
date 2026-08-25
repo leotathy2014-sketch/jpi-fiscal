@@ -1,7 +1,8 @@
 import { createClient } from "npm:@supabase/supabase-js@2.56.0";
 import forge from "npm:node-forge@1.3.1";
 
-const CONNECTION_TEST_URL = "https://adn.producaorestrita.nfse.gov.br/parametrizacao/3304557/convenio";
+const PARAMETERIZATION_TEST_URL = "https://adn.producaorestrita.nfse.gov.br/parametrizacao/3304557/convenio";
+const ISSUANCE_SERVER_URL = "https://sefin.producaorestrita.nfse.gov.br/API/SefinNacional/nfse";
 const CERTIFICATE_BUCKET = "certificados-a1";
 const CORS_HEADERS = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
@@ -87,7 +88,12 @@ function readCertificate(pfx: Uint8Array, password: string) {
   };
 }
 
-async function testRestrictedConnection(certificateChainPem: string, privateKeyPem: string) {
+async function testRestrictedEndpoint(
+  url: string,
+  method: "GET" | "HEAD",
+  certificateChainPem: string,
+  privateKeyPem: string,
+) {
   const client = Deno.createHttpClient({
     cert: certificateChainPem,
     key: privateKeyPem,
@@ -97,8 +103,8 @@ async function testRestrictedConnection(certificateChainPem: string, privateKeyP
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 18000);
   try {
-    const response = await fetch(CONNECTION_TEST_URL, {
-      method: "GET",
+    const response = await fetch(url, {
+      method,
       headers: { Accept: "application/json,text/html" },
       signal: controller.signal,
       client,
@@ -193,21 +199,48 @@ Deno.serve(async request => {
     const keys = readCertificate(pfx, password);
     password = "";
     pfx.fill(0);
-    const status = await testRestrictedConnection(keys.certificateChainPem, keys.privateKeyPem);
-    if (status < 200 || status >= 400) {
-      const message = status === 403
+    const [parameterizationProbe, issuanceProbe] = await Promise.allSettled([
+      testRestrictedEndpoint(PARAMETERIZATION_TEST_URL, "GET", keys.certificateChainPem, keys.privateKeyPem),
+      testRestrictedEndpoint(ISSUANCE_SERVER_URL, "HEAD", keys.certificateChainPem, keys.privateKeyPem),
+    ]);
+    if (parameterizationProbe.status === "rejected") throw parameterizationProbe.reason;
+    const parameterizationStatus = parameterizationProbe.value;
+    if (parameterizationStatus < 200 || parameterizationStatus >= 400) {
+      const message = parameterizationStatus === 403
         ? "O certificado não foi aceito pela produção restrita. Confira a habilitação fiscal do A1."
-        : `O Ambiente Nacional respondeu com o código ${status}. Tente novamente mais tarde.`;
-      console.error(JSON.stringify({ event: "nfse_teste_conexao_falhou", status }));
+        : `O Ambiente Nacional respondeu com o código ${parameterizationStatus}. Tente novamente mais tarde.`;
+      console.error(JSON.stringify({ event: "nfse_teste_conexao_falhou", parameterizationStatus }));
       return json({ error: message, diagnosticCode: "NFSE_HML_TESTAR_CONEXAO" }, 502);
     }
-    console.log(JSON.stringify({ event: "nfse_teste_conexao_confirmado", status }));
+    if (issuanceProbe.status === "rejected") {
+      const technicalMessage = issuanceProbe.reason instanceof Error
+        ? `${issuanceProbe.reason.name}: ${issuanceProbe.reason.message}`
+        : String(issuanceProbe.reason || "Falha de comunicação.");
+      console.error(JSON.stringify({ event: "nfse_servidor_emissao_indisponivel", technicalMessage }));
+      return json({
+        error: "O certificado está confirmado, mas o servidor de emissão da SEFIN está instável. Não tente enviar a nota agora.",
+        diagnosticCode: "NFSE_HML_SERVIDOR_INSTAVEL",
+        ready: false,
+      }, 503);
+    }
+    const issuanceStatus = issuanceProbe.value;
+    if (issuanceStatus >= 500) {
+      console.error(JSON.stringify({ event: "nfse_servidor_emissao_indisponivel", issuanceStatus }));
+      return json({
+        error: `O servidor de emissão da SEFIN respondeu com o código ${issuanceStatus}. Não tente enviar a nota agora.`,
+        diagnosticCode: "NFSE_HML_SERVIDOR_INSTAVEL",
+        ready: false,
+      }, 503);
+    }
+    console.log(JSON.stringify({ event: "nfse_teste_conexao_confirmado", parameterizationStatus, issuanceStatus }));
     return json({
       ok: true,
       action: "test-connection",
       environment: "Produção restrita",
-      server: new URL(CONNECTION_TEST_URL).hostname,
-      status,
+      server: new URL(ISSUANCE_SERVER_URL).hostname,
+      parameterizationStatus,
+      issuanceStatus,
+      ready: true,
       transmitted: false,
     });
   } catch (error) {

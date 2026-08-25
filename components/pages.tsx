@@ -1215,14 +1215,15 @@ function Integrations({accessToken}:{accessToken:string|null}) {
     try {
       setConnectionStage("Conectando ao Emissor Nacional de testes…");
       const { data, error: functionError } = await Promise.race([
-        supabase.functions.invoke<{ ok?:boolean;environment?:string;error?:string }>("nfse-teste-conexao-segura", {
+        supabase.functions.invoke<{ ok?:boolean;environment?:string;error?:string;ready?:boolean;issuanceStatus?:number }>("nfse-teste-conexao-segura", {
           body: { action: "test-connection" },
         }),
         new Promise<never>((_, reject) => { timeout = window.setTimeout(() => reject(new Error("JPI_CONNECTION_TIMEOUT")), 25000); }),
       ]);
       if (functionError) { setError(await connectionErrorMessage(functionError));return; }
       if (!data?.ok) { setError(data?.error || "Não foi possível testar a integração.");return; }
-      setTested(true);setMessage(`Conexão segura confirmada no ambiente de ${data.environment}. Nenhuma nota foi emitida.`);
+      if (!data.ready) { setError("O servidor de emissão está instável. Não tente enviar a nota agora.");return; }
+      setTested(true);setMessage(`Certificado confirmado e servidor de emissão da SEFIN respondendo no ambiente de ${data.environment}. Você pode tentar a homologação; nenhuma nota foi emitida neste teste.`);
     } catch (requestError) {
       const timedOut = requestError instanceof Error && (requestError.message === "JPI_CONNECTION_TIMEOUT" || requestError.name === "AbortError");
       setError(timedOut ? "A conexão foi encerrada após 25 segundos sem resposta. O ambiente nacional ou o acesso ao certificado não respondeu." : "A conexão foi interrompida. Confira sua internet e tente novamente.");
@@ -1479,5 +1480,4 @@ function Permissions() {
     </>
   );
 }
-
 

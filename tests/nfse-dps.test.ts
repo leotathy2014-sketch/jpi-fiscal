@@ -238,17 +238,20 @@ test("testa a conexão segura sem criar ou transmitir uma nota", () => {
   const settingsUi = readFileSync(new URL("../components/pages.tsx", import.meta.url), "utf8");
 
   assert.match(connectionEdge, /parametrizacao\/3304557\/convenio/);
-  assert.match(connectionEdge, /method: "GET"/);
+  assert.match(connectionEdge, /sefin\.producaorestrita\.nfse\.gov\.br\/API\/SefinNacional\/nfse/);
+  assert.match(connectionEdge, /method: "GET" \| "HEAD"/);
+  assert.match(connectionEdge, /ISSUANCE_SERVER_URL, "HEAD"/);
   assert.match(connectionEdge, /rpc\("get_certificate_password_service"/);
   assert.match(connectionEdge, /action !== "test-connection"/);
   assert.match(connectionEdge, /transmitted: false/);
   assert.match(connectionEdge, /issuer\.verify\(certificate\)/);
   assert.match(connectionEdge, /verifiesCertificate\(certificate, current\)/);
   assert.doesNotMatch(connectionEdge, /current\.verify\(certificate\)/);
-  assert.doesNotMatch(connectionEdge, /SefinNacional\/nfse/);
   assert.doesNotMatch(connectionEdge, /mensalidades/);
   assert.doesNotMatch(connectionEdge, /dpsXmlGZipB64/);
-  assert.match(settingsUi, /functions\.invoke<\{ ok\?:boolean;environment\?:string;error\?:string \}>\("nfse-teste-conexao-segura"/);
+  assert.match(connectionEdge, /ready: false/);
+  assert.match(connectionEdge, /ready: true/);
+  assert.match(settingsUi, /functions\.invoke<\{ ok\?:boolean;environment\?:string;error\?:string;ready\?:boolean;issuanceStatus\?:number \}>\("nfse-teste-conexao-segura"/);
   assert.match(settingsUi, /body: \{ action: "test-connection" \}/);
   assert.doesNotMatch(settingsUi, /fetch\("\/api\/nfse\/homologation\/test"/);
 });
