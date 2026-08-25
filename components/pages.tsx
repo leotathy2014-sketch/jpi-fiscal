@@ -1,6 +1,7 @@
 "use client";
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import { AlertCircle, ArrowUpRight, Building2, Check, CircleDollarSign, Clock3, FileCheck2, FilePlus2, Filter, KeyRound, Link2, MoreHorizontal, Plus, Search, ShieldCheck, SlidersHorizontal, Trash2, UploadCloud, UserCog, UsersRound, WalletCards, X } from "lucide-react";
+import { FunctionsHttpError } from "@supabase/supabase-js";
 import type { Role } from "./app-shell";
 import { createSupabaseBrowserClient } from "@/lib/supabase";
 
@@ -1193,26 +1194,37 @@ function Integrations({accessToken}:{accessToken:string|null}) {
     return () => window.clearTimeout(watchdog);
   }, [busy]);
   const elapsedLabel = `${String(Math.floor(elapsed / 60)).padStart(2, "0")}:${String(elapsed % 60).padStart(2, "0")}`;
+  async function connectionErrorMessage(functionError: unknown) {
+    if (functionError instanceof FunctionsHttpError) {
+      try {
+        const payload = await functionError.context.json() as { error?: string };
+        if (payload.error) return payload.error;
+      } catch {
+        return "O teste seguro não retornou uma resposta válida.";
+      }
+    }
+    return functionError instanceof Error ? functionError.message : "Não foi possível testar a integração.";
+  }
   async function testHomologation(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!supabase) return;
     setElapsed(0);setBusy(true);setError("");setMessage("");setConnectionStage("Preparando certificado A1…");
     const token = accessToken;
     if (!token) { setError("Sessão expirada. Saia do sistema e entre novamente.");setBusy(false);setConnectionStage("");return; }
-    const controller = new AbortController();
     let timeout = 0;
     try {
       setConnectionStage("Conectando ao Emissor Nacional de testes…");
-      const response = await Promise.race([
-        fetch("/api/nfse/homologation/test", { method: "POST", headers: { Authorization: `Bearer ${token}` }, signal: controller.signal }),
+      const { data, error: functionError } = await Promise.race([
+        supabase.functions.invoke<{ ok?:boolean;environment?:string;error?:string }>("nfse-teste-conexao-segura", {
+          body: { action: "test-connection" },
+        }),
         new Promise<never>((_, reject) => { timeout = window.setTimeout(() => reject(new Error("JPI_CONNECTION_TIMEOUT")), 25000); }),
       ]);
-      const result = await response.json() as { ok?:boolean;environment?:string;error?:string };
-      if (!response.ok || !result.ok) { setError(result.error || "Não foi possível testar a integração.");return; }
-      setTested(true);setMessage(`Conexão segura confirmada no ambiente de ${result.environment}. Nenhuma nota foi emitida.`);
+      if (functionError) { setError(await connectionErrorMessage(functionError));return; }
+      if (!data?.ok) { setError(data?.error || "Não foi possível testar a integração.");return; }
+      setTested(true);setMessage(`Conexão segura confirmada no ambiente de ${data.environment}. Nenhuma nota foi emitida.`);
     } catch (requestError) {
       const timedOut = requestError instanceof Error && (requestError.message === "JPI_CONNECTION_TIMEOUT" || requestError.name === "AbortError");
-      if (timedOut) controller.abort();
       setError(timedOut ? "A conexão foi encerrada após 25 segundos sem resposta. O ambiente nacional ou o acesso ao certificado não respondeu." : "A conexão foi interrompida. Confira sua internet e tente novamente.");
     } finally {
       if (timeout) window.clearTimeout(timeout);setBusy(false);setConnectionStage("");

@@ -233,3 +233,19 @@ test("guarda a senha do A1 no Vault e não a solicita durante a homologação", 
   assert.doesNotMatch(invoiceUi, /Senha do certificado A1<input/);
 });
 
+test("testa a conexão segura sem criar ou transmitir uma nota", () => {
+  const connectionEdge = readFileSync(new URL("../supabase/functions/nfse-teste-conexao-segura/index.ts", import.meta.url), "utf8");
+  const settingsUi = readFileSync(new URL("../components/pages.tsx", import.meta.url), "utf8");
+
+  assert.match(connectionEdge, /parametrizacao\/3304557\/convenio/);
+  assert.match(connectionEdge, /method: "GET"/);
+  assert.match(connectionEdge, /rpc\("get_certificate_password_service"/);
+  assert.match(connectionEdge, /action !== "test-connection"/);
+  assert.match(connectionEdge, /transmitted: false/);
+  assert.doesNotMatch(connectionEdge, /SefinNacional\/nfse/);
+  assert.doesNotMatch(connectionEdge, /mensalidades/);
+  assert.doesNotMatch(connectionEdge, /dpsXmlGZipB64/);
+  assert.match(settingsUi, /functions\.invoke<\{ ok\?:boolean;environment\?:string;error\?:string \}>\("nfse-teste-conexao-segura"/);
+  assert.match(settingsUi, /body: \{ action: "test-connection" \}/);
+  assert.doesNotMatch(settingsUi, /fetch\("\/api\/nfse\/homologation\/test"/);
+});
