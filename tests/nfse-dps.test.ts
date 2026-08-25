@@ -242,6 +242,9 @@ test("testa a conexão segura sem criar ou transmitir uma nota", () => {
   assert.match(connectionEdge, /rpc\("get_certificate_password_service"/);
   assert.match(connectionEdge, /action !== "test-connection"/);
   assert.match(connectionEdge, /transmitted: false/);
+  assert.match(connectionEdge, /issuer\.verify\(certificate\)/);
+  assert.match(connectionEdge, /verifiesCertificate\(certificate, current\)/);
+  assert.doesNotMatch(connectionEdge, /current\.verify\(certificate\)/);
   assert.doesNotMatch(connectionEdge, /SefinNacional\/nfse/);
   assert.doesNotMatch(connectionEdge, /mensalidades/);
   assert.doesNotMatch(connectionEdge, /dpsXmlGZipB64/);

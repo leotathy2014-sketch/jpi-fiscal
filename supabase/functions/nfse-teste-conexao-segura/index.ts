@@ -30,8 +30,16 @@ function sameRsaKey(certificate: ForgeCertificate, key: ForgePrivateKey) {
   return publicKey.n.compareTo(key.n) === 0 && publicKey.e.compareTo(key.e) === 0;
 }
 
+function verifiesCertificate(issuer: ForgeCertificate, certificate: ForgeCertificate) {
+  try {
+    return issuer.verify(certificate);
+  } catch {
+    return false;
+  }
+}
+
 function isSelfSigned(certificate: ForgeCertificate) {
-  return certificate.subject.hash === certificate.issuer.hash;
+  return certificate.subject.hash === certificate.issuer.hash && verifiesCertificate(certificate, certificate);
 }
 
 function orderedCertificateChainPem(leaf: ForgeCertificate, certificates: ForgeCertificate[]) {
@@ -42,7 +50,7 @@ function orderedCertificateChainPem(leaf: ForgeCertificate, certificates: ForgeC
     const issuer = certificates.find(certificate =>
       !used.has(certificate)
       && certificate.subject.hash === current.issuer.hash
-      && current.verify(certificate),
+      && verifiesCertificate(certificate, current),
     );
     if (!issuer) break;
     chain.push(issuer);
@@ -206,7 +214,12 @@ Deno.serve(async request => {
     password = "";
     pfx.fill(0);
     const message = safeConnectionMessage(error);
-    console.error(JSON.stringify({ event: "nfse_teste_conexao_falhou", diagnosticCode: "NFSE_HML_TESTAR_CONEXAO" }));
+    const technicalMessage = error instanceof Error ? `${error.name}: ${error.message}` : String(error || "Falha de comunicação.");
+    console.error(JSON.stringify({
+      event: "nfse_teste_conexao_falhou",
+      diagnosticCode: "NFSE_HML_TESTAR_CONEXAO",
+      technicalMessage,
+    }));
     return json({ error: message, diagnosticCode: "NFSE_HML_TESTAR_CONEXAO" }, 502);
   }
 });
