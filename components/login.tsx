@@ -1,11 +1,11 @@
 "use client";
 import { FormEvent, useState } from "react";
 import { Eye, EyeOff, LockKeyhole, Mail } from "lucide-react";
+import { SUPABASE_URL } from "@/lib/supabase";
 
 function CompanyLogo({ small = false }: { small?: boolean }) {
   const [loaded, setLoaded] = useState(false);
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const logoUrl = supabaseUrl ? `${supabaseUrl}/storage/v1/object/public/logos-empresa/empresa/logo` : null;
+  const logoUrl = SUPABASE_URL ? `${SUPABASE_URL}/storage/v1/object/public/logos-empresa/empresa/logo` : null;
 
   return <div className={`brand-seal${small ? " small" : ""}${loaded ? " has-logo" : ""}`}>
     <span>JPI</span>

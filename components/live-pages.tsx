@@ -11,6 +11,7 @@ type Payment = { id:number; aluno_id:number; competencia:string; valor_mensalida
 type CompanyFiscalConfig = { cnpj:string|null; inscricao_municipal:string|null; razao_social:string|null; nome_fantasia?:string|null; email?:string|null; telefone?:string|null; cidade:string|null; uf:string|null; regime_tributario:string; pis_aliquota:number; cofins_aliquota:number; pis_cofins_cst:string; pis_cofins_retencao:number };
 type ActiveCertificate = { validade:string; status:string; cnpj:string|null; senha_configurada:boolean };
 type DpsPreview = { payment:Payment; company:CompanyFiscalConfig; service:FiscalService; series:string; number:string; description:string };
+type HomologationResult = { ok?:boolean; alreadyIssued?:boolean; error?:string; key?:string };
 type FiscalService = { code:string; description:string; nbs:string };
 const segments=["Maternal","Jardim de Infância","Pré-escola","1º ao 5º anos","6º ao 9º anos","Ensino Médio"];
 const fiscalServiceForSegment=(segment?:string|null):FiscalService=>{
@@ -101,7 +102,32 @@ export function LiveInvoices({role}:{role:Role}) {
   async function generateDpsXml(){if(!supabase||!preview)return;setGenerating(true);setError("");const p=preview.payment;const description=upper(preview.description).trim();let storedPath="";try{const draft=buildDpsDraft({municipalityCode:"3304557",series:preview.series,number:preview.number,competence:p.competencia,provider:{cnpj:preview.company.cnpj||"",municipalRegistration:null,name:preview.company.razao_social},taker:{taxId:p.alunos?.cpf_cnpj||"",name:p.alunos?.responsavel||"",email:p.alunos?.email,phone:p.alunos?.whatsapp},service:{nationalTaxCode:preview.service.code,nbs:preview.service.nbs,description,amount:Number(p.valor_nfse),issRate:5,federalTaxes:{cst:preview.company.pis_cofins_cst,pisRate:Number(preview.company.pis_aliquota),cofinsRate:Number(preview.company.cofins_aliquota),withholdingType:Number(preview.company.pis_cofins_retencao)},ibsCbs:{operationIndicator:"030101",taxStatus:"200",taxClassification:"200028"}}});storedPath=dpsDraftVersionPath(p.id,draft.id);const blob=new Blob([draft.xml],{type:"application/xml"});const uploadResult=await supabase.storage.from("documentos-nfse").upload(storedPath,blob,{contentType:"application/xml",upsert:false});if(uploadResult.error)throw new Error(`Não foi possível guardar o XML: ${uploadResult.error.message}`);const generatedAt=new Date().toISOString();const updateResult=await supabase.from("mensalidades").update({status_nfse:"XML DPS armazenado",descricao_servico:description,dps_xml_path:storedPath,dps_xml_id:draft.id,dps_xml_gerado_em:generatedAt}).eq("id",p.id);if(updateResult.error){await supabase.storage.from("documentos-nfse").remove([storedPath]);throw new Error(updateResult.error.message)}const historyResult=await supabase.from("historico_nfse").insert({mensalidade_id:p.id,evento:"xml_dps_armazenado",valor_anterior:p.valor_nfse,valor_novo:p.valor_nfse,detalhes:`XML DPS ${draft.version} com Lucro Presumido, PIS/COFINS e IBS/CBS armazenado no repositório privado do sistema, sem assinatura e sem transmissão. Identificador ${draft.id}; arquivo ${storedPath}.`});if(historyResult.error)throw new Error(`O XML foi guardado, mas o histórico não pôde ser gravado: ${historyResult.error.message}`);setPreview(null);setMessage(`XML da DPS de ${p.alunos?.nome||"aluno"} guardado no sistema online. Nenhum download foi necessário e nenhuma nota foi transmitida.`);await load()}catch(cause){setError(cause instanceof Error?cause.message:"Não foi possível guardar o XML da DPS.")}finally{setGenerating(false)}}
  async function openStoredXml(p:Payment,path:string|null,title:string,subtitle:string){if(!supabase||!path)return;setOpeningXml(p.id);setError("");const {data,error}=await supabase.storage.from("documentos-nfse").download(path);setOpeningXml(null);if(error||!data){setError(error?.message||"Não foi possível abrir o XML guardado.");return}setStoredXml({title,subtitle,xml:await data.text()})}
  function closeHomologation(){if(sendingHomologation)return;setHomologationPayment(null)}
- async function sendToHomologation(event:FormEvent<HTMLFormElement>){event.preventDefault();if(!supabase||!homologationPayment)return;setSendingHomologation(true);setError("");setMessage("");try{const {data:{session}}=await supabase.auth.getSession();if(!session)throw new Error("Sua sessão expirou. Entre novamente.");const response=await fetch("/api/nfse/homologation/issue",{method:"POST",headers:{Authorization:`Bearer ${session.access_token}`,"Content-Type":"application/json"},body:JSON.stringify({monthlyId:homologationPayment.id})});let data:{ok?:boolean;alreadyIssued?:boolean;error?:string;key?:string}={};try{data=await response.json() as typeof data}catch{}if(!response.ok||!data.ok)throw new Error(data.error||"A produção restrita não confirmou a emissão.");const student=homologationPayment.alunos?.nome||"aluno";setMessage(data.alreadyIssued?`A NFS-e de teste de ${student} já estava guardada no sistema.`:`NFS-e de teste de ${student} gerada na produção restrita e guardada online. Chave: ${data.key}.`);setHomologationPayment(null);await load()}catch(cause){setError(cause instanceof Error?cause.message:"Não foi possível concluir a homologação.")}finally{setSendingHomologation(false)}}
+ async function sendToHomologation(event:FormEvent<HTMLFormElement>){
+  event.preventDefault();
+  if(!supabase||!homologationPayment)return;
+  setSendingHomologation(true);
+  setError("");
+  setMessage("");
+  try{
+    const {data:{session}}=await supabase.auth.getSession();
+    if(!session)throw new Error("Sua sessão expirou. Entre novamente.");
+    const {data,error:functionError}=await supabase.functions.invoke<HomologationResult>("nfse-homologacao-segura",{
+      body:{monthlyId:homologationPayment.id},
+    });
+    if(functionError||!data?.ok)throw new Error(data?.error||functionError?.message||"A produção restrita não confirmou a emissão.");
+    const student=homologationPayment.alunos?.nome||"aluno";
+    setMessage(data.alreadyIssued
+      ?`A NFS-e de teste de ${student} já estava guardada no sistema.`
+      :`NFS-e de teste de ${student} gerada na produção restrita e guardada online. Chave: ${data.key}.`
+    );
+    setHomologationPayment(null);
+    await load();
+  }catch(cause){
+    setError(cause instanceof Error?cause.message:"Não foi possível concluir a homologação.");
+  }finally{
+    setSendingHomologation(false);
+  }
+}
  const canManage=role==="Administrador"||role==="Financeiro";
  return <>
   <Heading title="NFS-e" desc="Preparação, armazenamento e revisão das notas no ambiente online."/>

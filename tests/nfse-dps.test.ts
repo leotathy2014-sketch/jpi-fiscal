@@ -211,7 +211,9 @@ test("guarda a senha do A1 no Vault e não a solicita durante a homologação", 
   assert.match(testSource, /rpc\("get_certificate_password"/);
   assert.match(edgeSource, /rpc\("get_certificate_password_service"/);
   assert.match(settingsUi, /savePasswordInVault/);
-  assert.match(invoiceUi, /JSON\.stringify\(\{monthlyId:homologationPayment\.id\}\)/);
+  assert.match(invoiceUi, /functions\.invoke<HomologationResult>\("nfse-homologacao-segura"/);
+  assert.match(invoiceUi, /body:\{monthlyId:homologationPayment\.id\}/);
+  assert.doesNotMatch(invoiceUi, /fetch\("\/api\/nfse\/homologation\/issue"/);
   assert.doesNotMatch(invoiceUi, /certificatePassword/);
   assert.doesNotMatch(invoiceUi, /Senha do certificado A1<input/);
 });
