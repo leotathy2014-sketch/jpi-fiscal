@@ -176,6 +176,17 @@ test("oferece correção obrigatória antes de reenviar uma rejeição", () => {
   assert.match(uiSource, /p\.status_nfse==="Rejeitada em homologação"[\s\S]*?Corrigir para reenviar/);
 });
 
+test("versiona cada rascunho da DPS para preservar tentativas anteriores", () => {
+  const uiSource = readFileSync(new URL("../components/live-pages.tsx", import.meta.url), "utf8");
+
+  assert.match(uiSource, /dpsDraftVersionPath/);
+  assert.match(uiSource, /rascunhos\/\$\{revision\}\/\$\{draftId\}\.xml/);
+  assert.match(uiSource, /crypto\.randomUUID\(\)/);
+  assert.match(uiSource, /upload\(storedPath,blob,\{contentType:"application\/xml",upsert:false\}\)/);
+  assert.match(uiSource, /arquivo \$\{storedPath\}/);
+  assert.doesNotMatch(uiSource, /storedPath=`dps\/\$\{p\.id\}\/\$\{draft\.id\}\.xml`/);
+});
+
 test("guarda a senha do A1 no Vault e não a solicita durante a homologação", () => {
   const nodeSource = readFileSync(new URL("../app/api/nfse/homologation/issue/route.ts", import.meta.url), "utf8");
   const testSource = readFileSync(new URL("../app/api/nfse/homologation/test/route.ts", import.meta.url), "utf8");
