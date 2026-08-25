@@ -13,6 +13,9 @@ const CORS_HEADERS = {
 
 type ForgeCertificate = forge.pki.Certificate;
 type ForgePrivateKey = forge.pki.rsa.PrivateKey;
+type CachedServerStatus = { body: Record<string, unknown>; status: number; expiresAt: number };
+
+let cachedServerStatus: CachedServerStatus | null = null;
 
 function json(body: unknown, status = 200) {
   return Response.json(body, { status, headers: CORS_HEADERS });
@@ -153,11 +156,6 @@ Deno.serve(async request => {
   const { data: { user }, error: userError } = await userClient.auth.getUser(token);
   if (userError || !user?.email) return json({ error: "Sessão expirada. Entre novamente." }, 401);
 
-  const { data: access } = await userClient.from("app_users").select("role,active").eq("email", user.email).maybeSingle();
-  if (!access?.active || !["admin", "financeiro"].includes(access.role)) {
-    return json({ error: "Seu usuário não possui permissão para testar a integração fiscal." }, 403);
-  }
-
   let action = "";
   try {
     const body = await request.json();
@@ -165,7 +163,20 @@ Deno.serve(async request => {
   } catch {
     return json({ error: "Dados da solicitação inválidos." }, 400);
   }
-  if (action !== "test-connection") return json({ error: "Ação de teste inválida." }, 400);
+  if (!["test-connection", "server-status"].includes(action)) return json({ error: "Ação de teste inválida." }, 400);
+
+  const { data: access } = await userClient.from("app_users").select("role,active").eq("email", user.email).maybeSingle();
+  if (!access?.active) return json({ error: "Seu usuário não possui acesso ao sistema." }, 403);
+  if (action === "test-connection" && !["admin", "financeiro"].includes(access.role)) {
+    return json({ error: "Seu usuário não possui permissão para testar a integração fiscal." }, 403);
+  }
+  if (action === "server-status" && cachedServerStatus && cachedServerStatus.expiresAt > Date.now()) {
+    return json({ ...cachedServerStatus.body, action, cached: true }, cachedServerStatus.status);
+  }
+  const serverStatusResponse = (body: Record<string, unknown>, status: number, ttlMs: number) => {
+    cachedServerStatus = { body, status, expiresAt: Date.now() + ttlMs };
+    return json(body, status);
+  };
 
   const { data: certificate } = await admin
     .from("certificados_a1")
@@ -217,32 +228,32 @@ Deno.serve(async request => {
         ? `${issuanceProbe.reason.name}: ${issuanceProbe.reason.message}`
         : String(issuanceProbe.reason || "Falha de comunicação.");
       console.error(JSON.stringify({ event: "nfse_servidor_emissao_indisponivel", technicalMessage }));
-      return json({
+      return serverStatusResponse({
         error: "O certificado está confirmado, mas o servidor de emissão da SEFIN está instável. Não tente enviar a nota agora.",
         diagnosticCode: "NFSE_HML_SERVIDOR_INSTAVEL",
         ready: false,
-      }, 503);
+      }, 503, 120000);
     }
     const issuanceStatus = issuanceProbe.value;
     if (issuanceStatus >= 500) {
       console.error(JSON.stringify({ event: "nfse_servidor_emissao_indisponivel", issuanceStatus }));
-      return json({
+      return serverStatusResponse({
         error: `O servidor de emissão da SEFIN respondeu com o código ${issuanceStatus}. Não tente enviar a nota agora.`,
         diagnosticCode: "NFSE_HML_SERVIDOR_INSTAVEL",
         ready: false,
-      }, 503);
+      }, 503, 120000);
     }
     console.log(JSON.stringify({ event: "nfse_teste_conexao_confirmado", parameterizationStatus, issuanceStatus }));
-    return json({
+    return serverStatusResponse({
       ok: true,
-      action: "test-connection",
+      action,
       environment: "Produção restrita",
       server: new URL(ISSUANCE_SERVER_URL).hostname,
       parameterizationStatus,
       issuanceStatus,
       ready: true,
       transmitted: false,
-    });
+    }, 200, 300000);
   } catch (error) {
     password = "";
     pfx.fill(0);

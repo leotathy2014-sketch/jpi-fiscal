@@ -236,13 +236,14 @@ test("guarda a senha do A1 no Vault e não a solicita durante a homologação", 
 test("testa a conexão segura sem criar ou transmitir uma nota", () => {
   const connectionEdge = readFileSync(new URL("../supabase/functions/nfse-teste-conexao-segura/index.ts", import.meta.url), "utf8");
   const settingsUi = readFileSync(new URL("../components/pages.tsx", import.meta.url), "utf8");
+  const appShell = readFileSync(new URL("../components/app-shell.tsx", import.meta.url), "utf8");
 
   assert.match(connectionEdge, /parametrizacao\/3304557\/convenio/);
   assert.match(connectionEdge, /sefin\.producaorestrita\.nfse\.gov\.br\/API\/SefinNacional\/nfse/);
   assert.match(connectionEdge, /method: "GET" \| "HEAD"/);
   assert.match(connectionEdge, /ISSUANCE_SERVER_URL, "HEAD"/);
   assert.match(connectionEdge, /rpc\("get_certificate_password_service"/);
-  assert.match(connectionEdge, /action !== "test-connection"/);
+  assert.match(connectionEdge, /\["test-connection", "server-status"\]\.includes\(action\)/);
   assert.match(connectionEdge, /transmitted: false/);
   assert.match(connectionEdge, /issuer\.verify\(certificate\)/);
   assert.match(connectionEdge, /verifiesCertificate\(certificate, current\)/);
@@ -254,4 +255,8 @@ test("testa a conexão segura sem criar ou transmitir uma nota", () => {
   assert.match(settingsUi, /functions\.invoke<\{ ok\?:boolean;environment\?:string;error\?:string;ready\?:boolean;issuanceStatus\?:number \}>\("nfse-teste-conexao-segura"/);
   assert.match(settingsUi, /body: \{ action: "test-connection" \}/);
   assert.doesNotMatch(settingsUi, /fetch\("\/api\/nfse\/homologation\/test"/);
+  assert.match(appShell, /body:\{action:"server-status"\}/);
+  assert.match(appShell, /SEFIN disponível/);
+  assert.match(appShell, /SEFIN instável/);
+  assert.match(appShell, /setInterval\(\(\)=>void checkSefin\(\),300000\)/);
 });
