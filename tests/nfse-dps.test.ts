@@ -176,6 +176,19 @@ test("oferece correção obrigatória antes de reenviar uma rejeição", () => {
   assert.match(uiSource, /p\.status_nfse==="Rejeitada em homologação"[\s\S]*?Corrigir para reenviar/);
 });
 
+test("fecha a confirmação após o envio e bloqueia clique duplicado", () => {
+  const uiSource = readFileSync(new URL("../components/live-pages.tsx", import.meta.url), "utf8");
+
+  assert.match(uiSource, /homologationRequestInFlight=useRef\(false\)/);
+  assert.match(uiSource, /homologationRequestInFlight\.current\)return/);
+  assert.match(uiSource, /homologationRequestInFlight\.current=true/);
+  assert.match(uiSource, /homologationRequestInFlight\.current=false/);
+  assert.match(uiSource, /if\(functionError\)throw new Error\(await homologationErrorMessage\(functionError\)\)/);
+  assert.match(uiSource, /catch\(cause\)\{\s*setHomologationPayment\(null\)/);
+  assert.match(uiSource, /Nenhuma NFS-e foi emitida\. Você pode tentar novamente nesta mesma mensalidade\./);
+  assert.match(uiSource, /type="submit" className="primary" disabled=\{sendingHomologation\}/);
+});
+
 test("versiona cada rascunho da DPS para preservar tentativas anteriores", () => {
   const uiSource = readFileSync(new URL("../components/live-pages.tsx", import.meta.url), "utf8");
 
@@ -213,12 +226,10 @@ test("guarda a senha do A1 no Vault e não a solicita durante a homologação", 
   assert.match(edgeSource, /https:\/\/jpi-fiscal\.vercel\.app/);
   assert.match(settingsUi, /savePasswordInVault/);
   assert.match(invoiceUi, /functions\.invoke<HomologationResult>\("nfse-homologacao-segura"/);
-  assert.match(invoiceUi, /body:\{monthlyId:homologationPayment\.id\}/);
+  assert.match(invoiceUi, /const payment=homologationPayment/);
+  assert.match(invoiceUi, /body:\{monthlyId:payment\.id\}/);
   assert.doesNotMatch(invoiceUi, /fetch\("\/api\/nfse\/homologation\/issue"/);
   assert.doesNotMatch(invoiceUi, /certificatePassword/);
   assert.doesNotMatch(invoiceUi, /Senha do certificado A1<input/);
 });
-
-
-
 
