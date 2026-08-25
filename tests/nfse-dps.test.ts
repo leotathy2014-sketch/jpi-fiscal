@@ -210,7 +210,7 @@ test("guarda a senha do A1 no Vault e não a solicita durante a homologação", 
   assert.match(nodeSource, /rpc\("get_certificate_password"/);
   assert.match(testSource, /rpc\("get_certificate_password"/);
   assert.match(edgeSource, /rpc\("get_certificate_password_service"/);
-  assert.match(edgeSource, /https:\/\/jpi-fiscal-leo-393e\.vercel\.app/);
+  assert.match(edgeSource, /https:\/\/jpi-fiscal\.vercel\.app/);
   assert.match(settingsUi, /savePasswordInVault/);
   assert.match(invoiceUi, /functions\.invoke<HomologationResult>\("nfse-homologacao-segura"/);
   assert.match(invoiceUi, /body:\{monthlyId:homologationPayment\.id\}/);
