@@ -13,7 +13,7 @@ const CERTIFICATE_BUCKET = "certificados-a1";
 const CORS_HEADERS = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
   "Access-Control-Allow-Methods": "POST, OPTIONS",
-  "Access-Control-Allow-Origin": "https://jpi-fiscal.vercel.app",
+  "Access-Control-Allow-Origin": "https://jpi-fiscal-leo-393e.vercel.app",
   Vary: "Origin",
 };
 
