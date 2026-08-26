@@ -645,7 +645,7 @@ export async function POST(request: NextRequest) {
       if (documentError && documentError.code !== "23505") throw new Error("A nota de teste foi gerada, mas sua versão não pôde ser registrada.");
     }
     const { error: updateError } = await supabase.from("mensalidades").update({
-      status_nfse: operation === "substitute" ? "NFS-e substituída em homologação" : "NFS-e emitida em homologação",
+      status_nfse: operation === "substitute" ? `NFS-e ativa em homologação · versão ${nextVersion}` : "NFS-e emitida em homologação",
       ...(operation === "substitute" ? {
         competencia: correctedCompetence,
         valor_nfse: correctedAmount,
@@ -695,5 +695,4 @@ export async function POST(request: NextRequest) {
     return json({ error: sefinAcceptedSubstitution ? "A substituição foi confirmada, mas alguns dados ainda precisam ser sincronizados." : validationError || stageError.message, diagnosticCode: stageError.code, confirmed: sefinAcceptedSubstitution }, sefinAcceptedSubstitution ? 202 : validationError ? 422 : 502);
   }
 }
-
 

@@ -4,6 +4,7 @@ import { AlertCircle, ArrowUpRight, Building2, Check, CircleDollarSign, Clock3, 
 import { FunctionsHttpError } from "@supabase/supabase-js";
 import type { Role } from "./app-shell";
 import { createSupabaseBrowserClient } from "@/lib/supabase";
+import { TransmissionProgress } from "./transmission-progress";
 
 const money = (n: number) => n.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 const onlyDigits = (value: string, limit: number) => value.replace(/\D/g, "").slice(0, limit);
@@ -1278,7 +1279,7 @@ function Integrations({accessToken}:{accessToken:string|null}) {
         </div>
         <button className="secondary full">Configurar canais</button>
       </article>
-    </div>{open&&<div className="modal-backdrop"><div className="modal-card small-modal"><div className="modal-head"><h2>Testar ambiente de homologação</h2><button className="icon-button" onClick={()=>setOpen(false)}><X/></button></div><form className="data-form" onSubmit={testHomologation}>{error&&<div className="error-box">{error}</div>}{message&&<div className="success-box">{message}</div>}<div className="notice compact warning"><ShieldCheck/><span>Este teste usa o certificado A1 e a senha protegida no cofre somente para autenticar a conexão com a produção restrita. Nenhuma DPS ou NFS-e será enviada.</span></div>{(busy||elapsed>0)&&<div className="connection-timer"><Clock3/><span>{busy?(connectionStage||"Iniciando conexão…"):"Tempo da tentativa"}</span><strong>{elapsedLabel}</strong></div>}<div className="notice compact"><KeyRound/><span>A senha será recuperada somente pelo servidor e não será exibida no navegador.</span></div><div className="form-actions"><button type="button" className="secondary" onClick={()=>setOpen(false)} disabled={busy}>Fechar</button><button className="primary" disabled={busy||tested}>{busy?`Conectando · ${elapsedLabel}`:tested?"Conexão confirmada":"Testar conexão"}</button></div></form></div></div>}</>
+    </div>{open&&<div className="modal-backdrop"><div className="modal-card small-modal"><div className="modal-head"><h2>Testar ambiente de homologação</h2><button className="icon-button" onClick={()=>setOpen(false)}><X/></button></div><form className="data-form" onSubmit={testHomologation}>{error&&<div className="error-box">{error}</div>}{message&&<div className="success-box">{message}</div>}<div className="notice compact warning"><ShieldCheck/><span>Este teste usa o certificado A1 e a senha protegida no cofre somente para autenticar a conexão com a produção restrita. Nenhuma DPS ou NFS-e será enviada.</span></div>{(busy||elapsed>0)&&<div className="connection-timer"><Clock3/><span>{busy?(connectionStage||"Iniciando conexão…"):"Tempo da tentativa"}</span><strong>{elapsedLabel}</strong></div>}{busy&&<TransmissionProgress kind="connection"/>}<div className="notice compact"><KeyRound/><span>A senha será recuperada somente pelo servidor e não será exibida no navegador.</span></div><div className="form-actions"><button type="button" className="secondary" onClick={()=>setOpen(false)} disabled={busy}>Fechar</button><button className="primary" disabled={busy||tested}>{busy?`Conectando · ${elapsedLabel}`:tested?"Conexão confirmada":"Testar conexão"}</button></div></form></div></div>}</>
   );
 }
 type ManagedUser = {
@@ -1480,4 +1481,3 @@ function Permissions() {
     </>
   );
 }
-
