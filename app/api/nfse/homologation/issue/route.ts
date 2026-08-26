@@ -51,6 +51,18 @@ type CompanySource = {
   pis_cofins_cst: string;
   pis_cofins_retencao: number;
 };
+type SubstitutionInput = {
+  originalKey: string;
+  reasonCode: "01" | "02" | "03" | "04" | "05" | "99";
+  reason: string;
+  dpsNumber: string;
+};
+type ActiveHomologationDocument = {
+  id: number;
+  versao: number;
+  chave_acesso: string;
+  estado: string;
+};
 type Asn1Node = { type: number; value: string | Asn1Node[] };
 type HomologationStage =
   | "validar_dados_fiscais"
@@ -125,14 +137,14 @@ function issueDateTime() {
   return `${part("year")}-${part("month")}-${part("day")}T${part("hour")}:${part("minute")}:${part("second")}-03:00`;
 }
 
-function buildRestrictedDps(payment: DpsSource, company: CompanySource) {
+function buildRestrictedDps(payment: DpsSource, company: CompanySource, substitution?: SubstitutionInput) {
   const municipality = "3304557";
   const providerCnpj = digits(company.cnpj);
   const takerTaxId = digits(payment.alunos?.cpf_cnpj);
   const description = String(payment.descricao_servico || "").trim();
   const takerName = String(payment.alunos?.responsavel || "").trim();
   const series = NFSE_OWN_APP_SERIES;
-  const number = String(payment.id);
+  const number = substitution?.dpsNumber || String(payment.id);
   const normalizedSegment = String(payment.alunos?.segmento || "").toLocaleLowerCase("pt-BR");
   const nbs = normalizedSegment.includes("médio") ? "122013000"
     : normalizedSegment.includes("1º") || normalizedSegment.includes("6º") || normalizedSegment.includes("fundamental") ? "122012000"
@@ -157,11 +169,14 @@ function buildRestrictedDps(payment: DpsSource, company: CompanySource) {
   const id = `DPS${municipality}2${providerCnpj}${series.padStart(5, "0")}${number.padStart(15, "0")}`;
   const document = takerTaxId.length === 11 ? `<CPF>${takerTaxId}</CPF>` : `<CNPJ>${takerTaxId}</CNPJ>`;
   const phone = digits(payment.alunos?.whatsapp);
+  const substitutionXml = substitution
+    ? `<subst><chSubstda>${substitution.originalKey}</chSubstda><cMotivo>${substitution.reasonCode}</cMotivo><xMotivo>${escapeXml(substitution.reason)}</xMotivo></subst>`
+    : "";
   return { id, xml: `<?xml version="1.0" encoding="UTF-8"?>
 <DPS xmlns="http://www.sped.fazenda.gov.br/nfse" versao="1.01">
   <infDPS Id="${id}">
     <tpAmb>2</tpAmb><dhEmi>${issueDateTime()}</dhEmi><verAplic>JPI-FISCAL-1.01</verAplic>
-    <serie>${series}</serie><nDPS>${number}</nDPS><dCompet>${competenceDate(payment.competencia)}</dCompet><tpEmit>1</tpEmit><cLocEmi>${municipality}</cLocEmi>
+    <serie>${series}</serie><nDPS>${number}</nDPS><dCompet>${competenceDate(payment.competencia)}</dCompet><tpEmit>1</tpEmit><cLocEmi>${municipality}</cLocEmi>${substitutionXml}
     <prest><CNPJ>${providerCnpj}</CNPJ><regTrib><opSimpNac>1</opSimpNac><regEspTrib>0</regEspTrib></regTrib></prest>
     <toma>${document}<xNome>${escapeXml(takerName)}</xNome>${phone.length >= 6 ? `<fone>${phone}</fone>` : ""}${payment.alunos?.email ? `<email>${escapeXml(payment.alunos.email.trim())}</email>` : ""}</toma>
     <serv><locPrest><cLocPrestacao>${municipality}</cLocPrestacao></locPrest><cServ><cTribNac>080101</cTribNac><cTribMun>${municipalTaxCode}</cTribMun><xDescServ>${escapeXml(description)}</xDescServ><cNBS>${nbs}</cNBS></cServ></serv>
@@ -407,24 +422,60 @@ export async function POST(request: NextRequest) {
 
   let monthlyId = 0;
   let password = "";
+  let operation: "issue" | "substitute" = "issue";
+  let substitutionReasonCode = "";
+  let substitutionReason = "";
+  let correctedCompetence = "";
+  let correctedDescription = "";
+  let correctedAmount = 0;
   try {
     const body = await request.json();
     monthlyId = Number(body.monthlyId);
+    operation = body.operation === "substitute" ? "substitute" : "issue";
+    if (operation === "substitute") {
+      substitutionReasonCode = String(body.reasonCode || "");
+      substitutionReason = String(body.reason || "").trim();
+      correctedCompetence = String(body.competence || "").trim();
+      correctedDescription = String(body.description || "").trim().toLocaleUpperCase("pt-BR");
+      correctedAmount = Number(body.amount);
+    }
   } catch {
     return json({ error: "Dados da solicitação inválidos." }, 400);
   }
   if (!Number.isSafeInteger(monthlyId) || monthlyId <= 0) return json({ error: "Mensalidade inválida." }, 400);
+  if (operation === "substitute") {
+    if (!["01", "02", "03", "04", "05", "99"].includes(substitutionReasonCode)) return json({ error: "Selecione um motivo válido para a substituição." }, 400);
+    if (substitutionReason.length < 15 || substitutionReason.length > 255) return json({ error: "Descreva o motivo da substituição entre 15 e 255 caracteres." }, 400);
+    if (!/^(0[1-9]|1[0-2])\/20\d{2}$/.test(correctedCompetence)) return json({ error: "A competência corrigida é inválida." }, 400);
+    if (!correctedDescription || correctedDescription.length > 1000) return json({ error: "A descrição corrigida deve ter entre 1 e 1000 caracteres." }, 400);
+    if (!Number.isFinite(correctedAmount) || correctedAmount <= 0) return json({ error: "O valor corrigido da NFS-e é inválido." }, 400);
+  }
 
   const { data: payment, error: paymentError } = await supabase
     .from("mensalidades")
-    .select("id,competencia,valor_nfse,descricao_servico,dps_xml_path,dps_xml_id,chave_nfse_homologacao,nfse_homologacao_xml_path,homologacao_emitida_em,alunos(responsavel,cpf_cnpj,email,whatsapp,segmento)")
+    .select("id,competencia,valor_nfse,descricao_servico,status_nfse,dps_xml_path,dps_xml_id,chave_nfse_homologacao,nfse_homologacao_xml_path,homologacao_emitida_em,alunos(responsavel,cpf_cnpj,email,whatsapp,segmento)")
     .eq("id", monthlyId)
     .maybeSingle();
   if (paymentError || !payment) return json({ error: "Mensalidade não encontrada ou sem permissão de acesso." }, 404);
-  if (payment.chave_nfse_homologacao) {
+  if (operation === "issue" && payment.chave_nfse_homologacao) {
     return json({ ok: true, alreadyIssued: true, environment: "Produção restrita", key: payment.chave_nfse_homologacao, issuedAt: payment.homologacao_emitida_em });
   }
-  if (!payment.dps_xml_path || !payment.dps_xml_id) return json({ error: "Gere e guarde primeiro a prévia XML da DPS." }, 400);
+  if (operation === "issue" && (!payment.dps_xml_path || !payment.dps_xml_id)) return json({ error: "Gere e guarde primeiro a prévia XML da DPS." }, 400);
+  if (operation === "substitute" && !payment.chave_nfse_homologacao) return json({ error: "A nota original não foi encontrada para substituição." }, 400);
+
+  let activeDocument: ActiveHomologationDocument | null = null;
+  if (operation === "substitute") {
+    const { data: active } = await supabase
+      .from("nfse_documentos_homologacao")
+      .select("id,versao,chave_acesso,estado")
+      .eq("mensalidade_id", payment.id)
+      .eq("estado", "ativa")
+      .maybeSingle();
+    activeDocument = active as ActiveHomologationDocument | null;
+    if (!activeDocument || activeDocument.chave_acesso !== payment.chave_nfse_homologacao) {
+      return json({ error: "A nota já está cancelada, substituída ou sendo processada." }, 409);
+    }
+  }
 
   const { data: company } = await supabase
     .from("configuracoes_empresa")
@@ -456,11 +507,38 @@ export async function POST(request: NextRequest) {
 
   const pfx = Buffer.from(await pfxFile.arrayBuffer());
   let stage: HomologationStage = "validar_dados_fiscais";
+  const previousStatus = payment.status_nfse || "NFS-e emitida em homologação";
+  let substitutionLocked = false;
+  let sefinAcceptedSubstitution = false;
   try {
-    const draft = buildRestrictedDps(payment as unknown as DpsSource, company as CompanySource);
+    if (operation === "substitute" && activeDocument) {
+      const lock = await supabase
+        .from("nfse_documentos_homologacao")
+        .update({ estado: "substituindo", evento_motivo_codigo: substitutionReasonCode, evento_motivo_descricao: substitutionReason })
+        .eq("id", activeDocument.id)
+        .eq("estado", "ativa")
+        .select("id")
+        .maybeSingle();
+      if (lock.error || !lock.data) throw new Error("A nota já está sendo processada. Aguarde a conclusão.");
+      substitutionLocked = true;
+      await supabase.from("mensalidades").update({ status_nfse: "Substituição em processamento" }).eq("id", payment.id);
+    }
+    const sourcePayment = operation === "substitute"
+      ? { ...payment, competencia: correctedCompetence, valor_nfse: correctedAmount, descricao_servico: correctedDescription }
+      : payment;
+    const nextVersion = operation === "substitute" && activeDocument ? activeDocument.versao + 1 : 1;
+    const substitution = operation === "substitute" && activeDocument ? {
+      originalKey: activeDocument.chave_acesso,
+      reasonCode: substitutionReasonCode as SubstitutionInput["reasonCode"],
+      reason: substitutionReason,
+      dpsNumber: `${payment.id}${String(nextVersion).padStart(3, "0")}`,
+    } : undefined;
+    const draft = buildRestrictedDps(sourcePayment as unknown as DpsSource, company as CompanySource, substitution);
     const unsignedXml = draft.xml;
     const attemptId = `${new Date().toISOString().replace(/\D/g, "").slice(0, 17)}-${crypto.randomUUID().slice(0, 8)}`;
-    const attemptBasePath = `dps/${payment.id}/tentativas/${attemptId}`;
+    const attemptBasePath = operation === "substitute"
+      ? `dps/${payment.id}/substituicoes/v${nextVersion}/${attemptId}`
+      : `dps/${payment.id}/tentativas/${attemptId}`;
     const unsignedPath = `${attemptBasePath}/${draft.id}.xml`;
     stage = "armazenar_dps";
     const { error: unsignedUploadError } = await supabase.storage
@@ -501,21 +579,30 @@ export async function POST(request: NextRequest) {
     if (response.status < 200 || response.status >= 300 || !sefin.nfseXmlGZipB64 || !sefin.chaveAcesso) {
       const fiscalErrors = safeFiscalErrors(sefinPayload);
       const formattedErrors = fiscalErrors.map(error => [error.codigo, error.descricao, error.complemento].filter(Boolean).join(" - "));
-      await supabase.from("mensalidades").update({ status_nfse: "Rejeitada em homologação" }).eq("id", payment.id);
+      if (operation === "substitute" && activeDocument) {
+        await supabase.from("nfse_documentos_homologacao").update({ estado: "ativa" }).eq("id", activeDocument.id).eq("estado", "substituindo");
+        await supabase.from("mensalidades").update({ status_nfse: previousStatus }).eq("id", payment.id);
+        substitutionLocked = false;
+      } else {
+        await supabase.from("mensalidades").update({ status_nfse: "Rejeitada em homologação" }).eq("id", payment.id);
+      }
       await supabase.from("historico_nfse").insert({
         mensalidade_id: payment.id,
-        evento: "nfse_homologacao_rejeitada",
+        evento: operation === "substitute" ? "nfse_substituicao_homologacao_rejeitada" : "nfse_homologacao_rejeitada",
         valor_anterior: payment.valor_nfse,
-        valor_novo: payment.valor_nfse,
-        detalhes: `Tentativa ${attemptId}. Produção restrita respondeu HTTP ${response.status}. ${formattedErrors.join(" | ")} DPS ${unsignedPath}; DPS assinada ${signedPath}.`.slice(0, 2000),
+        valor_novo: operation === "substitute" ? correctedAmount : payment.valor_nfse,
+        detalhes: `Tentativa ${attemptId}${operation === "substitute" ? " de substituição" : ""}. Produção restrita respondeu HTTP ${response.status}. ${formattedErrors.join(" | ")} DPS ${unsignedPath}; DPS assinada ${signedPath}.`.slice(0, 2000),
       });
       return json({ error: formattedErrors[0] || `A produção restrita respondeu com o código ${response.status}.`, errors: fiscalErrors }, 422);
     }
 
+    if (operation === "substitute") sefinAcceptedSubstitution = true;
     const nfseXml = gunzipSync(Buffer.from(sefin.nfseXmlGZipB64, "base64")).toString("utf8");
     const safeKey = sefin.chaveAcesso.replace(/[^A-Za-z0-9_-]/g, "").slice(0, 80);
     if (!safeKey) throw new Error("A produção restrita retornou uma chave de acesso inválida.");
-    const nfsePath = `dps/${payment.id}/autorizada-homologacao/${safeKey}.xml`;
+    const nfsePath = operation === "substitute"
+      ? `dps/${payment.id}/autorizada-homologacao/substituicoes/v${nextVersion}/${safeKey}.xml`
+      : `dps/${payment.id}/autorizada-homologacao/${safeKey}.xml`;
     stage = "armazenar_nfse_autorizada";
     const { error: nfseUploadError } = await supabase.storage
       .from(XML_BUCKET)
@@ -524,8 +611,46 @@ export async function POST(request: NextRequest) {
 
     const issuedAt = sefin.dataHoraProcessamento || new Date().toISOString();
     stage = "atualizar_cadastro";
+    if (operation === "substitute" && activeDocument) {
+      const { error: oldDocumentError } = await supabase.from("nfse_documentos_homologacao").update({
+        estado: "substituida",
+        evento_processado_em: issuedAt,
+      }).eq("id", activeDocument.id).eq("estado", "substituindo");
+      if (oldDocumentError) throw new Error("A nota substituta foi gerada, mas a versão anterior não pôde ser encerrada.");
+      const { error: newDocumentError } = await supabase.from("nfse_documentos_homologacao").insert({
+        mensalidade_id: payment.id,
+        versao: nextVersion,
+        chave_acesso: sefin.chaveAcesso,
+        dps_xml_id: draft.id,
+        dps_xml_path: unsignedPath,
+        dps_assinada_xml_path: signedPath,
+        nfse_xml_path: nfsePath,
+        estado: "ativa",
+        substitui_documento_id: activeDocument.id,
+        emitida_em: issuedAt,
+      });
+      if (newDocumentError) throw new Error("A nota substituta foi gerada, mas sua nova versão não pôde ser registrada.");
+    } else {
+      const { error: documentError } = await supabase.from("nfse_documentos_homologacao").insert({
+        mensalidade_id: payment.id,
+        versao: 1,
+        chave_acesso: sefin.chaveAcesso,
+        dps_xml_id: draft.id,
+        dps_xml_path: unsignedPath,
+        dps_assinada_xml_path: signedPath,
+        nfse_xml_path: nfsePath,
+        estado: "ativa",
+        emitida_em: issuedAt,
+      });
+      if (documentError && documentError.code !== "23505") throw new Error("A nota de teste foi gerada, mas sua versão não pôde ser registrada.");
+    }
     const { error: updateError } = await supabase.from("mensalidades").update({
-      status_nfse: "NFS-e emitida em homologação",
+      status_nfse: operation === "substitute" ? "NFS-e substituída em homologação" : "NFS-e emitida em homologação",
+      ...(operation === "substitute" ? {
+        competencia: correctedCompetence,
+        valor_nfse: correctedAmount,
+        descricao_servico: correctedDescription,
+      } : {}),
       dps_xml_path: unsignedPath,
       dps_xml_id: draft.id,
       dps_assinada_xml_path: signedPath,
@@ -537,33 +662,38 @@ export async function POST(request: NextRequest) {
     stage = "registrar_historico";
     await supabase.from("historico_nfse").insert({
       mensalidade_id: payment.id,
-      evento: "nfse_homologacao_emitida",
+      evento: operation === "substitute" ? "nfse_substituida_homologacao" : "nfse_homologacao_emitida",
       valor_anterior: payment.valor_nfse,
-      valor_novo: payment.valor_nfse,
-      detalhes: `Tentativa ${attemptId}. NFS-e gerada exclusivamente na produção restrita. Chave ${sefin.chaveAcesso}. Aplicativo ${sefin.versaoAplicativo || "não informado"}. DPS ${unsignedPath}; DPS assinada ${signedPath}; NFS-e ${nfsePath}.`,
+      valor_novo: operation === "substitute" ? correctedAmount : payment.valor_nfse,
+      detalhes: operation === "substitute" && activeDocument
+        ? `Tentativa ${attemptId}. NFS-e versão ${nextVersion} gerada na produção restrita em substituição à chave ${activeDocument.chave_acesso}. Nova chave ${sefin.chaveAcesso}. Motivo ${substitutionReasonCode}: ${substitutionReason}. DPS ${unsignedPath}; DPS assinada ${signedPath}; NFS-e ${nfsePath}.`
+        : `Tentativa ${attemptId}. NFS-e gerada exclusivamente na produção restrita. Chave ${sefin.chaveAcesso}. Aplicativo ${sefin.versaoAplicativo || "não informado"}. DPS ${unsignedPath}; DPS assinada ${signedPath}; NFS-e ${nfsePath}.`,
     });
-    return json({ ok: true, environment: "Produção restrita", key: sefin.chaveAcesso, issuedAt, alerts: sefin.alertas || [] });
+    return json({ ok: true, operation, environment: "Produção restrita", key: sefin.chaveAcesso, issuedAt, alerts: sefin.alertas || [] });
   } catch (error) {
     password = "";
     pfx.fill(0);
+    if (operation === "substitute" && activeDocument && substitutionLocked && !sefinAcceptedSubstitution) {
+      await supabase.from("nfse_documentos_homologacao").update({ estado: "ativa" }).eq("id", activeDocument.id).eq("estado", "substituindo");
+      await supabase.from("mensalidades").update({ status_nfse: previousStatus }).eq("id", payment.id);
+    } else if (operation === "substitute" && activeDocument && sefinAcceptedSubstitution) {
+      await supabase.from("nfse_documentos_homologacao").update({ estado: "substituida", evento_processado_em: new Date().toISOString() }).eq("id", activeDocument.id);
+      await supabase.from("mensalidades").update({ status_nfse: "Substituição confirmada; sincronização pendente" }).eq("id", payment.id);
+    }
     const stageError = STAGE_ERRORS[stage];
     const technicalError = safeTechnicalError(error);
     await supabase.from("historico_nfse").insert({
       mensalidade_id: payment.id,
-      evento: "nfse_homologacao_falhou_node",
+      evento: operation === "substitute"
+        ? (sefinAcceptedSubstitution ? "nfse_substituicao_confirmada_sincronizacao_pendente" : "nfse_substituicao_homologacao_falhou")
+        : "nfse_homologacao_falhou_node",
       valor_anterior: payment.valor_nfse,
-      valor_novo: payment.valor_nfse,
-      detalhes: `Falha técnica ${stageError.code} (${technicalError.name}: ${technicalError.message}) antes da conclusão da homologação. Nenhuma NFS-e com validade fiscal foi emitida.`.slice(0, 2000),
+      valor_novo: operation === "substitute" ? correctedAmount : payment.valor_nfse,
+      detalhes: `Falha técnica ${stageError.code} (${technicalError.name}: ${technicalError.message}). ${sefinAcceptedSubstitution ? "A SEFIN confirmou a substituição; o cadastro foi bloqueado para sincronização segura." : "Nenhuma nova NFS-e foi confirmada."}`.slice(0, 2000),
     });
     const validationError = stage === "validar_dados_fiscais" && error instanceof Error ? error.message : "";
-    return json({ error: validationError || stageError.message, diagnosticCode: stageError.code }, validationError ? 422 : 502);
+    return json({ error: sefinAcceptedSubstitution ? "A substituição foi confirmada, mas alguns dados ainda precisam ser sincronizados." : validationError || stageError.message, diagnosticCode: stageError.code, confirmed: sefinAcceptedSubstitution }, sefinAcceptedSubstitution ? 202 : validationError ? 422 : 502);
   }
 }
-
-
-
-
-
-
 
 
