@@ -183,7 +183,10 @@ test("fecha a confirmação após o envio e bloqueia clique duplicado", () => {
   assert.match(uiSource, /homologationRequestInFlight\.current\)return/);
   assert.match(uiSource, /homologationRequestInFlight\.current=true/);
   assert.match(uiSource, /homologationRequestInFlight\.current=false/);
-  assert.match(uiSource, /if\(functionError\)throw new Error\(await homologationErrorMessage\(functionError\)\)/);
+  assert.match(uiSource, /fetch\("\/api\/nfse\/homologation\/issue"/);
+  assert.match(uiSource, /Authorization:`Bearer \$\{session\.access_token\}`/);
+  assert.match(uiSource, /if\(!response\.ok\)throw new Error/);
+  assert.match(uiSource, /window\.setTimeout\(\(\)=>controller\.abort\(\),55000\)/);
   assert.match(uiSource, /catch\(cause\)\{\s*setHomologationPayment\(null\)/);
   assert.match(uiSource, /Nenhuma NFS-e foi emitida\. Você pode tentar novamente nesta mesma mensalidade\./);
   assert.match(uiSource, /type="submit" className="primary" disabled=\{sendingHomologation\}/);
@@ -225,10 +228,10 @@ test("guarda a senha do A1 no Vault e não a solicita durante a homologação", 
   assert.match(edgeSource, /rpc\("get_certificate_password_service"/);
   assert.match(edgeSource, /https:\/\/jpi-fiscal\.vercel\.app/);
   assert.match(settingsUi, /savePasswordInVault/);
-  assert.match(invoiceUi, /functions\.invoke<HomologationResult>\("nfse-homologacao-segura"/);
+  assert.doesNotMatch(invoiceUi, /functions\.invoke<HomologationResult>\("nfse-homologacao-segura"/);
   assert.match(invoiceUi, /const payment=homologationPayment/);
-  assert.match(invoiceUi, /body:\{monthlyId:payment\.id\}/);
-  assert.doesNotMatch(invoiceUi, /fetch\("\/api\/nfse\/homologation\/issue"/);
+  assert.match(invoiceUi, /body:JSON\.stringify\(\{monthlyId:payment\.id\}\)/);
+  assert.match(invoiceUi, /fetch\("\/api\/nfse\/homologation\/issue"/);
   assert.doesNotMatch(invoiceUi, /certificatePassword/);
   assert.doesNotMatch(invoiceUi, /Senha do certificado A1<input/);
 });

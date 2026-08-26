@@ -2,7 +2,6 @@
 
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Check, CircleDollarSign, Clock3, CloudUpload, FileCheck2, FileText, Filter, MoreHorizontal, Plus, Search, Send, ShieldCheck, UsersRound, WalletCards, X } from "lucide-react";
-import { FunctionsHttpError } from "@supabase/supabase-js";
 import { createSupabaseBrowserClient } from "@/lib/supabase";
 import { buildDpsDraft, isValidCpfCnpj, NFSE_OWN_APP_SERIES } from "@/lib/nfse-dps";
 import type { Role } from "./app-shell";
@@ -13,7 +12,6 @@ type CompanyFiscalConfig = { cnpj:string|null; inscricao_municipal:string|null; 
 type ActiveCertificate = { validade:string; status:string; cnpj:string|null; senha_configurada:boolean };
 type DpsPreview = { payment:Payment; company:CompanyFiscalConfig; service:FiscalService; series:string; number:string; description:string };
 type HomologationResult = { ok?:boolean; alreadyIssued?:boolean; error?:string; key?:string };
-type HomologationErrorResult = { error?:string; diagnosticCode?:string };
 type FiscalService = { code:string; description:string; nbs:string };
 const segments=["Maternal","Jardim de Infância","Pré-escola","1º ao 5º anos","6º ao 9º anos","Ensino Médio"];
 const fiscalServiceForSegment=(segment?:string|null):FiscalService=>{
@@ -38,15 +36,8 @@ const defaultServiceDescription=(competence:string,segment?:string|null)=>`MENSA
 const upperInput=(event:React.FormEvent<HTMLInputElement>)=>{event.currentTarget.value=upper(event.currentTarget.value)};
 
 async function homologationErrorMessage(error:unknown){
- if(error instanceof FunctionsHttpError){
-  try{
-   const payload=await error.context.json() as HomologationErrorResult;
-   if(payload.error)return payload.error;
-  }catch{
-   // A resposta sem JSON recebe a mensagem segura abaixo.
-  }
- }
- if(error instanceof Error&&!error.message.includes("non-2xx"))return error.message;
+ if(error instanceof Error&&error.name==="AbortError")return "O envio de teste ultrapassou o tempo de segurança e foi interrompido.";
+ if(error instanceof Error)return error.message;
  return "O ambiente de homologação não concluiu o envio.";
 }
 
@@ -125,13 +116,20 @@ export function LiveInvoices({role}:{role:Role}) {
   setSendingHomologation(true);
   setError("");
   setMessage("");
+  const controller=new AbortController();
+  const timeout=window.setTimeout(()=>controller.abort(),55000);
   try{
     const {data:{session}}=await supabase.auth.getSession();
     if(!session)throw new Error("Sua sessão expirou. Entre novamente.");
-    const {data,error:functionError}=await supabase.functions.invoke<HomologationResult>("nfse-homologacao-segura",{
-      body:{monthlyId:payment.id},
+    const response=await fetch("/api/nfse/homologation/issue",{
+      method:"POST",
+      headers:{Authorization:`Bearer ${session.access_token}`,"Content-Type":"application/json"},
+      body:JSON.stringify({monthlyId:payment.id}),
+      signal:controller.signal,
+      cache:"no-store",
     });
-    if(functionError)throw new Error(await homologationErrorMessage(functionError));
+    const data=await response.json().catch(()=>({})) as HomologationResult;
+    if(!response.ok)throw new Error(data.error||"A produção restrita não concluiu a homologação.");
     if(!data?.ok)throw new Error(data?.error||"A produção restrita não confirmou a emissão.");
     const student=payment.alunos?.nome||"aluno";
     setMessage(data.alreadyIssued
@@ -146,6 +144,7 @@ export function LiveInvoices({role}:{role:Role}) {
     setError(`${reason} Nenhuma NFS-e foi emitida. Você pode tentar novamente nesta mesma mensalidade.`);
     await load();
   }finally{
+    window.clearTimeout(timeout);
     homologationRequestInFlight.current=false;
     setSendingHomologation(false);
   }
@@ -162,7 +161,6 @@ export function LiveInvoices({role}:{role:Role}) {
   {storedXml&&<Modal title={storedXml.title} onClose={()=>setStoredXml(null)}><div className="stored-xml"><div className="notice"><FileText/><div><strong>Arquivo privado no sistema online</strong><span>{storedXml.subtitle}</span></div></div><pre className="xml-viewer">{storedXml.xml}</pre><div className="form-actions"><button className="secondary" onClick={()=>setStoredXml(null)}>Fechar</button></div></div></Modal>}
  </>
 }
-
 
 
 
