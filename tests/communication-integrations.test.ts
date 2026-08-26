@@ -5,6 +5,8 @@ import test from "node:test";
 const apiSource=readFileSync(new URL("../app/api/integrations/communications/route.ts",import.meta.url),"utf8");
 const uiSource=readFileSync(new URL("../components/pages.tsx",import.meta.url),"utf8");
 const migrationSource=readFileSync(new URL("../supabase/migrations/20260826185725_configurar_integracoes_comunicacao.sql",import.meta.url),"utf8");
+const locawebMigrationSource=readFileSync(new URL("../supabase/migrations/20260826203500_adicionar_smtp_locaweb.sql",import.meta.url),"utf8");
+const smtpSource=readFileSync(new URL("../lib/smtp.ts",import.meta.url),"utf8");
 
 test("protege as credenciais de comunicação no Vault e restringe a configuração ao administrador",()=>{
   assert.match(migrationSource,/vault\.create_secret/);
@@ -24,6 +26,17 @@ test("permite salvar e testar Resend sem enviar documento fiscal",()=>{
   assert.match(uiSource,/nfse@jejoaopaulo\.com\.br/);
 });
 
+test("permite configurar o E-mail Locaweb com conexão SMTP segura",()=>{
+  assert.match(locawebMigrationSource,/locaweb_email/);
+  assert.match(locawebMigrationSource,/email_smtp_host/);
+  assert.match(apiSource,/email-ssl\.com\.br/);
+  assert.match(apiSource,/sendSmtpEmail/);
+  assert.match(smtpSource,/port!==465/);
+  assert.match(smtpSource,/rejectUnauthorized:true/);
+  assert.match(uiSource,/E-mail Locaweb/);
+  assert.match(uiSource,/Porta 465 · SSL\/TLS/);
+});
+
 test("valida a Meta Cloud API sem disparar mensagem de WhatsApp",()=>{
   assert.match(apiSource,/graph\.facebook\.com/);
   assert.match(apiSource,/fields=display_phone_number,verified_name/);
@@ -34,7 +47,7 @@ test("valida a Meta Cloud API sem disparar mensagem de WhatsApp",()=>{
 
 test("informa ao administrador que segredos não voltam ao navegador",()=>{
   assert.match(uiSource,/nunca voltam a ser exibidos no navegador/);
-  assert.match(uiSource,/Chave protegida — deixe vazio para manter/);
+  assert.match(uiSource,/Credencial protegida — deixe vazio para manter/);
   assert.match(uiSource,/Token protegido — deixe vazio para manter/);
   assert.match(uiSource,/onClick=\{\(\)=>setCommunicationsOpen\(true\)\}/);
 });

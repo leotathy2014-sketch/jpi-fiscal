@@ -1174,7 +1174,10 @@ type CommunicationConfig = {
   email_from_name: string;
   email_from_address: string | null;
   email_reply_to: string | null;
-  email_api_key_configurada: boolean;
+  email_smtp_host: string | null;
+  email_smtp_port: number;
+  email_smtp_username: string | null;
+  email_credencial_configurada: boolean;
   email_testada_em: string | null;
   email_ultimo_status: string;
   whatsapp_provider: string;
@@ -1196,7 +1199,9 @@ function CommunicationsSettings({accessToken,onClose,onChanged}:{accessToken:str
   const [fromName,setFromName]=useState("JPI Fiscal");
   const [fromAddress,setFromAddress]=useState("nfse@jejoaopaulo.com.br");
   const [replyTo,setReplyTo]=useState("");
-  const [apiKey,setApiKey]=useState("");
+  const [emailProvider,setEmailProvider]=useState("locaweb_email");
+  const [smtpUsername,setSmtpUsername]=useState("nfse@jejoaopaulo.com.br");
+  const [emailCredential,setEmailCredential]=useState("");
   const [testRecipient,setTestRecipient]=useState("nfse@jejoaopaulo.com.br");
   const [phoneNumberId,setPhoneNumberId]=useState("");
   const [businessAccountId,setBusinessAccountId]=useState("");
@@ -1211,7 +1216,7 @@ function CommunicationsSettings({accessToken,onClose,onChanged}:{accessToken:str
       const data=await response.json().catch(()=>({})) as {config?:CommunicationConfig;error?:string};
       if(!response.ok||!data.config)throw new Error(data.error||"Não foi possível carregar as integrações.");
       const current=data.config;setConfig(current);onChanged(current);
-      setFromName(current.email_from_name||"JPI Fiscal");setFromAddress(current.email_from_address||"nfse@jejoaopaulo.com.br");setReplyTo(current.email_reply_to||"");
+      setFromName(current.email_from_name||"JPI Fiscal");setFromAddress(current.email_from_address||"nfse@jejoaopaulo.com.br");setReplyTo(current.email_reply_to||"");setEmailProvider(current.email_provider||"locaweb_email");setSmtpUsername(current.email_smtp_username||current.email_from_address||"nfse@jejoaopaulo.com.br");
       setPhoneNumberId(current.whatsapp_phone_number_id||"");setBusinessAccountId(current.whatsapp_business_account_id||"");setSenderNumber(current.whatsapp_sender_number||"");setTemplateName(current.whatsapp_template_name||"envio_nfse");
     }catch(requestError){setError(requestError instanceof Error?requestError.message:"Não foi possível carregar as integrações.");}
     finally{setLoading(false);}
@@ -1225,7 +1230,7 @@ function CommunicationsSettings({accessToken,onClose,onChanged}:{accessToken:str
     if(!response.ok)throw new Error(data.error||"Não foi possível concluir a operação.");
     return data.message||"Operação concluída.";
   }
-  async function saveEmail(event:FormEvent<HTMLFormElement>){event.preventDefault();setBusy("save-email");setError("");setMessage("");try{setMessage(await run("save-email",{fromName,fromAddress,replyTo,apiKey}));setApiKey("");await load();}catch(requestError){setError(requestError instanceof Error?requestError.message:"Não foi possível salvar o e-mail.");}finally{setBusy("");}}
+  async function saveEmail(event:FormEvent<HTMLFormElement>){event.preventDefault();setBusy("save-email");setError("");setMessage("");try{setMessage(await run("save-email",{provider:emailProvider,fromName,fromAddress,replyTo,smtpUsername,credential:emailCredential}));setEmailCredential("");await load();}catch(requestError){setError(requestError instanceof Error?requestError.message:"Não foi possível salvar o e-mail.");}finally{setBusy("");}}
   async function testEmail(){setBusy("test-email");setError("");setMessage("");try{setMessage(await run("test-email",{recipient:testRecipient}));await load();}catch(requestError){setError(requestError instanceof Error?requestError.message:"Não foi possível testar o e-mail.");}finally{setBusy("");}}
   async function saveWhatsapp(event:FormEvent<HTMLFormElement>){event.preventDefault();setBusy("save-whatsapp");setError("");setMessage("");try{setMessage(await run("save-whatsapp",{phoneNumberId,businessAccountId,senderNumber,templateName,accessToken:accessTokenMeta}));setAccessTokenMeta("");await load();}catch(requestError){setError(requestError instanceof Error?requestError.message:"Não foi possível salvar o WhatsApp.");}finally{setBusy("");}}
   async function testWhatsapp(){setBusy("test-whatsapp");setError("");setMessage("");try{setMessage(await run("test-whatsapp",{}));await load();}catch(requestError){setError(requestError instanceof Error?requestError.message:"Não foi possível testar o WhatsApp.");}finally{setBusy("");}}
@@ -1237,13 +1242,16 @@ function CommunicationsSettings({accessToken,onClose,onChanged}:{accessToken:str
       <div className="notice compact"><KeyRound/><span>Chaves e tokens são criptografados no cofre do servidor. Depois de salvos, eles nunca voltam a ser exibidos no navegador.</span></div>
       {loading?<div className="communications-loading">Carregando configurações…</div>:<div className="communication-settings-grid">
         <form className="communication-channel-card data-form" onSubmit={saveEmail}>
-          <div className="communication-channel-head"><span className="integration-icon blue"><Mail/></span><div><h3>E-mail</h3><small>Resend</small></div><Status>{config?.email_ultimo_status==="conectado"?"Conectado":config?.email_api_key_configurada?"Configurar":"Pendente"}</Status></div>
+          <div className="communication-channel-head"><span className="integration-icon blue"><Mail/></span><div><h3>E-mail</h3><small>{emailProvider==="resend"?"Resend":emailProvider==="locaweb_smtp"?"SMTP Locaweb":"E-mail Locaweb"}</small></div><Status>{config?.email_ultimo_status==="conectado"?"Conectado":config?.email_credencial_configurada?"Configurar":"Pendente"}</Status></div>
+          <label>Provedor de envio<select value={emailProvider} onChange={event=>{const provider=event.target.value;setEmailProvider(provider);if(provider==="locaweb_email")setSmtpUsername(fromAddress);}}><option value="locaweb_email">E-mail Locaweb</option><option value="locaweb_smtp">SMTP Locaweb contratado</option><option value="resend">Resend</option></select><small>Para a caixa atual, selecione E-mail Locaweb.</small></label>
           <label>Nome do remetente<input value={fromName} onChange={event=>setFromName(event.target.value)} required maxLength={100}/></label>
-          <label>E-mail do remetente<input type="email" value={fromAddress} onChange={event=>setFromAddress(event.target.value)} required/><small>O domínio precisa estar verificado no Resend.</small></label>
+          <label>E-mail do remetente<input type="email" value={fromAddress} onChange={event=>{setFromAddress(event.target.value);if(emailProvider==="locaweb_email")setSmtpUsername(event.target.value);}} required/><small>{emailProvider==="resend"?"O domínio precisa estar verificado no Resend.":"A conta deve estar ativa no painel da Locaweb."}</small></label>
           <label>Responder para (opcional)<input type="email" value={replyTo} onChange={event=>setReplyTo(event.target.value)}/></label>
-          <label>Chave da API do Resend<input type="password" value={apiKey} onChange={event=>setApiKey(event.target.value)} placeholder={config?.email_api_key_configurada?"Chave protegida — deixe vazio para manter":"re_..."} autoComplete="new-password"/><small>{config?.email_api_key_configurada?"Já existe uma chave protegida. Preencha apenas para substituí-la.":"Crie a chave no painel do Resend."}</small></label>
+          {emailProvider!=="resend"&&<div className="smtp-server-summary"><span>Servidor seguro</span><strong>{emailProvider==="locaweb_smtp"?"smtplw.com.br":"email-ssl.com.br"}</strong><small>Porta 465 · SSL/TLS</small></div>}
+          {emailProvider!=="resend"&&<label>Usuário SMTP<input value={smtpUsername} onChange={event=>setSmtpUsername(event.target.value)} required placeholder={emailProvider==="locaweb_email"?"E-mail completo":"Login informado no painel SMTP"}/><small>{emailProvider==="locaweb_email"?"Use nfse@jejoaopaulo.com.br.":"Use o login exibido no serviço SMTP Locaweb."}</small></label>}
+          <label>{emailProvider==="resend"?"Chave da API do Resend":"Senha da Locaweb"}<input type="password" value={emailCredential} onChange={event=>setEmailCredential(event.target.value)} placeholder={config?.email_credencial_configurada?"Credencial protegida — deixe vazio para manter":emailProvider==="resend"?"re_...":"Senha da conta de e-mail"} autoComplete="new-password"/><small>{config?.email_credencial_configurada?"Já existe uma credencial protegida. Preencha apenas para substituí-la.":emailProvider==="resend"?"Crie a chave no painel do Resend.":"A senha será criptografada e armazenada somente no cofre."}</small></label>
           <button className="primary full" disabled={disabled}>{busy==="save-email"?"Salvando…":"Salvar configuração de e-mail"}</button>
-          <div className="communication-test"><label>Destinatário do teste<input type="email" value={testRecipient} onChange={event=>setTestRecipient(event.target.value)}/></label><button type="button" className="secondary full" onClick={testEmail} disabled={disabled||!config?.email_api_key_configurada}>{busy==="test-email"?"Enviando teste…":"Enviar e-mail de teste"}</button></div>
+          <div className="communication-test"><label>Destinatário do teste<input type="email" value={testRecipient} onChange={event=>setTestRecipient(event.target.value)}/></label><button type="button" className="secondary full" onClick={testEmail} disabled={disabled||!config?.email_credencial_configurada}>{busy==="test-email"?"Enviando teste…":"Enviar e-mail de teste"}</button></div>
           {config?.email_testada_em&&<small className="last-test">Último teste: {new Date(config.email_testada_em).toLocaleString("pt-BR")}</small>}
         </form>
         <form className="communication-channel-card data-form" onSubmit={saveWhatsapp}>
@@ -1370,7 +1378,7 @@ function Integrations({accessToken}:{accessToken:string|null}) {
         <p>Configure e-mail e WhatsApp para recibos e avisos.</p>
         <div className="integration-meta">
           <span>Canal</span>
-          <strong>{communicationConfig?.email_api_key_configurada&&communicationConfig?.whatsapp_token_configurado?"E-mail e WhatsApp":communicationConfig?.email_api_key_configurada?"E-mail configurado":communicationConfig?.whatsapp_token_configurado?"WhatsApp configurado":"Não configurado"}</strong>
+          <strong>{communicationConfig?.email_credencial_configurada&&communicationConfig?.whatsapp_token_configurado?"E-mail e WhatsApp":communicationConfig?.email_credencial_configurada?"E-mail configurado":communicationConfig?.whatsapp_token_configurado?"WhatsApp configurado":"Não configurado"}</strong>
         </div>
         <button className="secondary full" onClick={()=>setCommunicationsOpen(true)}>Configurar canais</button>
       </article>
