@@ -1,6 +1,6 @@
 "use client";
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
-import { AlertCircle, ArrowUpRight, Building2, Check, CircleDollarSign, Clock3, FileCheck2, FilePlus2, Filter, KeyRound, Link2, MoreHorizontal, Plus, Search, ShieldCheck, SlidersHorizontal, Trash2, UploadCloud, UserCog, UsersRound, WalletCards, X } from "lucide-react";
+import { AlertCircle, ArrowUpRight, Building2, Check, CircleDollarSign, Clock3, FileCheck2, FilePlus2, Filter, KeyRound, Link2, Mail, MessageCircle, MoreHorizontal, Plus, Search, ShieldCheck, SlidersHorizontal, Trash2, UploadCloud, UserCog, UsersRound, WalletCards, X } from "lucide-react";
 import type { Role } from "./app-shell";
 import { createSupabaseBrowserClient } from "@/lib/supabase";
 import { TransmissionProgress } from "./transmission-progress";
@@ -1169,14 +1169,119 @@ function CertificateSettings() {
     </div>
   );
 }
+type CommunicationConfig = {
+  email_provider: string;
+  email_from_name: string;
+  email_from_address: string | null;
+  email_reply_to: string | null;
+  email_api_key_configurada: boolean;
+  email_testada_em: string | null;
+  email_ultimo_status: string;
+  whatsapp_provider: string;
+  whatsapp_phone_number_id: string | null;
+  whatsapp_business_account_id: string | null;
+  whatsapp_sender_number: string | null;
+  whatsapp_template_name: string;
+  whatsapp_token_configurado: boolean;
+  whatsapp_testada_em: string | null;
+  whatsapp_ultimo_status: string;
+};
+
+function CommunicationsSettings({accessToken,onClose,onChanged}:{accessToken:string|null;onClose:()=>void;onChanged:(config:CommunicationConfig)=>void}) {
+  const [config,setConfig]=useState<CommunicationConfig|null>(null);
+  const [loading,setLoading]=useState(true);
+  const [busy,setBusy]=useState("");
+  const [error,setError]=useState("");
+  const [message,setMessage]=useState("");
+  const [fromName,setFromName]=useState("JPI Fiscal");
+  const [fromAddress,setFromAddress]=useState("nfse@jejoaopaulo.com.br");
+  const [replyTo,setReplyTo]=useState("");
+  const [apiKey,setApiKey]=useState("");
+  const [testRecipient,setTestRecipient]=useState("nfse@jejoaopaulo.com.br");
+  const [phoneNumberId,setPhoneNumberId]=useState("");
+  const [businessAccountId,setBusinessAccountId]=useState("");
+  const [senderNumber,setSenderNumber]=useState("");
+  const [templateName,setTemplateName]=useState("envio_nfse");
+  const [accessTokenMeta,setAccessTokenMeta]=useState("");
+
+  const load=useCallback(async()=>{
+    if(!accessToken){setError("Sessão expirada. Entre novamente.");setLoading(false);return;}
+    try{
+      const response=await fetch("/api/integrations/communications",{headers:{Authorization:`Bearer ${accessToken}`},cache:"no-store"});
+      const data=await response.json().catch(()=>({})) as {config?:CommunicationConfig;error?:string};
+      if(!response.ok||!data.config)throw new Error(data.error||"Não foi possível carregar as integrações.");
+      const current=data.config;setConfig(current);onChanged(current);
+      setFromName(current.email_from_name||"JPI Fiscal");setFromAddress(current.email_from_address||"nfse@jejoaopaulo.com.br");setReplyTo(current.email_reply_to||"");
+      setPhoneNumberId(current.whatsapp_phone_number_id||"");setBusinessAccountId(current.whatsapp_business_account_id||"");setSenderNumber(current.whatsapp_sender_number||"");setTemplateName(current.whatsapp_template_name||"envio_nfse");
+    }catch(requestError){setError(requestError instanceof Error?requestError.message:"Não foi possível carregar as integrações.");}
+    finally{setLoading(false);}
+  },[accessToken,onChanged]);
+  useEffect(()=>{load();},[load]);
+
+  async function run(action:string,payload:Record<string,string>){
+    if(!accessToken)throw new Error("Sessão expirada. Entre novamente.");
+    const response=await fetch("/api/integrations/communications",{method:"POST",headers:{Authorization:`Bearer ${accessToken}`,"Content-Type":"application/json"},body:JSON.stringify({action,...payload}),cache:"no-store"});
+    const data=await response.json().catch(()=>({})) as {message?:string;error?:string};
+    if(!response.ok)throw new Error(data.error||"Não foi possível concluir a operação.");
+    return data.message||"Operação concluída.";
+  }
+  async function saveEmail(event:FormEvent<HTMLFormElement>){event.preventDefault();setBusy("save-email");setError("");setMessage("");try{setMessage(await run("save-email",{fromName,fromAddress,replyTo,apiKey}));setApiKey("");await load();}catch(requestError){setError(requestError instanceof Error?requestError.message:"Não foi possível salvar o e-mail.");}finally{setBusy("");}}
+  async function testEmail(){setBusy("test-email");setError("");setMessage("");try{setMessage(await run("test-email",{recipient:testRecipient}));await load();}catch(requestError){setError(requestError instanceof Error?requestError.message:"Não foi possível testar o e-mail.");}finally{setBusy("");}}
+  async function saveWhatsapp(event:FormEvent<HTMLFormElement>){event.preventDefault();setBusy("save-whatsapp");setError("");setMessage("");try{setMessage(await run("save-whatsapp",{phoneNumberId,businessAccountId,senderNumber,templateName,accessToken:accessTokenMeta}));setAccessTokenMeta("");await load();}catch(requestError){setError(requestError instanceof Error?requestError.message:"Não foi possível salvar o WhatsApp.");}finally{setBusy("");}}
+  async function testWhatsapp(){setBusy("test-whatsapp");setError("");setMessage("");try{setMessage(await run("test-whatsapp",{}));await load();}catch(requestError){setError(requestError instanceof Error?requestError.message:"Não foi possível testar o WhatsApp.");}finally{setBusy("");}}
+  const disabled=loading||Boolean(busy);
+  return <div className="modal-backdrop"><div className="modal-card communications-modal">
+    <div className="modal-head"><div><h2>Integrações de comunicação</h2><p>Configure os canais sem alterar o código do sistema.</p></div><button className="icon-button" onClick={onClose} disabled={Boolean(busy)} aria-label="Fechar"><X/></button></div>
+    <div className="communications-body">
+      {error&&<div className="error-box">{error}</div>}{message&&<div className="success-box">{message}</div>}
+      <div className="notice compact"><KeyRound/><span>Chaves e tokens são criptografados no cofre do servidor. Depois de salvos, eles nunca voltam a ser exibidos no navegador.</span></div>
+      {loading?<div className="communications-loading">Carregando configurações…</div>:<div className="communication-settings-grid">
+        <form className="communication-channel-card data-form" onSubmit={saveEmail}>
+          <div className="communication-channel-head"><span className="integration-icon blue"><Mail/></span><div><h3>E-mail</h3><small>Resend</small></div><Status>{config?.email_ultimo_status==="conectado"?"Conectado":config?.email_api_key_configurada?"Configurar":"Pendente"}</Status></div>
+          <label>Nome do remetente<input value={fromName} onChange={event=>setFromName(event.target.value)} required maxLength={100}/></label>
+          <label>E-mail do remetente<input type="email" value={fromAddress} onChange={event=>setFromAddress(event.target.value)} required/><small>O domínio precisa estar verificado no Resend.</small></label>
+          <label>Responder para (opcional)<input type="email" value={replyTo} onChange={event=>setReplyTo(event.target.value)}/></label>
+          <label>Chave da API do Resend<input type="password" value={apiKey} onChange={event=>setApiKey(event.target.value)} placeholder={config?.email_api_key_configurada?"Chave protegida — deixe vazio para manter":"re_..."} autoComplete="new-password"/><small>{config?.email_api_key_configurada?"Já existe uma chave protegida. Preencha apenas para substituí-la.":"Crie a chave no painel do Resend."}</small></label>
+          <button className="primary full" disabled={disabled}>{busy==="save-email"?"Salvando…":"Salvar configuração de e-mail"}</button>
+          <div className="communication-test"><label>Destinatário do teste<input type="email" value={testRecipient} onChange={event=>setTestRecipient(event.target.value)}/></label><button type="button" className="secondary full" onClick={testEmail} disabled={disabled||!config?.email_api_key_configurada}>{busy==="test-email"?"Enviando teste…":"Enviar e-mail de teste"}</button></div>
+          {config?.email_testada_em&&<small className="last-test">Último teste: {new Date(config.email_testada_em).toLocaleString("pt-BR")}</small>}
+        </form>
+        <form className="communication-channel-card data-form" onSubmit={saveWhatsapp}>
+          <div className="communication-channel-head"><span className="integration-icon green"><MessageCircle/></span><div><h3>WhatsApp</h3><small>Meta Cloud API</small></div><Status>{config?.whatsapp_ultimo_status==="conectado"?"Conectado":config?.whatsapp_token_configurado?"Configurar":"Pendente"}</Status></div>
+          <label>ID do número do WhatsApp<input inputMode="numeric" value={phoneNumberId} onChange={event=>setPhoneNumberId(event.target.value)} required placeholder="Phone Number ID"/></label>
+          <label>ID da conta comercial<input inputMode="numeric" value={businessAccountId} onChange={event=>setBusinessAccountId(event.target.value)} required placeholder="WhatsApp Business Account ID"/></label>
+          <label>Número remetente<input inputMode="tel" value={senderNumber} onChange={event=>setSenderNumber(event.target.value)} required placeholder="5521999999999"/><small>Informe DDI + DDD + número, somente dígitos.</small></label>
+          <label>Modelo aprovado para NFS-e<input value={templateName} onChange={event=>setTemplateName(event.target.value)} required placeholder="envio_nfse"/></label>
+          <label>Token permanente da Meta<input type="password" value={accessTokenMeta} onChange={event=>setAccessTokenMeta(event.target.value)} placeholder={config?.whatsapp_token_configurado?"Token protegido — deixe vazio para manter":"Cole o token permanente"} autoComplete="new-password"/><small>{config?.whatsapp_token_configurado?"Já existe um token protegido. Preencha apenas para substituí-lo.":"Use um token de usuário do sistema da Meta."}</small></label>
+          <button className="primary full" disabled={disabled}>{busy==="save-whatsapp"?"Salvando…":"Salvar configuração do WhatsApp"}</button>
+          <button type="button" className="secondary full" onClick={testWhatsapp} disabled={disabled||!config?.whatsapp_token_configurado}>{busy==="test-whatsapp"?"Testando conexão…":"Testar conexão sem enviar mensagem"}</button>
+          {config?.whatsapp_testada_em&&<small className="last-test">Último teste: {new Date(config.whatsapp_testada_em).toLocaleString("pt-BR")}</small>}
+        </form>
+      </div>}
+      <div className="form-actions"><button type="button" className="secondary" onClick={onClose} disabled={Boolean(busy)}>Fechar</button></div>
+    </div>
+  </div></div>;
+}
+
 function Integrations({accessToken}:{accessToken:string|null}) {
   const [open, setOpen] = useState(false);
+  const [communicationsOpen,setCommunicationsOpen]=useState(false);
+  const [communicationConfig,setCommunicationConfig]=useState<CommunicationConfig|null>(null);
   const [busy, setBusy] = useState(false);
   const [tested, setTested] = useState(false);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
   const [elapsed, setElapsed] = useState(0);
   const [connectionStage, setConnectionStage] = useState("");
+  useEffect(()=>{
+    if(!accessToken)return;
+    let active=true;
+    fetch("/api/integrations/communications",{headers:{Authorization:`Bearer ${accessToken}`},cache:"no-store"})
+      .then(async response=>({response,data:await response.json().catch(()=>({})) as {config?:CommunicationConfig}}))
+      .then(({response,data})=>{if(active&&response.ok&&data.config)setCommunicationConfig(data.config);})
+      .catch(()=>undefined);
+    return()=>{active=false;};
+  },[accessToken]);
   useEffect(() => {
     if (!busy) return;
     const startedAt = Date.now() - elapsed * 1000;
@@ -1259,17 +1364,17 @@ function Integrations({accessToken}:{accessToken:string|null}) {
           <span className="integration-icon purple">
             <Link2 />
           </span>
-          <Status>Pendente</Status>
+          <Status>{communicationConfig?.email_ultimo_status==="conectado"||communicationConfig?.whatsapp_ultimo_status==="conectado"?"Conectado":"Pendente"}</Status>
         </div>
         <h3>Comunicações</h3>
         <p>Configure e-mail e WhatsApp para recibos e avisos.</p>
         <div className="integration-meta">
           <span>Canal</span>
-          <strong>Não configurado</strong>
+          <strong>{communicationConfig?.email_api_key_configurada&&communicationConfig?.whatsapp_token_configurado?"E-mail e WhatsApp":communicationConfig?.email_api_key_configurada?"E-mail configurado":communicationConfig?.whatsapp_token_configurado?"WhatsApp configurado":"Não configurado"}</strong>
         </div>
-        <button className="secondary full">Configurar canais</button>
+        <button className="secondary full" onClick={()=>setCommunicationsOpen(true)}>Configurar canais</button>
       </article>
-    </div>{open&&<div className="modal-backdrop"><div className="modal-card small-modal"><div className="modal-head"><h2>Testar ambiente de homologação</h2><button className="icon-button" onClick={()=>setOpen(false)}><X/></button></div><form className="data-form" onSubmit={testHomologation}>{error&&<div className="error-box">{error}</div>}{message&&<div className="success-box">{message}</div>}<div className="notice compact warning"><ShieldCheck/><span>Este teste usa o certificado A1 e a senha protegida no cofre somente para autenticar a conexão com a produção restrita. Nenhuma DPS ou NFS-e será enviada.</span></div>{(busy||elapsed>0)&&<div className="connection-timer"><Clock3/><span>{busy?(connectionStage||"Iniciando conexão…"):"Tempo da tentativa"}</span><strong>{elapsedLabel}</strong></div>}{busy&&<TransmissionProgress kind="connection"/>}<div className="notice compact"><KeyRound/><span>A senha será recuperada somente pelo servidor e não será exibida no navegador.</span></div><div className="form-actions"><button type="button" className="secondary" onClick={()=>setOpen(false)} disabled={busy}>Fechar</button><button className="primary" disabled={busy||tested}>{busy?`Conectando · ${elapsedLabel}`:tested?"Conexão confirmada":"Testar conexão"}</button></div></form></div></div>}</>
+    </div>{communicationsOpen&&<CommunicationsSettings accessToken={accessToken} onClose={()=>setCommunicationsOpen(false)} onChanged={setCommunicationConfig}/>} {open&&<div className="modal-backdrop"><div className="modal-card small-modal"><div className="modal-head"><h2>Testar ambiente de homologação</h2><button className="icon-button" onClick={()=>setOpen(false)}><X/></button></div><form className="data-form" onSubmit={testHomologation}>{error&&<div className="error-box">{error}</div>}{message&&<div className="success-box">{message}</div>}<div className="notice compact warning"><ShieldCheck/><span>Este teste usa o certificado A1 e a senha protegida no cofre somente para autenticar a conexão com a produção restrita. Nenhuma DPS ou NFS-e será enviada.</span></div>{(busy||elapsed>0)&&<div className="connection-timer"><Clock3/><span>{busy?(connectionStage||"Iniciando conexão…"):"Tempo da tentativa"}</span><strong>{elapsedLabel}</strong></div>}{busy&&<TransmissionProgress kind="connection"/>}<div className="notice compact"><KeyRound/><span>A senha será recuperada somente pelo servidor e não será exibida no navegador.</span></div><div className="form-actions"><button type="button" className="secondary" onClick={()=>setOpen(false)} disabled={busy}>Fechar</button><button className="primary" disabled={busy||tested}>{busy?`Conectando · ${elapsedLabel}`:tested?"Conexão confirmada":"Testar conexão"}</button></div></form></div></div>}</>
   );
 }
 type ManagedUser = {
