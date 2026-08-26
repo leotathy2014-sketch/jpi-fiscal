@@ -29,3 +29,13 @@ test("usa uma única verificação de disponibilidade da SEFIN", () => {
   assert.match(settingsSource, /jpi-sefin-status-updated/);
   assert.match(appShellSource, /jpi-sefin-status-updated/);
 });
+
+test("organiza a listagem e os ajustes de NFS-e com os mesmos filtros", () => {
+  assert.match(invoicesSource, /Organizar NFS-e/);
+  assert.match(invoicesSource, /Todos os períodos/);
+  assert.match(invoicesSource, /Todas as situações/);
+  assert.match(invoicesSource, /Aluno, responsável ou chave/);
+  assert.match(invoicesSource, /const items=filteredItems/);
+  assert.match(invoicesSource, /filteredIssuedItems/);
+  assert.match(invoicesSource, /Limpar filtros/);
+});
