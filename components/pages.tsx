@@ -1,7 +1,6 @@
 "use client";
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import { AlertCircle, ArrowUpRight, Building2, Check, CircleDollarSign, Clock3, FileCheck2, FilePlus2, Filter, KeyRound, Link2, MoreHorizontal, Plus, Search, ShieldCheck, SlidersHorizontal, Trash2, UploadCloud, UserCog, UsersRound, WalletCards, X } from "lucide-react";
-import { FunctionsHttpError } from "@supabase/supabase-js";
 import type { Role } from "./app-shell";
 import { createSupabaseBrowserClient } from "@/lib/supabase";
 import { TransmissionProgress } from "./transmission-progress";
@@ -1171,7 +1170,6 @@ function CertificateSettings() {
   );
 }
 function Integrations({accessToken}:{accessToken:string|null}) {
-  const supabase = useMemo(() => createSupabaseBrowserClient(), []);
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [tested, setTested] = useState(false);
@@ -1195,34 +1193,26 @@ function Integrations({accessToken}:{accessToken:string|null}) {
     return () => window.clearTimeout(watchdog);
   }, [busy]);
   const elapsedLabel = `${String(Math.floor(elapsed / 60)).padStart(2, "0")}:${String(elapsed % 60).padStart(2, "0")}`;
-  async function connectionErrorMessage(functionError: unknown) {
-    if (functionError instanceof FunctionsHttpError) {
-      try {
-        const payload = await functionError.context.json() as { error?: string };
-        if (payload.error) return payload.error;
-      } catch {
-        return "O teste seguro não retornou uma resposta válida.";
-      }
-    }
-    return functionError instanceof Error ? functionError.message : "Não foi possível testar a integração.";
-  }
   async function testHomologation(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!supabase) return;
     setElapsed(0);setBusy(true);setError("");setMessage("");setConnectionStage("Preparando certificado A1…");
     const token = accessToken;
     if (!token) { setError("Sessão expirada. Saia do sistema e entre novamente.");setBusy(false);setConnectionStage("");return; }
     let timeout = 0;
     try {
       setConnectionStage("Conectando ao Emissor Nacional de testes…");
-      const { data, error: functionError } = await Promise.race([
-        supabase.functions.invoke<{ ok?:boolean;environment?:string;error?:string;ready?:boolean;issuanceStatus?:number }>("nfse-teste-conexao-segura", {
-          body: { action: "test-connection" },
+      const response = await Promise.race([
+        fetch("/api/nfse/homologation/test", {
+          method: "POST",
+          headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+          body: JSON.stringify({ action: "test-connection" }),
+          cache: "no-store",
         }),
         new Promise<never>((_, reject) => { timeout = window.setTimeout(() => reject(new Error("JPI_CONNECTION_TIMEOUT")), 25000); }),
       ]);
-      if (functionError) { setError(await connectionErrorMessage(functionError));return; }
-      if (!data?.ok) { setError(data?.error || "Não foi possível testar a integração.");return; }
+      const data = await response.json().catch(() => ({})) as { ok?:boolean;environment?:string;error?:string;ready?:boolean;issuanceStatus?:number };
+      window.dispatchEvent(new Event("jpi-sefin-status-updated"));
+      if (!response.ok || !data?.ok) { setError(data?.error || "Não foi possível testar a integração.");return; }
       if (!data.ready) { setError("O servidor de emissão está instável. Não tente enviar a nota agora.");return; }
       setTested(true);setMessage(`Certificado confirmado e servidor de emissão da SEFIN respondendo no ambiente de ${data.environment}. Você pode tentar a homologação; nenhuma nota foi emitida neste teste.`);
     } catch (requestError) {

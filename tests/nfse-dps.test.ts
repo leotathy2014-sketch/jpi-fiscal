@@ -265,9 +265,10 @@ test("testa a conexão segura sem criar ou transmitir uma nota", () => {
   assert.match(connectionNode, /transmitted: false/);
   assert.match(connectionNode, /transport: "vercel-node"/);
   assert.doesNotMatch(connectionNode, /dpsXmlGZipB64/);
-  assert.match(settingsUi, /functions\.invoke<\{ ok\?:boolean;environment\?:string;error\?:string;ready\?:boolean;issuanceStatus\?:number \}>\("nfse-teste-conexao-segura"/);
-  assert.match(settingsUi, /body: \{ action: "test-connection" \}/);
-  assert.doesNotMatch(settingsUi, /fetch\("\/api\/nfse\/homologation\/test"/);
+  assert.doesNotMatch(settingsUi, /nfse-teste-conexao-segura/);
+  assert.match(settingsUi, /fetch\("\/api\/nfse\/homologation\/test"/);
+  assert.match(settingsUi, /body: JSON\.stringify\(\{ action: "test-connection" \}\)/);
+  assert.match(settingsUi, /jpi-sefin-status-updated/);
   assert.match(appShell, /fetch\("\/api\/nfse\/homologation\/test"/);
   assert.match(appShell, /body:JSON\.stringify\(\{action:"server-status"\}\)/);
   assert.match(appShell, /SEFIN disponível/);
