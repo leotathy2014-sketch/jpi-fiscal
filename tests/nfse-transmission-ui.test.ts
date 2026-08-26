@@ -39,3 +39,13 @@ test("organiza a listagem e os ajustes de NFS-e com os mesmos filtros", () => {
   assert.match(invoicesSource, /filteredIssuedItems/);
   assert.match(invoicesSource, /Limpar filtros/);
 });
+
+test("emite notas selecionadas em fila individual e repete somente as pendentes", () => {
+  assert.match(invoicesSource, /Emissão em lote · homologação/);
+  assert.match(invoicesSource, /Emitir selecionadas/);
+  assert.match(invoicesSource, /for\(const payment of payments\)/);
+  assert.match(invoicesSource, /body:JSON\.stringify\(\{monthlyId:payment\.id\}\)/);
+  assert.match(invoicesSource, /batchIssueInFlight/);
+  assert.match(invoicesSource, /Uma falha não interromperá as demais emissões/);
+  assert.match(invoicesSource, /Tentar novamente as pendentes/);
+});
