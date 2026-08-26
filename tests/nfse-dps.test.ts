@@ -235,6 +235,7 @@ test("guarda a senha do A1 no Vault e não a solicita durante a homologação", 
 
 test("testa a conexão segura sem criar ou transmitir uma nota", () => {
   const connectionEdge = readFileSync(new URL("../supabase/functions/nfse-teste-conexao-segura/index.ts", import.meta.url), "utf8");
+  const connectionNode = readFileSync(new URL("../app/api/nfse/homologation/test/route.ts", import.meta.url), "utf8");
   const settingsUi = readFileSync(new URL("../components/pages.tsx", import.meta.url), "utf8");
   const appShell = readFileSync(new URL("../components/app-shell.tsx", import.meta.url), "utf8");
 
@@ -252,10 +253,18 @@ test("testa a conexão segura sem criar ou transmitir uma nota", () => {
   assert.doesNotMatch(connectionEdge, /dpsXmlGZipB64/);
   assert.match(connectionEdge, /ready: false/);
   assert.match(connectionEdge, /ready: true/);
+  assert.match(connectionNode, /parametrizacao\/3304557\/convenio/);
+  assert.match(connectionNode, /sefin\.producaorestrita\.nfse\.gov\.br\/API\/SefinNacional\/nfse/);
+  assert.match(connectionNode, /probeMutualTls\(ISSUANCE_SERVER_URL, "HEAD"/);
+  assert.match(connectionNode, /rpc\("get_certificate_password"/);
+  assert.match(connectionNode, /transmitted: false/);
+  assert.match(connectionNode, /transport: "vercel-node"/);
+  assert.doesNotMatch(connectionNode, /dpsXmlGZipB64/);
   assert.match(settingsUi, /functions\.invoke<\{ ok\?:boolean;environment\?:string;error\?:string;ready\?:boolean;issuanceStatus\?:number \}>\("nfse-teste-conexao-segura"/);
   assert.match(settingsUi, /body: \{ action: "test-connection" \}/);
   assert.doesNotMatch(settingsUi, /fetch\("\/api\/nfse\/homologation\/test"/);
-  assert.match(appShell, /body:\{action:"server-status"\}/);
+  assert.match(appShell, /fetch\("\/api\/nfse\/homologation\/test"/);
+  assert.match(appShell, /body:JSON\.stringify\(\{action:"server-status"\}\)/);
   assert.match(appShell, /SEFIN disponível/);
   assert.match(appShell, /SEFIN instável/);
   assert.match(appShell, /setInterval\(\(\)=>void checkSefin\(\),300000\)/);
