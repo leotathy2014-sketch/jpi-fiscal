@@ -27,5 +27,6 @@ test("documenta os principais módulos e operações do JPI Fiscal",()=>{
 test("orienta sem solicitar compartilhamento de credenciais",()=>{
   assert.match(helpSource,/Nunca compartilhe senha do A1, chave do Resend ou token da Meta/);
   assert.match(helpSource,/Não envie senhas ou tokens/);
-  assert.match(helpSource,/O teste não envia mensagem/);
+  assert.match(helpSource,/não envia mensagem/);
+  assert.match(helpSource,/link privado válido por 7 dias/);
 });

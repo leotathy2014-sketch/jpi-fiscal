@@ -1185,6 +1185,7 @@ type CommunicationConfig = {
   whatsapp_business_account_id: string | null;
   whatsapp_sender_number: string | null;
   whatsapp_template_name: string;
+  whatsapp_test_recipient: string | null;
   whatsapp_token_configurado: boolean;
   whatsapp_testada_em: string | null;
   whatsapp_ultimo_status: string;
@@ -1207,6 +1208,7 @@ function CommunicationsSettings({accessToken,onClose,onChanged}:{accessToken:str
   const [businessAccountId,setBusinessAccountId]=useState("");
   const [senderNumber,setSenderNumber]=useState("");
   const [templateName,setTemplateName]=useState("envio_nfse");
+  const [whatsappTestRecipient,setWhatsappTestRecipient]=useState("");
   const [accessTokenMeta,setAccessTokenMeta]=useState("");
 
   const load=useCallback(async()=>{
@@ -1217,7 +1219,7 @@ function CommunicationsSettings({accessToken,onClose,onChanged}:{accessToken:str
       if(!response.ok||!data.config)throw new Error(data.error||"Não foi possível carregar as integrações.");
       const current=data.config;setConfig(current);onChanged(current);
       setFromName(current.email_from_name||"JPI Fiscal");setFromAddress(current.email_from_address||"nfse@jejoaopaulo.com.br");setReplyTo(current.email_reply_to||"");setEmailProvider(current.email_provider||"locaweb_email");setSmtpUsername(current.email_smtp_username||current.email_from_address||"nfse@jejoaopaulo.com.br");
-      setPhoneNumberId(current.whatsapp_phone_number_id||"");setBusinessAccountId(current.whatsapp_business_account_id||"");setSenderNumber(current.whatsapp_sender_number||"");setTemplateName(current.whatsapp_template_name||"envio_nfse");
+      setPhoneNumberId(current.whatsapp_phone_number_id||"");setBusinessAccountId(current.whatsapp_business_account_id||"");setSenderNumber(current.whatsapp_sender_number||"");setTemplateName(current.whatsapp_template_name||"envio_nfse");setWhatsappTestRecipient(current.whatsapp_test_recipient||"");
     }catch(requestError){setError(requestError instanceof Error?requestError.message:"Não foi possível carregar as integrações.");}
     finally{setLoading(false);}
   },[accessToken,onChanged]);
@@ -1232,7 +1234,7 @@ function CommunicationsSettings({accessToken,onClose,onChanged}:{accessToken:str
   }
   async function saveEmail(event:FormEvent<HTMLFormElement>){event.preventDefault();setBusy("save-email");setError("");setMessage("");try{setMessage(await run("save-email",{provider:emailProvider,fromName,fromAddress,replyTo,smtpUsername,credential:emailCredential}));setEmailCredential("");await load();}catch(requestError){setError(requestError instanceof Error?requestError.message:"Não foi possível salvar o e-mail.");}finally{setBusy("");}}
   async function testEmail(){setBusy("test-email");setError("");setMessage("");try{setMessage(await run("test-email",{recipient:testRecipient}));await load();}catch(requestError){setError(requestError instanceof Error?requestError.message:"Não foi possível testar o e-mail.");}finally{setBusy("");}}
-  async function saveWhatsapp(event:FormEvent<HTMLFormElement>){event.preventDefault();setBusy("save-whatsapp");setError("");setMessage("");try{setMessage(await run("save-whatsapp",{phoneNumberId,businessAccountId,senderNumber,templateName,accessToken:accessTokenMeta}));setAccessTokenMeta("");await load();}catch(requestError){setError(requestError instanceof Error?requestError.message:"Não foi possível salvar o WhatsApp.");}finally{setBusy("");}}
+  async function saveWhatsapp(event:FormEvent<HTMLFormElement>){event.preventDefault();setBusy("save-whatsapp");setError("");setMessage("");try{setMessage(await run("save-whatsapp",{phoneNumberId,businessAccountId,senderNumber,testRecipient:whatsappTestRecipient,templateName,accessToken:accessTokenMeta}));setAccessTokenMeta("");await load();}catch(requestError){setError(requestError instanceof Error?requestError.message:"Não foi possível salvar o WhatsApp.");}finally{setBusy("");}}
   async function testWhatsapp(){setBusy("test-whatsapp");setError("");setMessage("");try{setMessage(await run("test-whatsapp",{}));await load();}catch(requestError){setError(requestError instanceof Error?requestError.message:"Não foi possível testar o WhatsApp.");}finally{setBusy("");}}
   const disabled=loading||Boolean(busy);
   return <div className="modal-backdrop"><div className="modal-card communications-modal">
@@ -1259,6 +1261,7 @@ function CommunicationsSettings({accessToken,onClose,onChanged}:{accessToken:str
           <label>ID do número do WhatsApp<input inputMode="numeric" value={phoneNumberId} onChange={event=>setPhoneNumberId(event.target.value)} required placeholder="Phone Number ID"/></label>
           <label>ID da conta comercial<input inputMode="numeric" value={businessAccountId} onChange={event=>setBusinessAccountId(event.target.value)} required placeholder="WhatsApp Business Account ID"/></label>
           <label>Número remetente<input inputMode="tel" value={senderNumber} onChange={event=>setSenderNumber(event.target.value)} required placeholder="5521999999999"/><small>Informe DDI + DDD + número, somente dígitos.</small></label>
+          <label>Número interno para homologação<input inputMode="tel" value={whatsappTestRecipient} onChange={event=>setWhatsappTestRecipient(event.target.value)} required placeholder="5521999999999"/><small>Durante os testes, todas as notas serão enviadas somente para este número.</small></label>
           <label>Modelo aprovado para NFS-e<input value={templateName} onChange={event=>setTemplateName(event.target.value)} required placeholder="envio_nfse"/></label>
           <label>Token permanente da Meta<input type="password" value={accessTokenMeta} onChange={event=>setAccessTokenMeta(event.target.value)} placeholder={config?.whatsapp_token_configurado?"Token protegido — deixe vazio para manter":"Cole o token permanente"} autoComplete="new-password"/><small>{config?.whatsapp_token_configurado?"Já existe um token protegido. Preencha apenas para substituí-lo.":"Use um token de usuário do sistema da Meta."}</small></label>
           <button className="primary full" disabled={disabled}>{busy==="save-whatsapp"?"Salvando…":"Salvar configuração do WhatsApp"}</button>

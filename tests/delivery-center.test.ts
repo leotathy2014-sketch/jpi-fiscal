@@ -22,6 +22,8 @@ test("organiza os envios por e-mail, WhatsApp e Agenda Edu",()=>{
   assert.match(uiSource,/Agenda Edu/);
   assert.match(uiSource,/Meta Cloud API/);
   assert.match(uiSource,/acesso oficial à integração/);
+  assert.match(uiSource,/channel!=="agenda-edu"/);
+  assert.match(uiSource,/channel==="whatsapp"\?"\/api\/deliveries\/whatsapp":"\/api\/deliveries\/email"/);
 });
 
 test("impede que homologações sejam enviadas aos responsáveis",()=>{
@@ -53,7 +55,7 @@ test("mostra somente pendentes e arquiva os sucessos em Enviadas",()=>{
 test("permite reenvio individual com confirmação e histórico acumulado",()=>{
   assert.match(uiSource,/sentAttemptsByDocument/);
   assert.match(uiSource,/delivery\.status!=="enviado"/);
-  assert.match(uiSource,/Reenviar por e-mail/);
+  assert.match(uiSource,/Reenviar pelo \{channelLabel\}/);
   assert.match(uiSource,/Confirme o reenvio/);
   assert.match(uiSource,/sem apagar o histórico anterior/);
   assert.match(uiSource,/Enviada \{sentAttempts\.length\}/);

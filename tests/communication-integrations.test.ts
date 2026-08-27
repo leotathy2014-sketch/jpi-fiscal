@@ -43,6 +43,10 @@ test("valida a Meta Cloud API sem disparar mensagem de WhatsApp",()=>{
   assert.doesNotMatch(apiSource,/\/messages/);
   assert.match(uiSource,/Salvar configuração do WhatsApp/);
   assert.match(uiSource,/Testar conexão sem enviar mensagem/);
+  assert.match(apiSource,/whatsapp_test_recipient:testRecipient/);
+  assert.match(apiSource,/número brasileiro interno para os testes/);
+  assert.match(uiSource,/Número interno para homologação/);
+  assert.match(uiSource,/testRecipient:whatsappTestRecipient/);
 });
 
 test("informa ao administrador que segredos não voltam ao navegador",()=>{

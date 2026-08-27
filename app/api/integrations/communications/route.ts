@@ -7,6 +7,7 @@ export const maxDuration = 30;
 
 const emailPattern=/^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const digits=(value:string)=>value.replace(/\D/g,"");
+const normalizeBrazilPhone=(value:string)=>{const phone=digits(value);return phone.length===10||phone.length===11?`55${phone}`:phone};
 const json=(body:Record<string,unknown>,status=200)=>NextResponse.json(body,{status,headers:{"Cache-Control":"no-store"}});
 const escapeHtml=(value:string)=>value.replace(/[&<>"']/g,character=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"})[character]||character);
 
@@ -26,7 +27,7 @@ async function authorizedClient(request:NextRequest){
 }
 
 async function readConfig(supabase:SupabaseClient){
-  return supabase.from("integracoes_comunicacao").select("email_provider,email_from_name,email_from_address,email_reply_to,email_smtp_host,email_smtp_port,email_smtp_username,email_credencial_configurada,email_testada_em,email_ultimo_status,whatsapp_provider,whatsapp_phone_number_id,whatsapp_business_account_id,whatsapp_sender_number,whatsapp_template_name,whatsapp_token_configurado,whatsapp_testada_em,whatsapp_ultimo_status").eq("id",true).single();
+  return supabase.from("integracoes_comunicacao").select("email_provider,email_from_name,email_from_address,email_reply_to,email_smtp_host,email_smtp_port,email_smtp_username,email_credencial_configurada,email_testada_em,email_ultimo_status,whatsapp_provider,whatsapp_phone_number_id,whatsapp_business_account_id,whatsapp_sender_number,whatsapp_template_name,whatsapp_test_recipient,whatsapp_token_configurado,whatsapp_testada_em,whatsapp_ultimo_status").eq("id",true).single();
 }
 
 export async function GET(request:NextRequest){
@@ -89,13 +90,14 @@ export async function POST(request:NextRequest){
   }
 
   if(action==="save-whatsapp"){
-    const phoneNumberId=digits(String(body.phoneNumberId||""));const businessAccountId=digits(String(body.businessAccountId||""));const senderNumber=digits(String(body.senderNumber||""));const templateName=String(body.templateName||"").trim();let accessToken=String(body.accessToken||"").trim();
+    const phoneNumberId=digits(String(body.phoneNumberId||""));const businessAccountId=digits(String(body.businessAccountId||""));const senderNumber=normalizeBrazilPhone(String(body.senderNumber||""));const testRecipient=normalizeBrazilPhone(String(body.testRecipient||""));const templateName=String(body.templateName||"").trim();let accessToken=String(body.accessToken||"").trim();
     if(!phoneNumberId||phoneNumberId.length>30)return json({error:"Informe o ID do número do WhatsApp."},400);
     if(!businessAccountId||businessAccountId.length>30)return json({error:"Informe o ID da conta comercial."},400);
     if(!senderNumber||senderNumber.length<10||senderNumber.length>15)return json({error:"Informe o número remetente com DDI e DDD."},400);
+    if(!/^55[1-9][0-9]{9,10}$/.test(testRecipient))return json({error:"Informe um número brasileiro interno para os testes, com DDI e DDD."},400);
     if(!/^[a-z0-9_]{3,100}$/i.test(templateName))return json({error:"Informe um nome de modelo válido."},400);
     if(accessToken&&accessToken.length<20)return json({error:"O token da WhatsApp Cloud API é inválido."},400);
-    const {error:updateError}=await auth.supabase.from("integracoes_comunicacao").update({whatsapp_provider:"meta_cloud",whatsapp_phone_number_id:phoneNumberId,whatsapp_business_account_id:businessAccountId,whatsapp_sender_number:senderNumber,whatsapp_template_name:templateName,whatsapp_ultimo_status:"pendente",updated_at:new Date().toISOString(),updated_by:auth.user.id}).eq("id",true);
+    const {error:updateError}=await auth.supabase.from("integracoes_comunicacao").update({whatsapp_provider:"meta_cloud",whatsapp_phone_number_id:phoneNumberId,whatsapp_business_account_id:businessAccountId,whatsapp_sender_number:senderNumber,whatsapp_template_name:templateName,whatsapp_test_recipient:testRecipient,whatsapp_ultimo_status:"pendente",updated_at:new Date().toISOString(),updated_by:auth.user.id}).eq("id",true);
     if(updateError)return json({error:updateError.message},400);
     if(accessToken){const {error:vaultError}=await auth.supabase.rpc("store_communication_secret",{p_channel:"whatsapp",p_secret:accessToken,p_backend_secret:backendSecret});accessToken="";if(vaultError)return json({error:"Não foi possível guardar o token do WhatsApp no cofre seguro."},500)}
     return json({ok:true,message:"Configuração do WhatsApp salva. Faça o teste antes de enviar mensagens."});
