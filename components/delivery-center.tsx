@@ -1,9 +1,9 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Check, Clock3, Filter, MailCheck, RefreshCw, Search, Send, ShieldCheck, X } from "lucide-react";
+import { CalendarDays, Check, Clock3, Filter, Mail, MailCheck, MessageCircle, RefreshCw, Search, Send, Settings, ShieldCheck, X } from "lucide-react";
 import { createSupabaseBrowserClient } from "@/lib/supabase";
-import type { Role } from "./app-shell";
+import type { AppPage, Role } from "./app-shell";
 
 type DeliveryPayment={id:number;aluno_id:number;competencia:string;valor_nfse:number;status_nfse:string;alunos:{nome:string;responsavel:string;email:string|null}|null};
 type DeliveryDocument={id:number;mensalidade_id:number;versao:number;chave_acesso:string;estado:string;emitida_em:string|null};
@@ -11,13 +11,20 @@ type DeliveryHistory={id:number;mensalidade_id:number;documento_homologacao_id:n
 type DeliveryRow={payment:DeliveryPayment;document:DeliveryDocument;latest?:DeliveryHistory};
 type BatchStatus="waiting"|"sending"|"success"|"error";
 type BatchItem={row:DeliveryRow;status:BatchStatus;error?:string};
+type DeliveryChannel="email"|"whatsapp"|"agenda-edu";
 const money=(value:number)=>Number(value).toLocaleString("pt-BR",{style:"currency",currency:"BRL"});
 const normalize=(value:string)=>value.normalize("NFD").replace(/[\u0300-\u036f]/g,"").toLocaleLowerCase("pt-BR");
 
 function Modal({onClose,children}:{onClose:()=>void;children:React.ReactNode}){return <div className="modal-backdrop"><div className="modal-card delivery-modal"><div className="modal-head"><div><h2>Enviar NFS-e de teste por e-mail</h2><p>Fila segura de homologação</p></div><button className="icon-button" onClick={onClose} aria-label="Fechar"><X/></button></div>{children}</div></div>}
 
-export function DeliveryCenter({role,accessToken}:{role:Role;accessToken:string|null}){
+function PendingChannel({channel,role,onNavigate}:{channel:Exclude<DeliveryChannel,"email">;role:Role;onNavigate:(page:AppPage)=>void}){
+  const whatsapp=channel==="whatsapp";const Icon=whatsapp?MessageCircle:CalendarDays;
+  return <section className="delivery-channel-pending"><span className={whatsapp?"green":"purple"}><Icon/></span><div><small>{whatsapp?"META CLOUD API":"AGENDA EDU"}</small><h2>{whatsapp?"Enviar notas por WhatsApp":"Enviar notas pelo Agenda Edu"}</h2><p>{whatsapp?"Este canal utilizará o número e o modelo aprovados na Meta para encaminhar cada nota ao WhatsApp do responsável.":"Este canal permitirá encaminhar as notas pelo aplicativo Agenda Edu depois que a escola fornecer o acesso oficial à integração."}</p><div className="notice compact"><ShieldCheck/><span>{whatsapp?"A configuração da Meta já possui espaço próprio no sistema. O envio de documentos ainda será implementado e testado antes da ativação.":"Ainda será necessário obter com o Agenda Edu as credenciais e a documentação da API da conta da escola. Nenhuma senha deve ser enviada pelo chat."}</span></div>{role==="Administrador"?<button className="secondary" onClick={()=>onNavigate("Configurações")}><Settings size={17}/>{whatsapp?"Abrir configuração do WhatsApp":"Abrir configurações"}</button>:<small>Solicite ao Administrador a configuração deste canal.</small>}</div></section>;
+}
+
+export function DeliveryCenter({role,accessToken,onNavigate}:{role:Role;accessToken:string|null;onNavigate:(page:AppPage)=>void}){
   const supabase=useMemo(()=>createSupabaseBrowserClient(),[]);const canManage=role==="Administrador"||role==="Financeiro";
+  const [channel,setChannel]=useState<DeliveryChannel>("email");
   const [rows,setRows]=useState<DeliveryRow[]>([]);const [history,setHistory]=useState<DeliveryHistory[]>([]);const [loading,setLoading]=useState(true);const [error,setError]=useState("");const [message,setMessage]=useState("");
   const [query,setQuery]=useState("");const [statusFilter,setStatusFilter]=useState("todas");const [selected,setSelected]=useState<Set<number>>(()=>new Set());
   const [modalOpen,setModalOpen]=useState(false);const [batch,setBatch]=useState<BatchItem[]>([]);const [busy,setBusy]=useState(false);const inFlight=useRef(false);
@@ -51,7 +58,9 @@ export function DeliveryCenter({role,accessToken}:{role:Role;accessToken:string|
   const batchDone=batch.length>0&&batch.every(item=>item.status==="success"||item.status==="error");const batchErrors=batch.filter(item=>item.status==="error");
 
   return <div className="delivery-page">
-    <div className="page-heading"><div><span className="eyebrow">COMUNICAÇÕES</span><h1>Central de Entregas</h1><p>Envio controlado das NFS-e e histórico por destinatário.</p></div><div className="delivery-heading-icon"><MailCheck/></div></div>
+    <div className="page-heading"><div><span className="eyebrow">COMUNICAÇÕES</span><h1>Enviar notas</h1><p>Escolha o canal para encaminhar as NFS-e aos responsáveis.</p></div><div className="delivery-heading-icon"><MailCheck/></div></div>
+    <section className="delivery-channels" aria-label="Canais para envio de notas"><button className={channel==="email"?"active email":"email"} onClick={()=>setChannel("email")}><span><Mail/></span><div><strong>Enviar por e-mail</strong><small>Locaweb conectada</small></div></button><button className={channel==="whatsapp"?"active whatsapp":"whatsapp"} onClick={()=>setChannel("whatsapp")}><span><MessageCircle/></span><div><strong>WhatsApp</strong><small>Meta Cloud API</small></div></button><button className={channel==="agenda-edu"?"active agenda":"agenda"} onClick={()=>setChannel("agenda-edu")}><span><CalendarDays/></span><div><strong>Agenda Edu</strong><small>Canal escolar</small></div></button></section>
+    {channel==="email"?<>
     <div className="notice warning"><ShieldCheck/><div><strong>Modo seguro de homologação</strong><span>O responsável aparece para conferência, mas todos os testes são enviados somente para <b>nfse@jejoaopaulo.com.br</b>. As famílias não receberão documentos sem validade fiscal.</span></div></div>
     {error&&<div className="error-box page-error">{error}</div>}{message&&<div className="success-box">{message}</div>}
     <section className="delivery-stats"><article><span>Pendentes</span><strong>{pendingCount}</strong><small>Aguardando teste</small></article><article><span>Enviadas</span><strong>{sentCount}</strong><small>Caixa interna</small></article><article><span>Com erro</span><strong>{errorCount}</strong><small>Disponíveis para repetir</small></article><article><span>Histórico</span><strong>{history.length}</strong><small>Tentativas registradas</small></article></section>
@@ -61,5 +70,6 @@ export function DeliveryCenter({role,accessToken}:{role:Role;accessToken:string|
       {canManage&&<input type="checkbox" checked={selected.has(row.document.id)} disabled={busy||!email} onChange={()=>toggle(row.document.id)} aria-label={`Selecionar ${row.payment.alunos?.nome||"aluno"}`}/>}<div className="delivery-main"><strong>{row.payment.alunos?.nome||`Aluno #${row.payment.aluno_id}`}</strong><span>{row.payment.alunos?.responsavel||"Responsável não informado"}</span><small>{email||"E-mail do responsável não informado"}</small></div><div className="delivery-document"><span>{row.payment.competencia} · {money(row.payment.valor_nfse)}</span><small>Versão {row.document.versao} · Chave {row.document.chave_acesso.slice(0,8)}…{row.document.chave_acesso.slice(-6)}</small></div><div className={`delivery-status ${state}`}>{state==="enviado"?<Check/>:state==="erro"?<X/>:<Clock3/>}<span><strong>{state==="enviado"?"Enviada":state==="erro"?"Falhou":state==="enviando"?"Enviando":"Pendente"}</strong><small>{latest?.enviado_em?new Date(latest.enviado_em).toLocaleString("pt-BR"):latest?.erro_mensagem||"Aguardando envio"}</small></span></div>
     </article>})}</div>}
     {modalOpen&&<Modal onClose={closeModal}><div className="delivery-modal-body"><div className="notice warning"><ShieldCheck/><div><strong>Confirme o teste interno</strong><span>{batch.length} {batch.length===1?"documento será enviado":"documentos serão enviados"} separadamente para nfse@jejoaopaulo.com.br, com o XML de homologação anexado.</span></div></div>{busy&&<div className="delivery-progress"><strong>Enviando e registrando</strong><span>{batch.filter(item=>item.status==="success"||item.status==="error").length} de {batch.length}</span><progress max={Math.max(batch.length,1)} value={batch.filter(item=>item.status==="success"||item.status==="error").length}/></div>}<div className="nfse-batch-results">{batch.map(item=><div key={item.row.document.id} className={`nfse-batch-result ${item.status}`}><span className="nfse-batch-result-icon">{item.status==="success"?<Check/>:item.status==="error"?<X/>:item.status==="sending"?<RefreshCw/>:<Clock3/>}</span><span><strong>{item.row.payment.alunos?.nome||"Aluno"}</strong><small>{item.row.payment.alunos?.email||"Sem e-mail cadastrado"}</small>{item.error&&<small>{item.error}</small>}</span><b>{item.status==="success"?"Enviada":item.status==="error"?"Pendente":item.status==="sending"?"Enviando":"Aguardando"}</b></div>)}</div><div className="form-actions"><button className="secondary" disabled={busy} onClick={closeModal}>{batchDone?"Fechar":"Cancelar"}</button>{!busy&&!batchDone&&<button className="primary" onClick={()=>void runDelivery(batch.map(item=>item.row))}><Send size={17}/>Confirmar e enviar</button>}{!busy&&batchDone&&batchErrors.length>0&&<button className="primary" onClick={()=>void runDelivery(batchErrors.map(item=>item.row))}><RefreshCw size={17}/>Repetir pendentes</button>}</div></div></Modal>}
+    </>:<PendingChannel channel={channel} role={role} onNavigate={onNavigate}/>}
   </div>;
 }

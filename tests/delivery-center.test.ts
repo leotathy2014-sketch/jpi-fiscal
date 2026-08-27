@@ -7,12 +7,20 @@ const uiSource=readFileSync(new URL("../components/delivery-center.tsx",import.m
 const shellSource=readFileSync(new URL("../components/app-shell.tsx",import.meta.url),"utf8");
 const migrationSource=readFileSync(new URL("../supabase/migrations/20260827024500_criar_central_entregas_email.sql",import.meta.url),"utf8");
 
-test("cria a Central de Entregas no menu fiscal",()=>{
-  assert.match(shellSource,/\|"Entregas"/);
-  assert.match(shellSource,/<DeliveryCenter role=\{role\} accessToken=\{accessToken\}/);
-  assert.match(uiSource,/Central de Entregas/);
+test("cria Enviar notas no menu fiscal",()=>{
+  assert.match(shellSource,/\|"Enviar notas"/);
+  assert.match(shellSource,/<DeliveryCenter role=\{role\} accessToken=\{accessToken\} onNavigate=\{onPageChange\}/);
+  assert.match(uiSource,/<h1>Enviar notas<\/h1>/);
   assert.match(uiSource,/Enviar selecionadas/);
   assert.match(uiSource,/Repetir pendentes/);
+});
+
+test("organiza os envios por e-mail, WhatsApp e Agenda Edu",()=>{
+  assert.match(uiSource,/Enviar por e-mail/);
+  assert.match(uiSource,/WhatsApp/);
+  assert.match(uiSource,/Agenda Edu/);
+  assert.match(uiSource,/Meta Cloud API/);
+  assert.match(uiSource,/acesso oficial à integração/);
 });
 
 test("impede que homologações sejam enviadas aos responsáveis",()=>{
