@@ -6,6 +6,7 @@ const apiSource=readFileSync(new URL("../app/api/deliveries/email/route.ts",impo
 const uiSource=readFileSync(new URL("../components/delivery-center.tsx",import.meta.url),"utf8");
 const shellSource=readFileSync(new URL("../components/app-shell.tsx",import.meta.url),"utf8");
 const migrationSource=readFileSync(new URL("../supabase/migrations/20260827024500_criar_central_entregas_email.sql",import.meta.url),"utf8");
+const recipientMigrationSource=readFileSync(new URL("../supabase/migrations/20260827034251_atualizar_destinatario_homologacao_email.sql",import.meta.url),"utf8");
 
 test("cria Enviar notas no menu fiscal",()=>{
   assert.match(shellSource,/\|"Enviar notas"/);
@@ -30,6 +31,7 @@ test("impede que homologações sejam enviadas aos responsáveis",()=>{
   assert.match(apiSource,/destinatario_pretendido:intendedRecipient/);
   assert.match(apiSource,/destinatario_utilizado:TEST_RECIPIENT/);
   assert.match(uiSource,/As famílias não receberão documentos sem validade fiscal/);
+  assert.match(recipientMigrationSource,/destinatario_utilizado = 'administracao@jejoaopaulo\.com\.br'/);
 });
 
 test("protege contra duplicidade e registra cada tentativa",()=>{
