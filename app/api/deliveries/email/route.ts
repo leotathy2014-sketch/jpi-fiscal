@@ -5,7 +5,8 @@ import { sendSmtpEmail } from "@/lib/smtp";
 export const runtime="nodejs";
 export const maxDuration=60;
 
-const TEST_RECIPIENT="nfse@jejoaopaulo.com.br";
+const AUTHORIZED_FROM="nfse@jejoaopaulo.com.br";
+const TEST_RECIPIENT="administracao@jejoaopaulo.com.br";
 const XML_BUCKET="documentos-nfse";
 const emailPattern=/^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const uuidPattern=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -63,7 +64,7 @@ export async function POST(request:NextRequest){
   const intendedRecipient=String(payment.alunos?.email||"").trim().toLowerCase();
   if(!emailPattern.test(intendedRecipient))return json({error:"O responsável não possui um e-mail válido no cadastro."},400);
   if(!config.email_credencial_configurada||config.email_ultimo_status!=="conectado")return json({error:"A integração de e-mail precisa estar configurada e testada antes das entregas."},400);
-  if(String(config.email_from_address||"").toLowerCase()!==TEST_RECIPIENT)return json({error:"O remetente interno de homologação não corresponde ao endereço autorizado."},400);
+  if(String(config.email_from_address||"").toLowerCase()!==AUTHORIZED_FROM)return json({error:"O remetente interno de homologação não corresponde ao endereço autorizado."},400);
 
   const subject=`TESTE — NFS-e de homologação · ${payment.alunos?.nome||"Aluno"} · ${payment.competencia}`;
   const insertResult=await auth.supabase.from("nfse_entregas").insert({mensalidade_id:monthlyId,documento_homologacao_id:documentId,request_id:requestId,canal:"email",ambiente:"homologacao",destinatario_pretendido:intendedRecipient,destinatario_utilizado:TEST_RECIPIENT,assunto:subject,status:"enviando",created_by:auth.user.id,updated_at:new Date().toISOString()}).select("id").single();

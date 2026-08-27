@@ -24,7 +24,8 @@ test("organiza os envios por e-mail, WhatsApp e Agenda Edu",()=>{
 });
 
 test("impede que homologações sejam enviadas aos responsáveis",()=>{
-  assert.match(apiSource,/const TEST_RECIPIENT="nfse@jejoaopaulo\.com\.br"/);
+  assert.match(apiSource,/const AUTHORIZED_FROM="nfse@jejoaopaulo\.com\.br"/);
+  assert.match(apiSource,/const TEST_RECIPIENT="administracao@jejoaopaulo\.com\.br"/);
   assert.match(apiSource,/to:\[TEST_RECIPIENT\]/);
   assert.match(apiSource,/destinatario_pretendido:intendedRecipient/);
   assert.match(apiSource,/destinatario_utilizado:TEST_RECIPIENT/);
