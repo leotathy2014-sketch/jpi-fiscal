@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { sendSmtpEmail } from "@/lib/smtp";
+import { buildDanfsePdf } from "@/lib/danfse-pdf";
 
 export const runtime="nodejs";
 export const maxDuration=60;
@@ -13,6 +14,7 @@ const uuidPattern=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[
 const json=(body:Record<string,unknown>,status=200)=>NextResponse.json(body,{status,headers:{"Cache-Control":"no-store"}});
 const escapeHtml=(value:string)=>value.replace(/[&<>"']/g,character=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"})[character]||character);
 const safeFilename=(key:string)=>`nfse-homologacao-${key.replace(/[^a-z0-9]/gi,"").slice(0,60)||"documento"}.xml`;
+const safePdfFilename=(key:string)=>`danfse-homologacao-${key.replace(/[^a-z0-9]/gi,"").slice(0,60)||"documento"}.pdf`;
 
 type EmailConfig={email_provider:string;email_from_name:string;email_from_address:string;email_reply_to:string|null;email_smtp_host:string|null;email_smtp_port:number;email_smtp_username:string|null;email_credencial_configurada:boolean;email_ultimo_status:string};
 type PaymentSource={id:number;competencia:string;valor_nfse:number;alunos:{nome:string;responsavel:string;email:string|null}|null};
@@ -23,6 +25,7 @@ function safeDeliveryError(error:unknown){
   if(/535|autentica|senha|credential|unauthorized|forbidden/i.test(message))return "A Locaweb recusou a autenticação. Confira a senha salva em Configurações → Integrações.";
   if(/timeout|demorou|timed out|encerrou a conexão|connect/i.test(message))return "O servidor de e-mail não respondeu a tempo. Tente novamente.";
   if(/recipient|destinat|address|endereço/i.test(message))return "O endereço de entrega não foi aceito pelo provedor.";
+  if(/XML|DANFSe|PDF|chave/i.test(message))return "O PDF da NFS-e não pôde ser gerado a partir do XML armazenado. A nota e o XML foram preservados.";
   return "O provedor não concluiu o envio. Tente novamente e, se persistir, revise a integração de e-mail.";
 }
 
@@ -81,15 +84,16 @@ export async function POST(request:NextRequest){
     if(secretError||!storedSecret)throw new Error("Credencial de e-mail não encontrada.");
     if(xmlError||!xmlBlob)throw new Error("O XML da NFS-e de teste não pôde ser recuperado.");
     const xmlBuffer=Buffer.from(await xmlBlob.arrayBuffer());if(xmlBuffer.length===0||xmlBuffer.length>10*1024*1024)throw new Error("O XML armazenado é inválido ou muito grande.");
-    credential=String(storedSecret);const filename=safeFilename(document.chave_acesso);
-    const html=`<div style="font-family:Arial,sans-serif;line-height:1.6;color:#243247;max-width:640px"><div style="padding:14px 18px;background:#fff4df;border:1px solid #edcf98;border-radius:10px"><strong style="color:#8a5700">DOCUMENTO DE HOMOLOGAÇÃO — SEM VALIDADE FISCAL</strong><br><span>Este e-mail foi direcionado à caixa interna da escola para validar a Central de Entregas.</span></div><h2 style="color:#174b8a">NFS-e de teste anexada</h2><p>Aluno: <strong>${escapeHtml(payment.alunos?.nome||"Aluno")}</strong><br>Responsável cadastrado: <strong>${escapeHtml(payment.alunos?.responsavel||"Responsável")}</strong><br>Competência: <strong>${escapeHtml(payment.competencia)}</strong><br>Versão: <strong>${document.versao}</strong></p><p>Destinatário previsto quando a produção real for ativada: <strong>${escapeHtml(intendedRecipient)}</strong>.</p><p>O XML de homologação segue anexado somente para conferência interna.</p><hr style="border:0;border-top:1px solid #dfe5ec"><small>JPI Fiscal · Jardim Escola João Paulo I</small></div>`;
+    const {pdf:pdfBuffer}=buildDanfsePdf(xmlBuffer.toString("utf8"),document.chave_acesso);
+    credential=String(storedSecret);const filename=safeFilename(document.chave_acesso);const pdfFilename=safePdfFilename(document.chave_acesso);
+    const html=`<div style="font-family:Arial,sans-serif;line-height:1.6;color:#243247;max-width:640px"><div style="padding:14px 18px;background:#fff4df;border:1px solid #edcf98;border-radius:10px"><strong style="color:#8a5700">DOCUMENTO DE HOMOLOGAÇÃO — SEM VALIDADE FISCAL</strong><br><span>Este e-mail foi direcionado à caixa interna da escola para validar a Central de Entregas.</span></div><h2 style="color:#174b8a">NFS-e de teste anexada</h2><p>Aluno: <strong>${escapeHtml(payment.alunos?.nome||"Aluno")}</strong><br>Responsável cadastrado: <strong>${escapeHtml(payment.alunos?.responsavel||"Responsável")}</strong><br>Competência: <strong>${escapeHtml(payment.competencia)}</strong><br>Versão: <strong>${document.versao}</strong></p><p>Destinatário previsto quando a produção real for ativada: <strong>${escapeHtml(intendedRecipient)}</strong>.</p><p>O DANFSe em PDF e o XML de homologação seguem anexados somente para conferência interna.</p><hr style="border:0;border-top:1px solid #dfe5ec"><small>JPI Fiscal · Jardim Escola João Paulo I</small></div>`;
     let providerMessageId:string|undefined;
     if(config.email_provider==="resend"){
-      const response=await fetch("https://api.resend.com/emails",{method:"POST",headers:{Authorization:`Bearer ${credential}`,"Content-Type":"application/json","Idempotency-Key":`jpi-delivery-${requestId}`},body:JSON.stringify({from:`${config.email_from_name} <${config.email_from_address}>`,to:[TEST_RECIPIENT],reply_to:config.email_reply_to||undefined,subject,html,attachments:[{filename,content:xmlBuffer.toString("base64")}]}),cache:"no-store"});
+      const response=await fetch("https://api.resend.com/emails",{method:"POST",headers:{Authorization:`Bearer ${credential}`,"Content-Type":"application/json","Idempotency-Key":`jpi-delivery-${requestId}`},body:JSON.stringify({from:`${config.email_from_name} <${config.email_from_address}>`,to:[TEST_RECIPIENT],reply_to:config.email_reply_to||undefined,subject,html,attachments:[{filename,content:xmlBuffer.toString("base64")},{filename:pdfFilename,content:pdfBuffer.toString("base64")}]}),cache:"no-store"});
       const result=await response.json().catch(()=>({})) as {id?:string;message?:string;name?:string};if(!response.ok)throw new Error(result.message||result.name||"O Resend não concluiu a entrega.");providerMessageId=result.id;
     }else{
       if(!config.email_smtp_host||!config.email_smtp_username)throw new Error("Configuração SMTP incompleta.");
-      const sent=await sendSmtpEmail({host:config.email_smtp_host,port:config.email_smtp_port||465,username:config.email_smtp_username,password:credential,fromName:config.email_from_name,fromAddress:config.email_from_address,replyTo:config.email_reply_to,to:TEST_RECIPIENT,subject,html,attachments:[{filename,content:xmlBuffer,contentType:"application/xml"}]});providerMessageId=sent.response.slice(0,250);
+      const sent=await sendSmtpEmail({host:config.email_smtp_host,port:config.email_smtp_port||465,username:config.email_smtp_username,password:credential,fromName:config.email_from_name,fromAddress:config.email_from_address,replyTo:config.email_reply_to,to:TEST_RECIPIENT,subject,html,attachments:[{filename,content:xmlBuffer,contentType:"application/xml"},{filename:pdfFilename,content:pdfBuffer,contentType:"application/pdf"}]});providerMessageId=sent.response.slice(0,250);
     }
     const sentAt=new Date().toISOString();const updateResult=await auth.supabase.from("nfse_entregas").update({status:"enviado",provider_message_id:providerMessageId||null,erro_mensagem:null,enviado_em:sentAt,updated_at:sentAt}).eq("id",deliveryId).select("id").maybeSingle();
     if(updateResult.error||!updateResult.data)return json({error:"O e-mail foi aceito pelo provedor, mas o histórico ainda precisa ser conferido.",sent:true},500);

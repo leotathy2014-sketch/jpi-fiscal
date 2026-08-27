@@ -54,6 +54,8 @@ test("mantém credenciais e XML exclusivamente no servidor",()=>{
   assert.match(apiSource,/get_communication_secret/);
   assert.match(apiSource,/storage\.from\(XML_BUCKET\)\.download/);
   assert.match(apiSource,/attachments:/);
+  assert.match(apiSource,/contentType:"application\/pdf"/);
+  assert.match(apiSource,/buildDanfsePdf/);
   assert.doesNotMatch(uiSource,/get_communication_secret/);
   assert.match(migrationSource,/enable row level security/);
   assert.match(migrationSource,/current_jpi_role/);
