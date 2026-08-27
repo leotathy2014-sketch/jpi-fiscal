@@ -45,9 +45,25 @@ test("protege contra duplicidade e registra cada tentativa",()=>{
 
 test("mostra somente pendentes e arquiva os sucessos em Enviadas",()=>{
   assert.match(uiSource,/useState\("pendente"\)/);
-  assert.match(uiSource,/setStatusFilter\("pendente"\)/);
+  assert.match(uiSource,/setStatusFilter\(batchMode==="resend"\?"enviado":"pendente"\)/);
   assert.match(uiSource,/<option value="enviado">Enviadas<\/option>/);
-  assert.match(uiSource,/row\.latest\?\.status==="enviado"/);
+  assert.match(uiSource,/deliveryState\(row\)==="enviado"/);
+});
+
+test("permite reenvio individual com confirmação e histórico acumulado",()=>{
+  assert.match(uiSource,/sentAttemptsByDocument/);
+  assert.match(uiSource,/delivery\.status!=="enviado"/);
+  assert.match(uiSource,/Reenviar por e-mail/);
+  assert.match(uiSource,/Confirme o reenvio/);
+  assert.match(uiSource,/sem apagar o histórico anterior/);
+  assert.match(uiSource,/Enviada \{sentAttempts\.length\}/);
+  assert.match(uiSource,/crypto\.randomUUID\(\)/);
+});
+
+test("mantém notas enviadas fora da seleção em lote",()=>{
+  assert.match(uiSource,/deliveryState\(row\)!=="enviado"/);
+  assert.match(uiSource,/state!=="enviado"/);
+  assert.match(uiSource,/openResend\(row\)/);
 });
 
 test("mantém credenciais e XML exclusivamente no servidor",()=>{
