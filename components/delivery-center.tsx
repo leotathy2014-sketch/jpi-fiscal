@@ -26,7 +26,7 @@ export function DeliveryCenter({role,accessToken,onNavigate}:{role:Role;accessTo
   const supabase=useMemo(()=>createSupabaseBrowserClient(),[]);const canManage=role==="Administrador"||role==="Financeiro";
   const [channel,setChannel]=useState<DeliveryChannel>("email");
   const [rows,setRows]=useState<DeliveryRow[]>([]);const [history,setHistory]=useState<DeliveryHistory[]>([]);const [loading,setLoading]=useState(true);const [error,setError]=useState("");const [message,setMessage]=useState("");
-  const [query,setQuery]=useState("");const [statusFilter,setStatusFilter]=useState("todas");const [selected,setSelected]=useState<Set<number>>(()=>new Set());
+  const [query,setQuery]=useState("");const [statusFilter,setStatusFilter]=useState("pendente");const [selected,setSelected]=useState<Set<number>>(()=>new Set());
   const [modalOpen,setModalOpen]=useState(false);const [batch,setBatch]=useState<BatchItem[]>([]);const [busy,setBusy]=useState(false);const inFlight=useRef(false);
 
   const load=useCallback(async()=>{
@@ -53,7 +53,7 @@ export function DeliveryCenter({role,accessToken,onNavigate}:{role:Role;accessTo
   async function runDelivery(targets:DeliveryRow[]){
     if(!accessToken||!targets.length||inFlight.current)return;inFlight.current=true;setBusy(true);setError("");setMessage("");const results:BatchItem[]=targets.map(row=>({row,status:"waiting"}));setBatch([...results]);
     for(const row of targets){const index=results.findIndex(item=>item.row.document.id===row.document.id);results[index]={row,status:"sending"};setBatch([...results]);try{const response=await fetch("/api/deliveries/email",{method:"POST",headers:{Authorization:`Bearer ${accessToken}`,"Content-Type":"application/json"},body:JSON.stringify({monthlyId:row.payment.id,documentId:row.document.id,requestId:crypto.randomUUID()}),cache:"no-store"});const data=await response.json().catch(()=>({})) as {ok?:boolean;error?:string};if(!response.ok||!data.ok)throw new Error(data.error||"O provedor não confirmou esta entrega.");results[index]={row,status:"success"}}catch(cause){results[index]={row,status:"error",error:cause instanceof Error?cause.message:"Não foi possível enviar."}}finally{setBatch([...results])}}
-    const failures=results.filter(item=>item.status==="error");const successes=results.length-failures.length;setSelected(new Set(failures.map(item=>item.row.document.id)));setMessage(failures.length?`Entrega concluída: ${successes} enviada(s) e ${failures.length} pendente(s).`:`${successes} ${successes===1?"NFS-e de teste enviada":"NFS-e de teste enviadas"} para a caixa interna.`);await load();inFlight.current=false;setBusy(false);
+    const failures=results.filter(item=>item.status==="error");const successes=results.length-failures.length;setSelected(new Set(failures.map(item=>item.row.document.id)));setStatusFilter("pendente");setMessage(failures.length?`Entrega concluída: ${successes} enviada(s) e ${failures.length} pendente(s).`:`${successes} ${successes===1?"NFS-e de teste enviada":"NFS-e de teste enviadas"} para a caixa interna.`);await load();inFlight.current=false;setBusy(false);
   }
   const batchDone=batch.length>0&&batch.every(item=>item.status==="success"||item.status==="error");const batchErrors=batch.filter(item=>item.status==="error");
 

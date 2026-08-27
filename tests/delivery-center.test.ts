@@ -43,6 +43,13 @@ test("protege contra duplicidade e registra cada tentativa",()=>{
   assert.match(apiSource,/status:"erro"/);
 });
 
+test("mostra somente pendentes e arquiva os sucessos em Enviadas",()=>{
+  assert.match(uiSource,/useState\("pendente"\)/);
+  assert.match(uiSource,/setStatusFilter\("pendente"\)/);
+  assert.match(uiSource,/<option value="enviado">Enviadas<\/option>/);
+  assert.match(uiSource,/row\.latest\?\.status==="enviado"/);
+});
+
 test("mantém credenciais e XML exclusivamente no servidor",()=>{
   assert.match(apiSource,/get_communication_secret/);
   assert.match(apiSource,/storage\.from\(XML_BUCKET\)\.download/);
