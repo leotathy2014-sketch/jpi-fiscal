@@ -1,14 +1,23 @@
 import { randomUUID } from "node:crypto";
 import tls, { type TLSSocket } from "node:tls";
 
-type SmtpOptions={host:string;port:number;username:string;password:string;fromName:string;fromAddress:string;replyTo?:string|null;to:string;subject:string;html:string};
+export type SmtpAttachment={filename:string;content:Buffer;contentType:string};
+type SmtpOptions={host:string;port:number;username:string;password:string;fromName:string;fromAddress:string;replyTo?:string|null;to:string;subject:string;html:string;attachments?:SmtpAttachment[]};
 const emailPattern=/^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const cleanHeader=(value:string)=>value.replace(/[\r\n]+/g," ").trim();
 const encodedHeader=(value:string)=>`=?UTF-8?B?${Buffer.from(cleanHeader(value),"utf8").toString("base64")}?=`;
 
-export function buildSmtpMessage(options:Pick<SmtpOptions,"fromName"|"fromAddress"|"replyTo"|"to"|"subject"|"html">){
+const wrapBase64=(value:string)=>value.match(/.{1,76}/g)?.join("\r\n")||"";
+
+export function buildSmtpMessage(options:Pick<SmtpOptions,"fromName"|"fromAddress"|"replyTo"|"to"|"subject"|"html"|"attachments">){
   for(const address of [options.fromAddress,options.to,options.replyTo].filter(Boolean) as string[])if(!emailPattern.test(address))throw new Error("Endereço de e-mail inválido.");
   const domain=options.fromAddress.split("@")[1];
+  const attachments=options.attachments||[];
+  for(const attachment of attachments){
+    if(!/^[\w.-]{1,180}$/i.test(attachment.filename))throw new Error("Nome de anexo inválido.");
+    if(!attachment.contentType||attachment.content.length>10*1024*1024)throw new Error("Anexo de e-mail inválido ou muito grande.");
+  }
+  const boundary=`jpi-${randomUUID()}`;
   const headers=[
     `Date: ${new Date().toUTCString()}`,
     `Message-ID: <${randomUUID()}@${domain}>`,
@@ -17,11 +26,27 @@ export function buildSmtpMessage(options:Pick<SmtpOptions,"fromName"|"fromAddres
     ...(options.replyTo?[`Reply-To: <${options.replyTo}>`]:[]),
     `Subject: ${encodedHeader(options.subject)}`,
     "MIME-Version: 1.0",
+    ...(attachments.length?[`Content-Type: multipart/mixed; boundary=\"${boundary}\"`]:["Content-Type: text/html; charset=UTF-8","Content-Transfer-Encoding: 8bit"]),
+  ];
+  const html=options.html.replace(/\r?\n/g,"\r\n");
+  const body=attachments.length?[
+    `--${boundary}`,
     "Content-Type: text/html; charset=UTF-8",
     "Content-Transfer-Encoding: 8bit",
-  ];
-  const body=options.html.replace(/\r?\n/g,"\r\n").replace(/(^|\r\n)\./g,"$1..");
-  return `${headers.join("\r\n")}\r\n\r\n${body}`;
+    "",
+    html,
+    ...attachments.flatMap(attachment=>[
+      `--${boundary}`,
+      `Content-Type: ${cleanHeader(attachment.contentType)}; name=\"${attachment.filename}\"`,
+      `Content-Disposition: attachment; filename=\"${attachment.filename}\"`,
+      "Content-Transfer-Encoding: base64",
+      "",
+      wrapBase64(attachment.content.toString("base64")),
+    ]),
+    `--${boundary}--`,
+  ].join("\r\n"):html;
+  const dotSafeBody=body.replace(/(^|\r\n)\./g,"$1..");
+  return `${headers.join("\r\n")}\r\n\r\n${dotSafeBody}`;
 }
 
 class SmtpConnection{
