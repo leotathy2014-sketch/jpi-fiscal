@@ -14,7 +14,7 @@ test("protege a visualização e o download dos documentos fiscais",()=>{
 });
 
 test("oferece PDF e XML separados somente nas notas enviadas",()=>{
-  assert.match(uiSource,/state==="enviado"&&<>/);
+  assert.match(uiSource,/state==="enviado"&&<details className="delivery-details">/);
   assert.match(uiSource,/<div className="delivery-files">/);
   assert.match(uiSource,/handleDocument\(row\.document\.id,"pdf","inline"\)/);
   assert.match(uiSource,/handleDocument\(row\.document\.id,"pdf","attachment"\)/);

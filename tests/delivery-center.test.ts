@@ -66,6 +66,25 @@ test("mantém notas enviadas fora da seleção em lote",()=>{
   assert.match(uiSource,/openResend\(row\)/);
 });
 
+test("organiza grandes volumes com filtros, ordenação e paginação",()=>{
+  assert.match(uiSource,/const PAGE_SIZE=20/);
+  assert.match(uiSource,/Todas as competências/);
+  assert.match(uiSource,/Mais recentes/);
+  assert.match(uiSource,/Aluno A–Z/);
+  assert.match(uiSource,/Maior valor/);
+  assert.match(uiSource,/Mais enviadas/);
+  assert.match(uiSource,/notas encontradas/);
+  assert.match(uiSource,/delivery-pagination/);
+  assert.match(uiSource,/Página <strong>\{safePage\}<\/strong> de \{pageCount\}/);
+});
+
+test("mantém documentos e histórico recolhidos até o usuário abrir",()=>{
+  assert.match(uiSource,/<details className="delivery-details">/);
+  assert.match(uiSource,/Documentos e histórico/);
+  assert.match(uiSource,/PDF, XML e reenvio/);
+  assert.match(uiSource,/delivery-details-content/);
+});
+
 test("mantém credenciais e XML exclusivamente no servidor",()=>{
   assert.match(apiSource,/get_communication_secret/);
   assert.match(apiSource,/storage\.from\(XML_BUCKET\)\.download/);
