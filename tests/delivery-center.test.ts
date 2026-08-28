@@ -20,10 +20,11 @@ test("organiza os envios por e-mail, WhatsApp e Agenda Edu",()=>{
   assert.match(uiSource,/Enviar por e-mail/);
   assert.match(uiSource,/WhatsApp/);
   assert.match(uiSource,/Agenda Edu/);
-  assert.match(uiSource,/Meta Cloud API/);
+  assert.match(uiSource,/Manual gratuito/);
+  assert.match(uiSource,/Não há envio pela API da Meta nem cobrança por mensagem/);
   assert.match(uiSource,/Mensagens com os responsáveis/);
   assert.match(uiSource,/channel==="agenda-edu"\?"\/api\/deliveries\/agenda-edu"/);
-  assert.match(uiSource,/channel==="whatsapp"\?"\/api\/deliveries\/whatsapp":"\/api\/deliveries\/email"/);
+  assert.match(uiSource,/fetch\("\/api\/deliveries\/whatsapp-manual"/);
 });
 
 test("impede que homologações sejam enviadas aos responsáveis",()=>{

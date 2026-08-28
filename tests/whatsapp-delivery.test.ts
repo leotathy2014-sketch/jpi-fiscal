@@ -54,11 +54,11 @@ test("usa modelo aprovado e registra tentativas independentes",()=>{
   assert.match(apiSource,/status:"erro"/);
 });
 
-test("oferece lote, histórico e reenvio específicos do WhatsApp",()=>{
-  assert.match(uiSource,/eq\("canal",channel==="agenda-edu"\?"agenda_edu":channel\)/);
+test("preserva a integração automática para uso futuro e oferece o modo manual na interface",()=>{
+  assert.match(uiSource,/channel==="whatsapp-manual"\?"whatsapp_manual"/);
   assert.match(uiSource,/row\.payment\.alunos\?\.whatsapp/);
-  assert.match(uiSource,/WhatsApp interno/);
-  assert.match(uiSource,/PDF anexado · XML em link privado de 7 dias/);
-  assert.match(uiSource,/Repetir pendentes/);
-  assert.match(uiSource,/Reenviar pelo \{channelLabel\}/);
+  assert.match(uiSource,/Manual gratuito/);
+  assert.match(uiSource,/Abrir WhatsApp/);
+  assert.match(uiSource,/Sim, enviei/);
+  assert.match(apiSource,/graph\.facebook\.com/);
 });
