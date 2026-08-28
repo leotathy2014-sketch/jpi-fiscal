@@ -55,7 +55,7 @@ test("usa modelo aprovado e registra tentativas independentes",()=>{
 });
 
 test("oferece lote, histórico e reenvio específicos do WhatsApp",()=>{
-  assert.match(uiSource,/eq\("canal",channel==="whatsapp"\?"whatsapp":"email"\)/);
+  assert.match(uiSource,/eq\("canal",channel==="agenda-edu"\?"agenda_edu":channel\)/);
   assert.match(uiSource,/row\.payment\.alunos\?\.whatsapp/);
   assert.match(uiSource,/WhatsApp interno/);
   assert.match(uiSource,/PDF anexado · XML em link privado de 7 dias/);

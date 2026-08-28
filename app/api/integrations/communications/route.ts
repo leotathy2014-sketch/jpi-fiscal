@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { sendSmtpEmail } from "@/lib/smtp";
+import { serializeAgendaEduCredentials, parseAgendaEduCredentials, testAgendaEduConnection } from "@/lib/agenda-edu";
 
 export const runtime = "nodejs";
 export const maxDuration = 30;
@@ -27,7 +28,7 @@ async function authorizedClient(request:NextRequest){
 }
 
 async function readConfig(supabase:SupabaseClient){
-  return supabase.from("integracoes_comunicacao").select("email_provider,email_from_name,email_from_address,email_reply_to,email_smtp_host,email_smtp_port,email_smtp_username,email_credencial_configurada,email_testada_em,email_ultimo_status,whatsapp_provider,whatsapp_phone_number_id,whatsapp_business_account_id,whatsapp_sender_number,whatsapp_template_name,whatsapp_test_recipient,whatsapp_token_configurado,whatsapp_testada_em,whatsapp_ultimo_status").eq("id",true).single();
+  return supabase.from("integracoes_comunicacao").select("email_provider,email_from_name,email_from_address,email_reply_to,email_smtp_host,email_smtp_port,email_smtp_username,email_credencial_configurada,email_testada_em,email_ultimo_status,whatsapp_provider,whatsapp_phone_number_id,whatsapp_business_account_id,whatsapp_sender_number,whatsapp_template_name,whatsapp_test_recipient,whatsapp_token_configurado,whatsapp_testada_em,whatsapp_ultimo_status,agenda_edu_provider,agenda_edu_school_identifier,agenda_edu_channel_id,agenda_edu_environment,agenda_edu_documentacao_confirmada,agenda_edu_credencial_configurada,agenda_edu_testada_em,agenda_edu_ultimo_status").eq("id",true).single();
 }
 
 export async function GET(request:NextRequest){
@@ -113,6 +114,34 @@ export async function POST(request:NextRequest){
     await auth.supabase.from("integracoes_comunicacao").update({whatsapp_ultimo_status:response.ok?"conectado":"erro",whatsapp_testada_em:response.ok?new Date().toISOString():null,updated_at:new Date().toISOString(),updated_by:auth.user.id}).eq("id",true);
     if(!response.ok)return json({error:result.error?.message||"A Meta não confirmou a conexão com este número."},400);
     return json({ok:true,message:`WhatsApp confirmado${result.verified_name?` para ${result.verified_name}`:""}${result.display_phone_number?` · ${result.display_phone_number}`:""}. Nenhuma mensagem foi enviada.`});
+  }
+
+  if(action==="save-agenda"){
+    const schoolIdentifier=String(body.schoolIdentifier||"").trim();const channelId=String(body.channelId||"").trim();let clientId=String(body.clientId||"").trim();let clientSecret=String(body.clientSecret||"").trim();let schoolToken=String(body.schoolToken||"").trim();
+    if(schoolIdentifier.length>100||!/^[-_. a-z0-9À-ÿ]*$/i.test(schoolIdentifier))return json({error:"O identificador da escola contém caracteres inválidos."},400);
+    if(channelId&&!/^[a-z0-9_-]{1,100}$/i.test(channelId))return json({error:"O ID do canal da Agenda Edu é inválido."},400);
+    const supplied=[clientId,clientSecret,schoolToken].filter(Boolean).length;
+    if(supplied>0&&supplied<3)return json({error:"Informe client_id, client_secret e x-school-token juntos."},400);
+    if(supplied===3&&(clientId.length>300||clientSecret.length>1000||schoolToken.length>1000))return json({error:"Uma das credenciais da Agenda Edu ultrapassa o tamanho permitido."},400);
+    const {data:current}=await readConfig(auth.supabase);
+    if(!current?.agenda_edu_credencial_configurada&&supplied===0)return json({error:"Informe as três credenciais de homologação da Agenda Edu."},400);
+    const {error:updateError}=await auth.supabase.from("integracoes_comunicacao").update({agenda_edu_school_identifier:schoolIdentifier||null,agenda_edu_channel_id:channelId||null,agenda_edu_environment:"homologacao",agenda_edu_documentacao_confirmada:true,agenda_edu_ultimo_status:"pendente",updated_at:new Date().toISOString(),updated_by:auth.user.id}).eq("id",true);
+    if(updateError)return json({error:"A configuração local da Agenda Edu ainda não foi aplicada ao banco."},503);
+    if(supplied===3){const protectedCredential=serializeAgendaEduCredentials({clientId,clientSecret,schoolToken});const {error:vaultError}=await auth.supabase.rpc("store_communication_secret",{p_channel:"agenda_edu",p_secret:protectedCredential,p_backend_secret:backendSecret});clientId="";clientSecret="";schoolToken="";if(vaultError)return json({error:"Não foi possível guardar as credenciais da Agenda Edu no cofre seguro."},500)}
+    return json({ok:true,message:"Configuração da Agenda Edu salva para o Sandbox. Nenhuma mensagem foi enviada."});
+  }
+
+  if(action==="test-agenda"){
+    const {data:storedSecret,error:secretError}=await auth.supabase.rpc("get_communication_secret",{p_channel:"agenda_edu",p_backend_secret:backendSecret});
+    if(secretError||!storedSecret)return json({error:"Cadastre primeiro as credenciais da Agenda Edu."},400);
+    try{
+      const result=await testAgendaEduConnection(parseAgendaEduCredentials(String(storedSecret)));
+      await auth.supabase.from("integracoes_comunicacao").update({agenda_edu_documentacao_confirmada:true,agenda_edu_ultimo_status:"conectado",agenda_edu_testada_em:new Date().toISOString(),updated_at:new Date().toISOString(),updated_by:auth.user.id}).eq("id",true);
+      return json({ok:true,message:`Conexão com o Sandbox da Agenda Edu confirmada${result.channelName?` · canal encontrado: ${result.channelName}`:""}. Nenhuma mensagem foi enviada.`});
+    }catch(testError){
+      await auth.supabase.from("integracoes_comunicacao").update({agenda_edu_ultimo_status:"erro",updated_at:new Date().toISOString(),updated_by:auth.user.id}).eq("id",true);
+      return json({error:testError instanceof Error?testError.message:"A Agenda Edu não confirmou a conexão com o Sandbox."},400);
+    }
   }
 
   return json({error:"Ação de integração inválida."},400);

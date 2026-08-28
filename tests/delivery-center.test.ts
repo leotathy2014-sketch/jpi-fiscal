@@ -21,8 +21,8 @@ test("organiza os envios por e-mail, WhatsApp e Agenda Edu",()=>{
   assert.match(uiSource,/WhatsApp/);
   assert.match(uiSource,/Agenda Edu/);
   assert.match(uiSource,/Meta Cloud API/);
-  assert.match(uiSource,/acesso oficial à integração/);
-  assert.match(uiSource,/channel!=="agenda-edu"/);
+  assert.match(uiSource,/Mensagens com os responsáveis/);
+  assert.match(uiSource,/channel==="agenda-edu"\?"\/api\/deliveries\/agenda-edu"/);
   assert.match(uiSource,/channel==="whatsapp"\?"\/api\/deliveries\/whatsapp":"\/api\/deliveries\/email"/);
 });
 

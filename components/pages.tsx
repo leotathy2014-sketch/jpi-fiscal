@@ -1,9 +1,10 @@
 "use client";
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
-import { AlertCircle, ArrowUpRight, Building2, Check, CircleDollarSign, Clock3, FileCheck2, FilePlus2, Filter, KeyRound, Link2, Mail, MessageCircle, MoreHorizontal, Plus, Search, ShieldCheck, SlidersHorizontal, Trash2, UploadCloud, UserCog, UsersRound, WalletCards, X } from "lucide-react";
+import { AlertCircle, ArrowUpRight, Building2, CalendarDays, Check, CircleDollarSign, Clock3, FileCheck2, FilePlus2, Filter, KeyRound, Link2, Mail, MessageCircle, MoreHorizontal, Plus, Search, ShieldCheck, SlidersHorizontal, Trash2, UploadCloud, UserCog, UsersRound, WalletCards, X } from "lucide-react";
 import type { Role } from "./app-shell";
 import { createSupabaseBrowserClient } from "@/lib/supabase";
 import { TransmissionProgress } from "./transmission-progress";
+import { AgendaEduStudentLinks } from "./agenda-edu-student-links";
 
 const money = (n: number) => n.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 const onlyDigits = (value: string, limit: number) => value.replace(/\D/g, "").slice(0, limit);
@@ -21,62 +22,8 @@ const maskCep = (value: string) => onlyDigits(value, 8).replace(/^(\d{5})(\d)/, 
 const upperCompanyInput = (event: React.FormEvent<HTMLInputElement>) => {
   event.currentTarget.value = event.currentTarget.value.toLocaleUpperCase("pt-BR");
 };
-const students = [
-  {
-    name: "Alice Ferreira Lima",
-    class: "Infantil 5",
-    guardian: "Mariana Ferreira",
-    phone: "(21) 99854-1203",
-    status: "Ativo",
-  },
-  {
-    name: "Bernardo Santos",
-    class: "2º ano",
-    guardian: "Carlos Eduardo Santos",
-    phone: "(21) 99221-5578",
-    status: "Ativo",
-  },
-  {
-    name: "Clara Menezes Alves",
-    class: "4º ano",
-    guardian: "Renata Menezes",
-    phone: "(21) 98773-8041",
-    status: "Ativo",
-  },
-  {
-    name: "Davi Oliveira Costa",
-    class: "1º ano",
-    guardian: "Patrícia Oliveira",
-    phone: "(21) 99618-4420",
-    status: "Pendente",
-  },
-];
-const payments = [
-  {
-    student: "Alice Ferreira Lima",
-    due: "10/08/2026",
-    value: 850,
-    status: "Pago",
-  },
-  {
-    student: "Bernardo Santos",
-    due: "10/08/2026",
-    value: 920,
-    status: "Pendente",
-  },
-  {
-    student: "Clara Menezes Alves",
-    due: "10/08/2026",
-    value: 920,
-    status: "Pago",
-  },
-  {
-    student: "Davi Oliveira Costa",
-    due: "10/08/2026",
-    value: 850,
-    status: "Atrasado",
-  },
-];
+const students: Array<{name:string;class:string;guardian:string;phone:string;status:string}>=[];
+const payments: Array<{student:string;due:string;value:number;status:string}>=[];
 function Heading({ title, desc, action }: { title: string; desc: string; action?: React.ReactNode }) {
   return (
     <div className="page-heading">
@@ -118,9 +65,9 @@ export function Dashboard() {
           </span>
           <div>
             <span>Alunos ativos</span>
-            <strong>148</strong>
+            <strong>—</strong>
             <small>
-              <ArrowUpRight /> 6 novos este mês
+              <ArrowUpRight /> Consulte os dados atuais
             </small>
           </div>
         </article>
@@ -130,9 +77,9 @@ export function Dashboard() {
           </span>
           <div>
             <span>Recebido no mês</span>
-            <strong>R$ 112.640</strong>
+            <strong>—</strong>
             <small>
-              <ArrowUpRight /> 92% das mensalidades
+              <ArrowUpRight /> Consulte os dados atuais
             </small>
           </div>
         </article>
@@ -142,8 +89,8 @@ export function Dashboard() {
           </span>
           <div>
             <span>Mensalidades pendentes</span>
-            <strong>12</strong>
-            <small>R$ 10.780 a receber</small>
+            <strong>—</strong>
+            <small>Consulte os dados atuais</small>
           </div>
         </article>
         <article className="stat-card">
@@ -152,8 +99,8 @@ export function Dashboard() {
           </span>
           <div>
             <span>Notas preparadas</span>
-            <strong>136</strong>
-            <small>12 aguardando revisão</small>
+            <strong>—</strong>
+            <small>Consulte os dados atuais</small>
           </div>
         </article>
       </section>
@@ -190,17 +137,17 @@ export function Dashboard() {
           <div className="progress-item">
             <div>
               <span>Notas preparadas</span>
-              <b>136 de 148</b>
+              <b>Dados atuais</b>
             </div>
-            <progress value="136" max="148" />
+            <progress value="0" max="1" />
           </div>
           <div className="fiscal-total">
             <span>Valor total preparado</span>
-            <strong>R$ 116.730,00</strong>
+            <strong>—</strong>
           </div>
           <div className="notice compact">
             <AlertCircle />
-            <span>12 notas precisam ser revisadas antes da homologação.</span>
+            <span>Consulte as notas atuais antes da homologação.</span>
           </div>
         </article>
       </section>
@@ -357,10 +304,7 @@ export function Payments({ role }: { role: Role }) {
 
 export function Invoices({ role }: { role: Role }) {
   const [editing, setEditing] = useState<string | null>(null);
-  const [vals, setVals] = useState<Record<string, string>>({
-    "Alice Ferreira Lima": "850,00",
-    "Clara Menezes Alves": "920,00",
-  });
+  const [vals, setVals] = useState<Record<string, string>>({});
   return (
     <>
       <Heading
@@ -1189,6 +1133,14 @@ type CommunicationConfig = {
   whatsapp_token_configurado: boolean;
   whatsapp_testada_em: string | null;
   whatsapp_ultimo_status: string;
+  agenda_edu_provider: string;
+  agenda_edu_school_identifier: string | null;
+  agenda_edu_channel_id: string | null;
+  agenda_edu_environment: string;
+  agenda_edu_documentacao_confirmada: boolean;
+  agenda_edu_credencial_configurada: boolean;
+  agenda_edu_testada_em: string | null;
+  agenda_edu_ultimo_status: string;
 };
 
 function CommunicationsSettings({accessToken,onClose,onChanged}:{accessToken:string|null;onClose:()=>void;onChanged:(config:CommunicationConfig)=>void}) {
@@ -1210,6 +1162,11 @@ function CommunicationsSettings({accessToken,onClose,onChanged}:{accessToken:str
   const [templateName,setTemplateName]=useState("envio_nfse");
   const [whatsappTestRecipient,setWhatsappTestRecipient]=useState("");
   const [accessTokenMeta,setAccessTokenMeta]=useState("");
+  const [agendaEduSchoolIdentifier,setAgendaEduSchoolIdentifier]=useState("");
+  const [agendaEduChannelId,setAgendaEduChannelId]=useState("");
+  const [agendaEduClientId,setAgendaEduClientId]=useState("");
+  const [agendaEduClientSecret,setAgendaEduClientSecret]=useState("");
+  const [agendaEduSchoolToken,setAgendaEduSchoolToken]=useState("");
 
   const load=useCallback(async()=>{
     if(!accessToken){setError("Sessão expirada. Entre novamente.");setLoading(false);return;}
@@ -1220,6 +1177,8 @@ function CommunicationsSettings({accessToken,onClose,onChanged}:{accessToken:str
       const current=data.config;setConfig(current);onChanged(current);
       setFromName(current.email_from_name||"JPI Fiscal");setFromAddress(current.email_from_address||"nfse@jejoaopaulo.com.br");setReplyTo(current.email_reply_to||"");setEmailProvider(current.email_provider||"locaweb_email");setSmtpUsername(current.email_smtp_username||current.email_from_address||"nfse@jejoaopaulo.com.br");
       setPhoneNumberId(current.whatsapp_phone_number_id||"");setBusinessAccountId(current.whatsapp_business_account_id||"");setSenderNumber(current.whatsapp_sender_number||"");setTemplateName(current.whatsapp_template_name||"envio_nfse");setWhatsappTestRecipient(current.whatsapp_test_recipient||"");
+      setAgendaEduSchoolIdentifier(current.agenda_edu_school_identifier||"");
+      setAgendaEduChannelId(current.agenda_edu_channel_id||"");
     }catch(requestError){setError(requestError instanceof Error?requestError.message:"Não foi possível carregar as integrações.");}
     finally{setLoading(false);}
   },[accessToken,onChanged]);
@@ -1236,6 +1195,8 @@ function CommunicationsSettings({accessToken,onClose,onChanged}:{accessToken:str
   async function testEmail(){setBusy("test-email");setError("");setMessage("");try{setMessage(await run("test-email",{recipient:testRecipient}));await load();}catch(requestError){setError(requestError instanceof Error?requestError.message:"Não foi possível testar o e-mail.");}finally{setBusy("");}}
   async function saveWhatsapp(event:FormEvent<HTMLFormElement>){event.preventDefault();setBusy("save-whatsapp");setError("");setMessage("");try{setMessage(await run("save-whatsapp",{phoneNumberId,businessAccountId,senderNumber,testRecipient:whatsappTestRecipient,templateName,accessToken:accessTokenMeta}));setAccessTokenMeta("");await load();}catch(requestError){setError(requestError instanceof Error?requestError.message:"Não foi possível salvar o WhatsApp.");}finally{setBusy("");}}
   async function testWhatsapp(){setBusy("test-whatsapp");setError("");setMessage("");try{setMessage(await run("test-whatsapp",{}));await load();}catch(requestError){setError(requestError instanceof Error?requestError.message:"Não foi possível testar o WhatsApp.");}finally{setBusy("");}}
+  async function saveAgenda(event:FormEvent<HTMLFormElement>){event.preventDefault();setBusy("save-agenda");setError("");setMessage("");try{setMessage(await run("save-agenda",{schoolIdentifier:agendaEduSchoolIdentifier,channelId:agendaEduChannelId,clientId:agendaEduClientId,clientSecret:agendaEduClientSecret,schoolToken:agendaEduSchoolToken}));setAgendaEduClientId("");setAgendaEduClientSecret("");setAgendaEduSchoolToken("");await load();}catch(requestError){setError(requestError instanceof Error?requestError.message:"Não foi possível salvar a Agenda Edu.");}finally{setBusy("");}}
+  async function testAgenda(){setBusy("test-agenda");setError("");setMessage("");try{setMessage(await run("test-agenda",{}));await load();}catch(requestError){setError(requestError instanceof Error?requestError.message:"Não foi possível testar a Agenda Edu.");}finally{setBusy("");}}
   const disabled=loading||Boolean(busy);
   return <div className="modal-backdrop"><div className="modal-card communications-modal">
     <div className="modal-head"><div><h2>Integrações de comunicação</h2><p>Configure os canais sem alterar o código do sistema.</p></div><button className="icon-button" onClick={onClose} disabled={Boolean(busy)} aria-label="Fechar"><X/></button></div>
@@ -1268,6 +1229,21 @@ function CommunicationsSettings({accessToken,onClose,onChanged}:{accessToken:str
           <button type="button" className="secondary full" onClick={testWhatsapp} disabled={disabled||!config?.whatsapp_token_configurado}>{busy==="test-whatsapp"?"Testando conexão…":"Testar conexão sem enviar mensagem"}</button>
           {config?.whatsapp_testada_em&&<small className="last-test">Último teste: {new Date(config.whatsapp_testada_em).toLocaleString("pt-BR")}</small>}
         </form>
+        <form className="communication-channel-card data-form" onSubmit={saveAgenda}>
+          <div className="communication-channel-head"><span className="integration-icon purple"><CalendarDays/></span><div><h3>Agenda Edu</h3><small>Mensagens com os responsáveis</small></div><Status>{config?.agenda_edu_ultimo_status==="conectado"?"Conectado":config?.agenda_edu_credencial_configurada?"Testar":"Configurar"}</Status></div>
+          <div className="notice compact"><ShieldCheck/><span>Documentação oficial v2 confirmada. A conexão usará somente o Sandbox até concluirmos os testes dos responsáveis e anexos.</span></div>
+          <label>Identificação da escola (opcional)<input value={agendaEduSchoolIdentifier} onChange={event=>setAgendaEduSchoolIdentifier(event.target.value)} maxLength={100} placeholder="Jardim Escola João Paulo I"/><small>É apenas um nome interno para facilitar a conferência.</small></label>
+          <label>ID do canal de família (opcional)<input value={agendaEduChannelId} onChange={event=>setAgendaEduChannelId(event.target.value)} maxLength={100} placeholder="Informado ou localizado após o teste"/><small>O canal precisa incluir as turmas dos alunos que receberão as NFS-e.</small></label>
+          <div className="smtp-server-summary"><span>Ambiente oficial</span><strong>Sandbox</strong><small>sandbox-api.agendaedu.dev · nenhuma mensagem real nesta etapa.</small></div>
+          <label>Client ID<input type="password" value={agendaEduClientId} onChange={event=>setAgendaEduClientId(event.target.value)} placeholder={config?.agenda_edu_credencial_configurada?"Protegido — deixe vazio para manter":"Client ID fornecido pela Agenda Edu"} autoComplete="new-password"/></label>
+          <label>Client Secret<input type="password" value={agendaEduClientSecret} onChange={event=>setAgendaEduClientSecret(event.target.value)} placeholder={config?.agenda_edu_credencial_configurada?"Protegido — deixe vazio para manter":"Client Secret fornecido pela Agenda Edu"} autoComplete="new-password"/></label>
+          <label>X-School-Token<input type="password" value={agendaEduSchoolToken} onChange={event=>setAgendaEduSchoolToken(event.target.value)} placeholder={config?.agenda_edu_credencial_configurada?"Protegido — deixe vazio para manter":"Token da escola"} autoComplete="new-password"/><small>As três credenciais são criptografadas juntas e nunca voltam para o navegador.</small></label>
+          <div className="agenda-checklist"><span className="done"><Check/>Base local e rota protegida</span><span className="done"><Check/>Documentação oficial da API</span><span className={config?.agenda_edu_credencial_configurada?"done":""}>{config?.agenda_edu_credencial_configurada?<Check/>:<Clock3/>}Credenciais do Sandbox</span><span className={config?.agenda_edu_testada_em?"done":""}>{config?.agenda_edu_testada_em?<Check/>:<Clock3/>}Teste sem enviar mensagem</span><span><Clock3/>PDF e XML em Mensagens</span></div>
+          <button className="primary full" disabled={disabled}>{busy==="save-agenda"?"Salvando…":"Salvar configuração da Agenda Edu"}</button>
+          <button type="button" className="secondary full" onClick={testAgenda} disabled={disabled||!config?.agenda_edu_credencial_configurada}>{busy==="test-agenda"?"Testando conexão…":"Testar conexão sem enviar mensagem"}</button>
+          {config?.agenda_edu_testada_em&&<small className="last-test">Último teste: {new Date(config.agenda_edu_testada_em).toLocaleString("pt-BR")}</small>}
+        </form>
+        <AgendaEduStudentLinks/>
       </div>}
       <div className="form-actions"><button type="button" className="secondary" onClick={onClose} disabled={Boolean(busy)}>Fechar</button></div>
     </div>
@@ -1378,10 +1354,10 @@ function Integrations({accessToken}:{accessToken:string|null}) {
           <Status>{communicationConfig?.email_ultimo_status==="conectado"||communicationConfig?.whatsapp_ultimo_status==="conectado"?"Conectado":"Pendente"}</Status>
         </div>
         <h3>Comunicações</h3>
-        <p>Configure e-mail e WhatsApp para recibos e avisos.</p>
+        <p>Configure e-mail, WhatsApp e Agenda Edu para recibos e avisos.</p>
         <div className="integration-meta">
           <span>Canal</span>
-          <strong>{communicationConfig?.email_credencial_configurada&&communicationConfig?.whatsapp_token_configurado?"E-mail e WhatsApp":communicationConfig?.email_credencial_configurada?"E-mail configurado":communicationConfig?.whatsapp_token_configurado?"WhatsApp configurado":"Não configurado"}</strong>
+          <strong>{communicationConfig?.agenda_edu_ultimo_status==="conectado"?"3 canais conectados":communicationConfig?.email_credencial_configurada&&communicationConfig?.whatsapp_token_configurado?"E-mail e WhatsApp":communicationConfig?.email_credencial_configurada?"E-mail configurado":communicationConfig?.whatsapp_token_configurado?"WhatsApp configurado":"Não configurado"}</strong>
         </div>
         <button className="secondary full" onClick={()=>setCommunicationsOpen(true)}>Configurar canais</button>
       </article>
