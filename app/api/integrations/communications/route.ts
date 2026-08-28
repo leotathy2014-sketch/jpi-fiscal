@@ -9,6 +9,7 @@ export const maxDuration = 30;
 const emailPattern=/^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const digits=(value:string)=>value.replace(/\D/g,"");
 const normalizeBrazilPhone=(value:string)=>{const phone=digits(value);return phone.length===10||phone.length===11?`55${phone}`:phone};
+const maskPhone=(value:string)=>value.length>=12?`+${value.slice(0,2)} (${value.slice(2,4)}) •••••-${value.slice(-4)}`:"Número interno configurado";
 const json=(body:Record<string,unknown>,status=200)=>NextResponse.json(body,{status,headers:{"Cache-Control":"no-store"}});
 const escapeHtml=(value:string)=>value.replace(/[&<>"']/g,character=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"})[character]||character);
 
@@ -88,6 +89,14 @@ export async function POST(request:NextRequest){
       await auth.supabase.from("integracoes_comunicacao").update({email_ultimo_status:"erro",updated_at:new Date().toISOString(),updated_by:auth.user.id}).eq("id",true);
       return json({error:sendError instanceof Error?sendError.message:"O provedor não concluiu o envio de teste."},400);
     }
+  }
+
+  if(action==="save-whatsapp-manual"){
+    const testRecipient=normalizeBrazilPhone(String(body.testRecipient||""));
+    if(!/^55[1-9][0-9]{9,10}$/.test(testRecipient))return json({error:"Informe um número brasileiro interno para os testes, com DDI e DDD."},400);
+    const {error:updateError}=await auth.supabase.from("integracoes_comunicacao").update({whatsapp_test_recipient:testRecipient,updated_at:new Date().toISOString(),updated_by:auth.user.id}).eq("id",true);
+    if(updateError)return json({error:"Não foi possível salvar o número interno de teste."},400);
+    return json({ok:true,ready:true,testRecipient:maskPhone(testRecipient),message:"Número interno salvo. O WhatsApp manual gratuito está liberado."});
   }
 
   if(action==="save-whatsapp"){

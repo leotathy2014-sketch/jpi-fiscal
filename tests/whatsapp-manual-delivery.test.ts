@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 
 const apiSource=readFileSync(new URL("../app/api/deliveries/whatsapp-manual/route.ts",import.meta.url),"utf8");
+const settingsApiSource=readFileSync(new URL("../app/api/integrations/communications/route.ts",import.meta.url),"utf8");
 const uiSource=readFileSync(new URL("../components/delivery-center.tsx",import.meta.url),"utf8");
 const migrationSource=readFileSync(new URL("../supabase/migrations/20260828203000_habilitar_whatsapp_manual_gratuito.sql",import.meta.url),"utf8");
 
@@ -48,4 +49,13 @@ test("mantém a política RLS vinculada ao usuário que iniciou a tentativa",()=
   assert.match(migrationSource,/current_jpi_role\(\)[\s\S]*array\['admin'::text,'financeiro'::text\]/);
   assert.match(apiSource,/\.eq\("canal","whatsapp_manual"\)\.eq\("status","aguardando_confirmacao"\)/);
   assert.match(uiSource,/Apenas o mesmo usuário pode confirmá-la ou cancelá-la/);
+});
+
+test("libera o modo manual cadastrando somente o número interno, sem exigir a Meta",()=>{
+  assert.match(settingsApiSource,/action==="save-whatsapp-manual"/);
+  assert.match(settingsApiSource,/whatsapp_test_recipient:testRecipient/);
+  assert.match(settingsApiSource,/O WhatsApp manual gratuito está liberado/);
+  assert.match(uiSource,/Salvar e liberar os botões/);
+  assert.match(uiSource,/Configurar número de teste/);
+  assert.match(uiSource,/action:"save-whatsapp-manual"/);
 });
