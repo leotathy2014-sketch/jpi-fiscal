@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
+import { createHash, randomBytes } from "node:crypto";
 import { buildDanfsePdf } from "@/lib/danfse-pdf";
 import { createAgendaEduAccessToken, parseAgendaEduCredentials, resolveAgendaEduFamilyChat, sendAgendaEduAttachment } from "@/lib/agenda-edu";
 
@@ -95,13 +96,17 @@ export async function POST(request:NextRequest){
     const xmlBuffer=Buffer.from(await xmlBlob.arrayBuffer());
     if(xmlBuffer.length===0||xmlBuffer.length>10*1024*1024)throw new Error("O XML armazenado é inválido ou muito grande.");
     const {pdf:pdfBuffer}=buildDanfsePdf(xmlBuffer.toString("utf8"),document.chave_acesso);
+    const accessTokenValue=randomBytes(32).toString("base64url");const accessTokenHash=createHash("sha256").update(accessTokenValue).digest("hex");
+    const accessResult=await auth.supabase.rpc("create_nfse_delivery_access",{p_delivery_id:deliveryId,p_token_hash:accessTokenHash,p_xml_base64:xmlBuffer.toString("base64"),p_chave_acesso:document.chave_acesso,p_backend_secret:backendSecret});
+    if(accessResult.error)throw new Error("Não foi possível criar o link protegido da NFS-e.");
+    const protectedUrl=new URL(`/nota/${accessTokenValue}`,request.nextUrl.origin).toString();
     protectedSecret=String(storedSecret);const credentials=parseAgendaEduCredentials(protectedSecret);const {accessToken}=await createAgendaEduAccessToken(credentials);
     const common={accessToken,schoolToken:credentials.schoolToken,channelId:config.agenda_edu_channel_id,studentId,useExternalId:Boolean(payment.alunos?.agenda_edu_use_external_id)};
     const chatId=await resolveAgendaEduFamilyChat(common);
     const prefix="TESTE DE HOMOLOGAÇÃO — SEM VALIDADE FISCAL";
-    providerIds.pdf=await sendAgendaEduAttachment({accessToken,schoolToken:credentials.schoolToken,channelId:config.agenda_edu_channel_id,chatId,content:`${prefix}\nNFS-e de ${payment.alunos?.nome||"aluno"}, competência ${payment.competencia}. DANFSe em PDF.`,filename:`danfse-homologacao-${safeKey(document.chave_acesso)}.pdf`,contentType:"application/pdf",bytes:new Uint8Array(pdfBuffer)});
+    providerIds.pdf=await sendAgendaEduAttachment({accessToken,schoolToken:credentials.schoolToken,channelId:config.agenda_edu_channel_id,chatId,content:`${prefix}\nNFS-e de ${payment.alunos?.nome||"aluno"}, competência ${payment.competencia}. DANFSe em PDF.\n\nAcesso individual protegido: ${protectedUrl}`,filename:`danfse-homologacao-${safeKey(document.chave_acesso)}.pdf`,contentType:"application/pdf",bytes:new Uint8Array(pdfBuffer)});
     providerIds.xml=await sendAgendaEduAttachment({accessToken,schoolToken:credentials.schoolToken,channelId:config.agenda_edu_channel_id,chatId,content:`${prefix}\nArquivo XML da mesma NFS-e, competência ${payment.competencia}.`,filename:`nfse-homologacao-${safeKey(document.chave_acesso)}.xml`,contentType:"application/xml",bytes:new Uint8Array(xmlBuffer)});
-    const sentAt=new Date().toISOString();const update=await auth.supabase.from("nfse_entregas").update({status:"enviado",provider_message_id:providerIds.pdf,provider_message_ids:providerIds,erro_mensagem:null,enviado_em:sentAt,updated_at:sentAt}).eq("id",deliveryId).select("id").maybeSingle();
+    const sentAt=new Date().toISOString();const update=await auth.supabase.from("nfse_entregas").update({status:"enviado",provider_message_id:providerIds.pdf,provider_message_ids:providerIds,erro_mensagem:null,enviado_em:sentAt,provider_aceito_em:sentAt,updated_at:sentAt}).eq("id",deliveryId).select("id").maybeSingle();
     if(update.error||!update.data)return json({error:"A Agenda Edu aceitou os documentos, mas o histórico precisa ser conferido.",sent:true},500);
     return json({ok:true,status:"enviado",sentAt,providerMessages:providerIds,message:"PDF e XML aceitos em duas mensagens para os responsáveis do aluno no Sandbox."});
   }catch(error){

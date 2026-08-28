@@ -9,6 +9,9 @@ const settingsUiSource=readFileSync(new URL("../components/pages.tsx",import.met
 const studentLinksSource=readFileSync(new URL("../components/agenda-edu-student-links.tsx",import.meta.url),"utf8");
 const migrationSource=readFileSync(new URL("../supabase/migrations/20260827171000_preparar_integracao_agenda_edu.sql",import.meta.url),"utf8");
 const agendaClientSource=readFileSync(new URL("../lib/agenda-edu.ts",import.meta.url),"utf8");
+const accessMigrationSource=readFileSync(new URL("../supabase/migrations/20260828184500_registrar_visualizacao_nfse_agenda_edu.sql",import.meta.url),"utf8");
+const protectedPageSource=readFileSync(new URL("../app/nota/[token]/protected-note.tsx",import.meta.url),"utf8");
+const protectedAccessSource=readFileSync(new URL("../lib/protected-delivery.ts",import.meta.url),"utf8");
 
 test("envia pelo módulo Mensagens com os responsáveis somente no Sandbox",()=>{
   assert.match(deliveryApiSource,/agenda_edu_environment!=="homologacao"/);
@@ -68,4 +71,18 @@ test("não promete leitura inexistente na API pública de Mensagens",()=>{
   assert.match(migrationSource,/não documenta confirmação de leitura/);
   assert.doesNotMatch(deliveryApiSource,/status:"lido"/);
   assert.doesNotMatch(deliveryApiSource,/seenAt|confirmedAt/);
+});
+
+test("registra a visualização somente após ação explícita no link protegido",()=>{
+  assert.match(deliveryApiSource,/randomBytes\(32\)/);
+  assert.match(deliveryApiSource,/create_nfse_delivery_access/);
+  assert.match(deliveryApiSource,/Acesso individual protegido/);
+  assert.match(protectedPageSource,/Visualizar NFS-e/);
+  assert.match(protectedPageSource,/method:"POST"/);
+  assert.match(protectedAccessSource,/createHmac/);
+  assert.match(protectedAccessSource,/timingSafeEqual/);
+  assert.match(accessMigrationSource,/token_hash text not null unique/);
+  assert.match(accessMigrationSource,/visualizado_em=coalesce/);
+  assert.match(accessMigrationSource,/visualizacoes=visualizacoes\+1/);
+  assert.doesNotMatch(accessMigrationSource,/grant (select|insert|update).*nfse_entrega_links to anon/i);
 });
