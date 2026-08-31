@@ -22,7 +22,8 @@ export default function PasswordRecoveryPage(){
     if(!supabase||!tokenHash||busy)return;
     setBusy(true);setError("");
     try{
-      const {data,error}=await supabase.auth.verifyOtp({token_hash:tokenHash,type:"recovery"});
+      const recoveryParams={token_hash:tokenHash,type:"recovery"} as Parameters<typeof supabase.auth.verifyOtp>[0];
+      const {data,error}=await supabase.auth.verifyOtp(recoveryParams);
       if(error||!data.session)throw new Error("Este link expirou ou já foi utilizado. Solicite um novo link em “Esqueci minha senha”.");
       window.location.replace("/?recovery=1");
     }catch(err){
