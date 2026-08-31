@@ -243,3 +243,23 @@
   white-space:nowrap;
   width:auto;
 }
+
+
+/* Legenda única de status para integrações */
+.integration-state-badge{display:inline-flex;align-items:center;gap:6px;width:max-content;padding:5px 9px;border:1px solid #d7dfe8;border-radius:999px;background:#f4f6f8;color:#657285;font-size:9px;font-weight:900;white-space:nowrap}
+.integration-state-badge i,.integration-nav-status i{width:7px;height:7px;border-radius:50%;background:currentColor;box-shadow:0 0 0 3px color-mix(in srgb,currentColor 14%,transparent);flex:none}
+.integration-state-badge.connected{color:#157653;background:#e8f7f1;border-color:#9bd7c1}
+.integration-state-badge.pending{color:#a46109;background:#fff2df;border-color:#edc98f}
+.integration-state-badge.disconnected{color:#b42318;background:#fff1f0;border-color:#f0aaa4}
+.integration-state-badge.neutral{color:#657285;background:#f4f6f8;border-color:#d7dfe8}
+
+.integration-navigation small.integration-nav-status{display:inline-flex;align-items:center;gap:5px;width:max-content;font-size:9px;font-weight:800;line-height:1.2}
+.integration-navigation small.integration-nav-status.connected{color:#157653}
+.integration-navigation small.integration-nav-status.pending{color:#a46109}
+.integration-navigation small.integration-nav-status.disconnected{color:#b42318}
+.integration-navigation small.integration-nav-status.neutral{color:#7a8795}
+
+.communication-channel-head>.integration-state-badge,.integration-detail-heading>.integration-state-badge{margin-left:auto;flex:none}
+@media(max-width:640px){
+ .integration-detail-heading>.integration-state-badge{margin-left:46px}
+}
