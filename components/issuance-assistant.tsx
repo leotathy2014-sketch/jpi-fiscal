@@ -201,6 +201,124 @@ export function IssuanceAssistant({onNavigate}:{onNavigate:(page:AppPage)=>void}
     delivery?"Envio concluído":"Enviar nota ao responsável",
   ][effectiveCurrent]:"Selecione uma nota";
 
+
+  async function loadFiscalContext(){
+    if(!supabase)return null;
+    const result=await supabase.from("configuracoes_empresa").select("cnpj,razao_social,cidade,uf,regime_tributario,pis_aliquota,cofins_aliquota,pis_cofins_cst,pis_cofins_retencao").eq("id",true).maybeSingle();
+    if(result.error||!result.data)throw new Error(result.error?.message||"Configuração fiscal da empresa não encontrada.");
+    const context=result.data as FiscalContext;
+    setFiscalContext(context);
+    return context;
+  }
+
+  async function validateSelected(){
+    if(!supabase||!selected||!canPrepare)return;
+    setBusyAction("validate");setError("");setMessage("");
+    try{
+      const results=await Promise.all([
+        supabase.from("configuracoes_empresa").select("cnpj,razao_social,cidade,uf,regime_tributario,pis_aliquota,cofins_aliquota,pis_cofins_cst,pis_cofins_retencao").eq("id",true).maybeSingle(),
+        supabase.from("certificados_a1").select("validade,status,cnpj,senha_configurada").eq("status","ATIVO").order("created_at",{ascending:false}).limit(1).maybeSingle()
+      ]);
+      const companyResult=results[0];const certificateResult=results[1];
+      if(companyResult.error||certificateResult.error)throw new Error(companyResult.error?.message||certificateResult.error?.message||"Não foi possível conferir os dados fiscais.");
+      const company=companyResult.data as FiscalContext|null;
+      const certificate=certificateResult.data as {validade:string;senha_configurada:boolean}|null;
+      if(company)setFiscalContext(company);
+      const pending:string[]=[...missingStudentFields(selected)];
+      if(selected.alunos?.cpf_cnpj&&!isValidCpfCnpj(selected.alunos.cpf_cnpj))pending.push("CPF/CNPJ válido");
+      if(!company?.cnpj)pending.push("CNPJ da empresa");
+      if(!company?.razao_social)pending.push("razão social");
+      if(!company?.cidade||!company?.uf)pending.push("município da empresa");
+      if(company?.regime_tributario!=="LUCRO PRESUMIDO")pending.push("regime tributário Lucro Presumido");
+      if(!certificate)pending.push("certificado A1 ativo");
+      else if(new Date(certificate.validade+"T23:59:59").getTime()<Date.now())pending.push("certificado A1 válido");
+      else if(!certificate.senha_configurada)pending.push("senha protegida do certificado A1");
+      const comp=competenceInput(selected.competencia);
+      if(!/^20\d{2}-(0[1-9]|1[0-2])$/.test(comp)||comp>currentCompetenceInput())pending.push("competência válida");
+      if(Number(selected.valor_nfse)<=0)pending.push("valor da NFS-e");
+      if(pending.length)throw new Error("Antes de validar, complete: "+Array.from(new Set(pending)).join(", ")+".");
+      const update=await supabase.from("mensalidades").update({status_nfse:"Homologação validada"}).eq("id",selected.id).is("chave_nfse_homologacao",null);
+      if(update.error)throw new Error(update.error.message);
+      const service=fiscalServiceForSegment(selected.alunos?.segmento);
+      const history=await supabase.from("historico_nfse").insert({
+        mensalidade_id:selected.id,
+        evento:"validacao_homologacao_aprovada",
+        valor_anterior:selected.valor_nfse,
+        valor_novo:selected.valor_nfse,
+        detalhes:"Validação pelo Assistente aprovada. Serviço "+service.code+" - "+service.description+". Nenhuma transmissão realizada."
+      });
+      if(history.error)throw new Error("Validação concluída, mas o histórico não pôde ser gravado: "+history.error.message);
+      setMessage("Validação concluída. Agora revise os campos editáveis da DPS.");
+      await load(true);
+    }catch(cause){setError(cause instanceof Error?cause.message:"Não foi possível validar a nota.");}
+    finally{setBusyAction("")}
+  }
+
+  async function saveDps(){
+    if(!supabase||!selected||!canPrepare||selected.chave_nfse_homologacao)return;
+    setBusyAction("save-dps");setError("");setMessage("");
+    try{
+      const amount=Number(draftValue.replace(",","."));
+      if(!draftCompetence||draftCompetence>currentCompetenceInput())throw new Error("A competência não pode ser posterior ao mês atual.");
+      if(!Number.isFinite(amount)||amount<=0)throw new Error("Informe um valor válido para a NFS-e.");
+      const description=upper(draftDescription).trim();
+      if(!description||description.length>1000)throw new Error("A descrição do serviço deve ter entre 1 e 1000 caracteres.");
+      const oldValue=selected.valor_nfse;
+      const update=await supabase.from("mensalidades").update({
+        competencia:formatCompetence(draftCompetence),
+        valor_nfse:amount,
+        descricao_servico:description,
+        status_nfse:"DPS revisada"
+      }).eq("id",selected.id).is("chave_nfse_homologacao",null);
+      if(update.error)throw new Error(update.error.message);
+      const history=await supabase.from("historico_nfse").insert({
+        mensalidade_id:selected.id,
+        evento:"dps_revisada_no_assistente",
+        valor_anterior:oldValue,
+        valor_novo:amount,
+        detalhes:"DPS revisada no Assistente. Competência "+formatCompetence(draftCompetence)+". Descrição: "+description+". Nenhuma transmissão realizada."
+      });
+      if(history.error)throw new Error("DPS salva, mas o histórico não pôde ser gravado: "+history.error.message);
+      setDraftDescription(description);
+      setMessage("DPS revisada e salva. Confira agora a prévia completa.");
+      await load(true);
+      await loadFiscalContext();
+    }catch(cause){setError(cause instanceof Error?cause.message:"Não foi possível salvar a DPS.");}
+    finally{setBusyAction("")}
+  }
+
+  async function approvePreview(){
+    if(!supabase||!selected||!canPrepare||selected.chave_nfse_homologacao)return;
+    setBusyAction("approve");setError("");setMessage("");
+    try{
+      const context=fiscalContext||await loadFiscalContext();
+      if(!context)throw new Error("Configuração fiscal indisponível.");
+      const description=upper(draftDescription).trim();
+      if(!description)throw new Error("Informe a descrição do serviço antes de aprovar.");
+      const amount=Number(draftValue.replace(",","."));
+      if(!Number.isFinite(amount)||amount<=0)throw new Error("Informe um valor válido para a NFS-e.");
+      const update=await supabase.from("mensalidades").update({
+        competencia:formatCompetence(draftCompetence),
+        valor_nfse:amount,
+        descricao_servico:description,
+        status_nfse:"Prévia DPS aprovada"
+      }).eq("id",selected.id).is("chave_nfse_homologacao",null);
+      if(update.error)throw new Error(update.error.message);
+      const service=fiscalServiceForSegment(selected.alunos?.segmento);
+      const history=await supabase.from("historico_nfse").insert({
+        mensalidade_id:selected.id,
+        evento:"previa_dps_aprovada",
+        valor_anterior:selected.valor_nfse,
+        valor_novo:amount,
+        detalhes:"Prévia DPS aprovada no Assistente, sem transmissão. Serviço "+service.code+"; regime "+context.regime_tributario+"; PIS "+context.pis_aliquota+"%; COFINS "+context.cofins_aliquota+"%; descrição: "+description+"."
+      });
+      if(history.error)throw new Error("Prévia aprovada, mas o histórico não pôde ser gravado: "+history.error.message);
+      setMessage("Prévia aprovada. A próxima etapa é gerar e validar o XML.");
+      await load(true);
+    }catch(cause){setError(cause instanceof Error?cause.message:"Não foi possível aprovar a prévia.");}
+    finally{setBusyAction("")}
+  }
+
   function focusAndNavigate(target:"NFS-e"|"Enviar notas"|"Alunos e Responsáveis"){
     if(!selected)return;
     const focus=String(selected.id);
@@ -212,6 +330,9 @@ export function IssuanceAssistant({onNavigate}:{onNavigate:(page:AppPage)=>void}
   function continueProcess(){
     if(!selected)return;
     if(effectiveCurrent===1&&missing.length){focusAndNavigate("Alunos e Responsáveis");return}
+    if(effectiveCurrent===1){void validateSelected();return}
+    if(effectiveCurrent===2){void saveDps();return}
+    if(effectiveCurrent===3){void approvePreview();return}
     if(effectiveCurrent>=7){focusAndNavigate("Enviar notas");return}
     focusAndNavigate("NFS-e");
   }
