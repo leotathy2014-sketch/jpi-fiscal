@@ -1559,7 +1559,7 @@ function Permissions() {
     const {data,error}=await supabase.functions.invoke("manage-users",{body:{action:"update",id:user.id,...next}});
     setBusy(false);
     if(error||data?.error){setError(data?.error||error?.message||"Não foi possível atualizar o usuário.");return}
-    setMessage(`Usuário ${next.active?"ativado":"bloqueado"} e perfil atualizado com sucesso.`);await loadUsers();
+    setMessage(changes.active!==undefined?`Usuário ${next.active?"ATIVADO":"BLOQUEADO"} com sucesso.`:`Perfil do usuário alterado para ${roleLabels[next.role]} com sucesso.`);await loadUsers();
   }
 
   if(!canViewUsers)return <div className="notice warning"><ShieldCheck/><span>Seu perfil não possui permissão para visualizar usuários.</span></div>;
