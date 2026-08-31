@@ -51,6 +51,7 @@ const currentCompetenceInput=()=>{const parts=new Intl.DateTimeFormat("pt-BR",{t
 const upper=(value:string)=>value.toLocaleUpperCase("pt-BR");
 const fiscalServiceForSegment=(segment?:string|null)=>{const normalized=normalize(segment||"");if(normalized.includes("medio"))return {code:"08.01.01",description:"Ensino regular médio",nbs:"122013000"};if(normalized.includes("1º")||normalized.includes("6º")||normalized.includes("fundamental"))return {code:"08.01.01",description:"Ensino regular fundamental",nbs:"122012000"};return {code:"08.01.01",description:"Ensino regular pré-escolar",nbs:"122011200"}};
 const defaultServiceDescription=(competence:string,segment?:string|null)=>"MENSALIDADE ESCOLAR - COMPETÊNCIA "+formatCompetence(competence)+" - "+fiscalServiceForSegment(segment).description.toLocaleUpperCase("pt-BR");
+const parseMoneyInput=(value:string)=>{const clean=value.replace(/R\$/g,"").replace(/\s/g,"");if(clean.includes(","))return Number(clean.replace(/\./g,"").replace(",","."));return Number(clean)};
 
 function statusOrder(payment:AssistantPayment){
   const status=normalize(payment.status_nfse||"");
@@ -154,6 +155,12 @@ export function IssuanceAssistant({onNavigate}:{onNavigate:(page:AppPage)=>void}
     if(!q)return payments;
     return payments.filter(payment=>normalize([payment.alunos?.nome,payment.alunos?.responsavel,payment.competencia,payment.status_nfse,String(payment.id)].filter(Boolean).join(" ")).includes(q));
   },[payments,query]);
+  const filteredStudents=useMemo(()=>{
+    const q=normalize(studentQuery.trim());
+    if(!q)return students;
+    return students.filter(student=>normalize([student.nome,student.responsavel,student.turma,student.segmento,student.cpf_cnpj].filter(Boolean).join(" ")).includes(q));
+  },[studentQuery,students]);
+  const selectedStudent=useMemo(()=>students.find(student=>student.id===newStudentId)||null,[newStudentId,students]);
   const selected=useMemo(()=>payments.find(item=>item.id===selectedId)||null,[payments,selectedId]);
   useEffect(()=>{
     if(!selected){setDraftCompetence("");setDraftValue("");setDraftDescription("");return}
@@ -163,6 +170,10 @@ export function IssuanceAssistant({onNavigate}:{onNavigate:(page:AppPage)=>void}
     setDraftDescription(selected.descricao_servico||defaultServiceDescription(competence,selected.alunos?.segmento));
     setMessage("");setError("");
   },[selected?.id]);
+  useEffect(()=>{
+    if(!selectedStudent){setNewDescription("");setNewDescriptionEdited(false);return}
+    if(!newDescriptionEdited)setNewDescription(defaultServiceDescription(newCompetence,selectedStudent.segmento));
+  },[selectedStudent?.id,newCompetence,newDescriptionEdited]);
   const delivery=useMemo(()=>selected?deliveries.find(item=>item.mensalidade_id===selected.id&&item.status==="enviado")||null:null,[deliveries,selected]);
   const missing=selected?missingStudentFields(selected):[];
   const progress=selected?statusOrder(selected):null;
