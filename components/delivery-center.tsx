@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { CalendarDays, Check, ChevronDown, ChevronLeft, ChevronRight, Clock3, Download, Eye, FileCode2, FileText, Filter, Mail, MailCheck, MessageCircle, RefreshCw, Search, Send, Settings, ShieldCheck, X } from "lucide-react";
 import { createSupabaseBrowserClient } from "@/lib/supabase";
+import { authenticatedFetch } from "@/lib/authenticated-fetch";
 import type { AppPage, Role } from "./app-shell";
 
 type DeliveryPayment={id:number;aluno_id:number;competencia:string;valor_nfse:number;status_nfse:string;alunos:{nome:string;responsavel:string;email:string|null;whatsapp:string|null;agenda_edu_student_id:string|null;agenda_edu_use_external_id:boolean}|null};
@@ -49,10 +50,10 @@ export function DeliveryCenter({role,accessToken,onNavigate}:{role:Role;accessTo
     setRows(documents.flatMap(document=>{const payment=paymentById.get(document.mensalidade_id);return payment?[{payment,document,latest:latestByDocument.get(document.id)}]:[]}));setHistory(deliveries);setLoading(false);
   },[channel,supabase]);
   useEffect(()=>{void load()},[load]);
-  const loadWhatsappInfo=useCallback(async()=>{if(!accessToken)return;const response=await fetch("/api/deliveries/whatsapp-manual",{headers:{Authorization:`Bearer ${accessToken}`},cache:"no-store"});const data=await response.json().catch(()=>({})) as ManualWhatsappInfo&{error?:string};if(!response.ok)throw new Error(data.error||"Não foi possível verificar o WhatsApp.");setWhatsappInfo(data);setManualSenderId(current=>current&&data.senders?.some(sender=>sender.id===current)?current:(data.senders?.[0]?.id??null))},[accessToken]);
+  const loadWhatsappInfo=useCallback(async()=>{if(!accessToken)return;const response=await authenticatedFetch("/api/deliveries/whatsapp-manual",{headers:{Authorization:`Bearer ${accessToken}`},cache:"no-store"});const data=await response.json().catch(()=>({})) as ManualWhatsappInfo&{error?:string};if(!response.ok)throw new Error(data.error||"Não foi possível verificar o WhatsApp.");setWhatsappInfo(data);setManualSenderId(current=>current&&data.senders?.some(sender=>sender.id===current)?current:(data.senders?.[0]?.id??null))},[accessToken]);
   useEffect(()=>{if(channel!=="whatsapp-manual"||!accessToken){setWhatsappInfo(null);return}let active=true;void loadWhatsappInfo().catch(cause=>{if(active){setWhatsappInfo({ready:false,testRecipient:null,senders:[],mode:"manual",cost:"gratuito"});setError(cause instanceof Error?cause.message:"Não foi possível verificar o WhatsApp.")}});return()=>{active=false}},[accessToken,channel,loadWhatsappInfo]);
   useEffect(()=>{if(channel!=="whatsapp-manual")return;const interval=window.setInterval(()=>void load(true),15_000);return()=>window.clearInterval(interval)},[channel,load]);
-  useEffect(()=>{if(channel!=="agenda-edu"||!accessToken){setAgendaEduInfo(null);return}let active=true;void fetch("/api/deliveries/agenda-edu",{headers:{Authorization:`Bearer ${accessToken}`},cache:"no-store"}).then(async response=>{const data=await response.json().catch(()=>({})) as AgendaEduInfo&{error?:string};if(!response.ok)throw new Error(data.error||"Não foi possível verificar a Agenda Edu.");if(active)setAgendaEduInfo(data)}).catch(cause=>{if(active){setAgendaEduInfo({ready:false,environment:"sandbox",channelConfigured:false,message:"A configuração da Agenda Edu ainda não está pronta."});setError(cause instanceof Error?cause.message:"Não foi possível verificar a Agenda Edu.")}});return()=>{active=false}},[accessToken,channel]);
+  useEffect(()=>{if(channel!=="agenda-edu"||!accessToken){setAgendaEduInfo(null);return}let active=true;void authenticatedFetch("/api/deliveries/agenda-edu",{headers:{Authorization:`Bearer ${accessToken}`},cache:"no-store"}).then(async response=>{const data=await response.json().catch(()=>({})) as AgendaEduInfo&{error?:string};if(!response.ok)throw new Error(data.error||"Não foi possível verificar a Agenda Edu.");if(active)setAgendaEduInfo(data)}).catch(cause=>{if(active){setAgendaEduInfo({ready:false,environment:"sandbox",channelConfigured:false,message:"A configuração da Agenda Edu ainda não está pronta."});setError(cause instanceof Error?cause.message:"Não foi possível verificar a Agenda Edu.")}});return()=>{active=false}},[accessToken,channel]);
 
   const sentAttemptsByDocument=useMemo(()=>{const attempts=new Map<number,DeliveryHistory[]>();for(const delivery of history){if(delivery.status!=="enviado")continue;const documentAttempts=attempts.get(delivery.documento_homologacao_id);if(documentAttempts)documentAttempts.push(delivery);else attempts.set(delivery.documento_homologacao_id,[delivery])}return attempts},[history]);
   const deliveryState=useCallback((row:DeliveryRow)=>{if(row.latest?.status==="enviando"||row.latest?.status==="aguardando_confirmacao")return row.latest.status;if(sentAttemptsByDocument.has(row.document.id))return "enviado";return row.latest?.status||"pendente"},[sentAttemptsByDocument]);
@@ -74,7 +75,7 @@ export function DeliveryCenter({role,accessToken,onNavigate}:{role:Role;accessTo
   async function saveManualTestRecipient(event:React.FormEvent<HTMLFormElement>){
     event.preventDefault();if(!accessToken||manualConfigBusy)return;setManualConfigBusy(true);setError("");setMessage("");
     try{
-      const response=await fetch("/api/integrations/communications",{method:"POST",headers:{Authorization:`Bearer ${accessToken}`,"Content-Type":"application/json"},body:JSON.stringify({action:"save-whatsapp-manual",testRecipient:manualTestRecipient}),cache:"no-store"});
+      const response=await authenticatedFetch("/api/integrations/communications",{method:"POST",headers:{Authorization:`Bearer ${accessToken}`,"Content-Type":"application/json"},body:JSON.stringify({action:"save-whatsapp-manual",testRecipient:manualTestRecipient}),cache:"no-store"});
       const data=await response.json().catch(()=>({})) as {ok?:boolean;error?:string;message?:string};if(!response.ok||!data.ok)throw new Error(data.error||"Não foi possível salvar o número interno.");
       await loadWhatsappInfo();setManualTestRecipient("");setMessage(data.message||"Número interno salvo. Os botões do WhatsApp foram liberados.");
     }catch(cause){setError(cause instanceof Error?cause.message:"Não foi possível salvar o número interno.")}
@@ -86,7 +87,7 @@ export function DeliveryCenter({role,accessToken,onNavigate}:{role:Role;accessTo
     const popup=window.open("about:blank","_blank");if(popup)popup.opener=null;
     setBusy(true);setError("");setMessage("");
     try{
-      const response=await fetch("/api/deliveries/whatsapp-manual",{method:"POST",headers:{Authorization:`Bearer ${accessToken}`,"Content-Type":"application/json"},body:JSON.stringify({action:"prepare",monthlyId:row.payment.id,documentId:row.document.id,senderId:manualSenderId,requestId:crypto.randomUUID()}),cache:"no-store"});
+      const response=await authenticatedFetch("/api/deliveries/whatsapp-manual",{method:"POST",headers:{Authorization:`Bearer ${accessToken}`,"Content-Type":"application/json"},body:JSON.stringify({action:"prepare",monthlyId:row.payment.id,documentId:row.document.id,senderId:manualSenderId,requestId:crypto.randomUUID()}),cache:"no-store"});
       const data=await response.json().catch(()=>({})) as {ok?:boolean;error?:string;deliveryId?:number;whatsappUrl?:string;actualRecipient?:string};
       if(!response.ok||!data.ok||!data.deliveryId||!data.whatsappUrl)throw new Error(data.error||"Não foi possível preparar o WhatsApp.");
       const whatsappUrl=new URL(data.whatsappUrl);if(whatsappUrl.protocol!=="https:"||whatsappUrl.hostname!=="wa.me")throw new Error("O endereço seguro do WhatsApp não pôde ser validado.");
@@ -100,7 +101,7 @@ export function DeliveryCenter({role,accessToken,onNavigate}:{role:Role;accessTo
   async function finishManual(action:"confirm"|"cancel"){
     if(!accessToken||!manualPending||busy)return;setBusy(true);setError("");
     try{
-      const response=await fetch("/api/deliveries/whatsapp-manual",{method:"POST",headers:{Authorization:`Bearer ${accessToken}`,"Content-Type":"application/json"},body:JSON.stringify({action,deliveryId:manualPending.deliveryId}),cache:"no-store"});
+      const response=await authenticatedFetch("/api/deliveries/whatsapp-manual",{method:"POST",headers:{Authorization:`Bearer ${accessToken}`,"Content-Type":"application/json"},body:JSON.stringify({action,deliveryId:manualPending.deliveryId}),cache:"no-store"});
       const data=await response.json().catch(()=>({})) as {ok?:boolean;error?:string};if(!response.ok||!data.ok)throw new Error(data.error||"Não foi possível concluir esta tentativa.");
       setMessage(action==="confirm"?"Envio confirmado e registrado no histórico.":"Tentativa cancelada. O link privado foi revogado.");setManualPending(null);await load(true);
     }catch(cause){setError(cause instanceof Error?cause.message:"Não foi possível concluir esta tentativa.")}
@@ -118,7 +119,7 @@ export function DeliveryCenter({role,accessToken,onNavigate}:{role:Role;accessTo
     setDocumentBusy(actionKey);setError("");
     try{
       const params=new URLSearchParams({documentId:String(documentId),format,disposition});
-      const response=await fetch(`/api/deliveries/documents?${params}`,{headers:{Authorization:`Bearer ${accessToken}`},cache:"no-store"});
+      const response=await authenticatedFetch(`/api/deliveries/documents?${params}`,{headers:{Authorization:`Bearer ${accessToken}`},cache:"no-store"});
       if(!response.ok){const data=await response.json().catch(()=>({})) as {error?:string};throw new Error(data.error||"O documento não pôde ser aberto.")}
       const blob=await response.blob();const url=URL.createObjectURL(blob);
       if(disposition==="inline"){
