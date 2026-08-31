@@ -1,22 +1,24 @@
 "use client";
 import { useEffect, useMemo, useState } from "react";
-import { BarChart3, BookOpen, GraduationCap, HelpCircle, KeyRound, LogOut, MailCheck, Menu, ReceiptText, Search, Settings, WalletCards, X } from "lucide-react";
+import { BarChart3, BookOpen, GraduationCap, HelpCircle, KeyRound, LogOut, MailCheck, Menu, ReceiptText, Search, Settings, Sparkles, WalletCards, X } from "lucide-react";
 import { SettingsPage } from "./pages";
 import { LiveDashboard, LiveStudents, LivePayments, LiveInvoices } from "./live-pages";
 import { HelpPage } from "./help-page";
 import { DeliveryCenter } from "./delivery-center";
+import { IssuanceAssistant } from "./issuance-assistant";
 import { createSupabaseBrowserClient } from "@/lib/supabase";
 import { authenticatedFetch } from "@/lib/authenticated-fetch";
 import { BrandLogo } from "./branding";
 import { useAccess } from "./access";
 
 export type Role = "Master"|"Administrador"|"Financeiro"|"Secretaria"|"Consulta";
-export type AppPage = "Painel"|"Alunos e Responsáveis"|"Mensalidades"|"NFS-e"|"Enviar notas"|"Configurações"|"Ajuda";
+export type AppPage = "Painel"|"Alunos e Responsáveis"|"Mensalidades"|"Assistente de emissão"|"NFS-e"|"Enviar notas"|"Configurações"|"Ajuda";
 type SefinAvailability = "checking"|"available"|"unstable"|"unknown"|"session";
 const nav: {name:AppPage; icon: typeof BarChart3; permissions:string[]}[] = [
  {name:"Painel",icon:BarChart3,permissions:["dashboard.view"]},
  {name:"Alunos e Responsáveis",icon:GraduationCap,permissions:["students.view"]},
  {name:"Mensalidades",icon:WalletCards,permissions:["payments.view"]},
+ {name:"Assistente de emissão",icon:Sparkles,permissions:["nfse.view"]},
  {name:"NFS-e",icon:ReceiptText,permissions:["nfse.view"]},
  {name:"Enviar notas",icon:MailCheck,permissions:["deliveries.view"]},
  {name:"Configurações",icon:Settings,permissions:["settings.company.view","settings.company.edit","settings.branding.view","settings.branding.edit","settings.certificate.view","settings.certificate.manage","settings.integrations.view","settings.integrations.edit","settings.users.view","settings.users.manage"]}
@@ -28,7 +30,7 @@ export function AppShell({email,accessToken,role,page,onPageChange,onSignOut}:{e
  useEffect(()=>{if(!accessToken||!can("nfse.test_connection"))return;let mounted=true;let inFlight=false;let lastCheck=0;const checkSefin=async()=>{if(inFlight||document.visibilityState==="hidden")return;inFlight=true;if(lastCheck===0)setSefinStatus("checking");try{const response=await authenticatedFetch("/api/nfse/homologation/test",{method:"POST",headers:{Authorization:`Bearer ${accessToken}`,"Content-Type":"application/json"},body:JSON.stringify({action:"server-status"}),cache:"no-store"});const data=await response.json().catch(()=>({})) as {ready?:boolean;diagnosticCode?:string};if(!mounted)return;if(response.status===401){setSefinStatus("session");window.dispatchEvent(new Event("jpi-session-invalid"));return}if(!response.ok)setSefinStatus(data.diagnosticCode==="NFSE_HML_SERVIDOR_INSTAVEL"?"unstable":"unknown");else setSefinStatus(data.ready?"available":"unstable")}catch{if(mounted)setSefinStatus("unknown")}finally{lastCheck=Date.now();inFlight=false;if(mounted)setSefinCheckedAt(new Date())}};const refresh=()=>{if(Date.now()-lastCheck>120000)void checkSefin()};const refreshNow=()=>void checkSefin();void checkSefin();const timer=window.setInterval(()=>void checkSefin(),300000);window.addEventListener("focus",refresh);window.addEventListener("online",refresh);window.addEventListener("jpi-sefin-status-updated",refreshNow);return()=>{mounted=false;window.clearInterval(timer);window.removeEventListener("focus",refresh);window.removeEventListener("online",refresh);window.removeEventListener("jpi-sefin-status-updated",refreshNow)}},[accessToken,can]);
  const certificateDays=certificateExpiry?Math.ceil((new Date(`${certificateExpiry}T23:59:59`).getTime()-Date.now())/86400000):null;const certificateUrgent=certificateDays!==null&&certificateDays<=30;
  const sefinCopy=sefinStatus==="available"?{title:"SEFIN disponível",detail:productionEnabled?"Pronto e enviando":"Pode enviar homologação"}:sefinStatus==="unstable"?{title:"SEFIN instável",detail:"Não enviar notas"}:sefinStatus==="session"?{title:"Sessão expirada",detail:"Entre novamente"}:sefinStatus==="unknown"?{title:"SEFIN sem resposta",detail:"Aguarde nova verificação"}:{title:"SEFIN verificando",detail:"Consultando servidor"};
- const content = page==="Painel"?<LiveDashboard/>:page==="Alunos e Responsáveis"?<LiveStudents role={role}/>:page==="Mensalidades"?<LivePayments role={role}/>:page==="NFS-e"?<LiveInvoices role={role}/>:page==="Enviar notas"?<DeliveryCenter role={role} accessToken={accessToken} onNavigate={onPageChange}/>:page==="Ajuda"?<HelpPage onNavigate={onPageChange}/>:<SettingsPage accessToken={accessToken}/>;
+ const content = page==="Painel"?<LiveDashboard/>:page==="Alunos e Responsáveis"?<LiveStudents role={role}/>:page==="Mensalidades"?<LivePayments role={role}/>:page==="Assistente de emissão"?<IssuanceAssistant onNavigate={onPageChange}/>:page==="NFS-e"?<LiveInvoices role={role}/>:page==="Enviar notas"?<DeliveryCenter role={role} accessToken={accessToken} onNavigate={onPageChange}/>:page==="Ajuda"?<HelpPage onNavigate={onPageChange}/>:<SettingsPage accessToken={accessToken}/>;
  return <div className="app-layout"><aside className={open?"sidebar open":"sidebar"}>
   <div className="sidebar-head"><BrandLogo small/><div><strong>JPI Fiscal</strong><span>Gestão escolar</span></div><button className="close-mobile" onClick={()=>setOpen(false)}><X/></button></div>
   <nav><span className="nav-label">MENU PRINCIPAL</span>{visible.map(({name,icon:Icon})=><button key={name} className={page===name?"nav-item active":"nav-item"} onClick={()=>{onPageChange(name);setOpen(false)}}><Icon size={19}/>{name}</button>)}</nav>
