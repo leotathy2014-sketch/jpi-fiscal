@@ -208,3 +208,25 @@
  .integration-overview-card{grid-template-columns:auto 1fr}
  .integration-overview-card>.status{grid-column:2}
 }
+
+
+/* Estado operacional NFS-e / SEFIN */
+.nfse-status-pair{display:flex;align-items:center;justify-content:flex-end;gap:6px;flex-wrap:wrap}
+.nfse-status-pair.detail{max-width:320px}
+.nfse-state-badge{display:inline-flex;align-items:center;gap:6px;width:max-content;padding:6px 9px;border:1px solid #d8e0e8;border-radius:999px;background:#f5f7fa;color:#647285;font-size:9px;font-weight:900;white-space:nowrap}
+.nfse-state-badge i{width:8px;height:8px;border-radius:50%;background:currentColor;box-shadow:0 0 0 3px color-mix(in srgb,currentColor 15%,transparent)}
+.nfse-state-badge.available{color:#157653;background:#e8f7f1;border-color:#9bd7c1}
+.nfse-state-badge.homologation{color:#a46109;background:#fff2df;border-color:#edc98f}
+.nfse-state-badge.unstable{color:#b42318;background:#fff1f0;border-color:#f0aaa4}
+.nfse-state-badge.unknown{color:#a46109;background:#fff8eb;border-color:#f3d9ae}
+.nfse-state-badge.checking{color:#405a78;background:#f0f7ff;border-color:#bcd8f6}
+.nfse-state-badge.checking i{animation:sefin-pulse 1.2s ease-in-out infinite}
+.integration-overview-card.nfse-overview-card{grid-template-columns:auto minmax(0,1fr) auto}
+.integration-nfse-summary>div small{font-size:9px;line-height:1.4;color:var(--muted)}
+.red-text{color:#b42318!important}
+@media(max-width:760px){
+ .integration-overview-card.nfse-overview-card{grid-template-columns:auto 1fr}
+ .integration-overview-card.nfse-overview-card .nfse-status-pair{grid-column:2;justify-content:flex-start}
+ .integration-detail-heading{align-items:flex-start;flex-wrap:wrap}
+ .nfse-status-pair.detail{width:100%;max-width:none;justify-content:flex-start;padding-left:46px}
+}
