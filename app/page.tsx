@@ -53,6 +53,7 @@ export default function Home() {
         setEmail(data.session?.user.email??null);
         setAccessToken(data.session?.access_token??null);
         setNeedsPassword(data.session?.user.user_metadata?.needs_password===true);
+        if(data.session&&(url.searchParams.get("recovery")==="1"||url.hash.includes("type=recovery")))setPasswordRecovery(true);
       }catch{
         if(active)setAuthError("Não foi possível validar o link de recuperação. Solicite um novo link.");
       }finally{
@@ -140,7 +141,13 @@ export default function Home() {
     };
   }, [supabase, email]);
 
-  async function requestPasswordReset(inputEmail:string){if(!supabase)throw new Error("Recuperação indisponível no modo de apresentação.");const {error}=await supabase.auth.resetPasswordForEmail(inputEmail.trim().toLowerCase(),{redirectTo:`${APP_URL}/?recovery=1`});if(error)throw error}
+  async function requestPasswordReset(inputEmail:string){
+    if(!supabase)throw new Error("Recuperação indisponível no modo de apresentação.");
+    const normalized=inputEmail.trim().toLowerCase();
+    const {data,error}=await supabase.functions.invoke("password-recovery",{body:{email:normalized}});
+    if(error)throw new Error("Não foi possível enviar o e-mail de recuperação agora. Tente novamente.");
+    if(data?.error)throw new Error(String(data.error));
+  }
   async function definePassword(password:string){
     if(!supabase)return;
     const {error}=await supabase.auth.updateUser({password,data:{needs_password:false}});
