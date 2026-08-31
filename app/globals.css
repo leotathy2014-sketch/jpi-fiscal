@@ -506,3 +506,19 @@
  .assistant-delivery-send-row{align-items:stretch;flex-direction:column}
  .assistant-delivery-send-row button{justify-content:center}
 }
+
+
+/* Encerramento do processo do Assistente */
+.assistant-complete-card{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:14px;align-items:center;margin-top:14px;padding:17px;border:1px solid #b9decf;border-radius:16px;background:#edf9f4;color:#157653}
+.assistant-complete-card>svg{width:34px;height:34px;padding:7px;border-radius:50%;background:#16875f;color:#fff}
+.assistant-complete-card>div:nth-child(2){display:grid;gap:4px;min-width:0}
+.assistant-complete-card span{font-size:7px;font-weight:900;letter-spacing:.08em}
+.assistant-complete-card h3{margin:0;font-size:14px}
+.assistant-complete-card p{margin:0;font-size:9px}
+.assistant-complete-card small{font-size:8px;opacity:.85}
+.assistant-complete-actions{display:flex;gap:7px;flex-wrap:wrap;justify-content:flex-end}
+.assistant-complete-actions button{display:inline-flex;align-items:center;gap:6px}
+@media(max-width:780px){
+ .assistant-complete-card{grid-template-columns:1fr;align-items:flex-start}
+ .assistant-complete-actions{justify-content:flex-start}
+}
