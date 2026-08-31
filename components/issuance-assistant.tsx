@@ -685,6 +685,30 @@ export function IssuanceAssistant({onNavigate}:{onNavigate:(page:AppPage)=>void}
             </div>}
           </section>}
 
+          {effectiveCurrent===6&&selected&&<section className="assistant-sefin-confirm">
+            <div className="assistant-workspace-head">
+              <div><span>ETAPA 7 · SEFIN</span><h3>Enviar para homologação</h3><p>Esta ação usa o XML já validado e envia somente para a produção restrita. A produção real continua bloqueada.</p></div>
+              <span className="assistant-safe-tag"><ShieldCheck size={15}/>Homologação</span>
+            </div>
+            <div className="assistant-sefin-body">
+              <div className="assistant-sefin-summary">
+                <span><small>Aluno</small><b>{selected.alunos?.nome||"—"}</b></span>
+                <span><small>XML</small><b>{selected.dps_xml_id||"—"}</b></span>
+                <span><small>Valor</small><b>{money(selected.valor_nfse)}</b></span>
+                <span><small>Destino</small><b>SEFIN · Produção restrita</b></span>
+              </div>
+              <label className="assistant-confirm-check">
+                <input type="checkbox" checked={homologationConfirmed} onChange={e=>{setHomologationConfirmed(e.target.checked);if(e.target.checked)setError("")}}/>
+                <span><strong>Confirmo o envio desta nota para homologação</strong><small>O sistema fará apenas uma tentativa. Em caso de erro, nenhuma repetição automática será executada.</small></span>
+              </label>
+            </div>
+          </section>}
+
+          {effectiveCurrent===7&&selected&&selected.chave_nfse_homologacao&&<section className="assistant-sefin-result">
+            <Check size={22}/>
+            <div><span>HOMOLOGAÇÃO CONCLUÍDA</span><h3>NFS-e de teste confirmada pela SEFIN</h3><p>Chave: <strong>{selected.chave_nfse_homologacao}</strong></p>{selected.homologacao_emitida_em&&<small>Processada em {new Date(selected.homologacao_emitida_em).toLocaleString("pt-BR")}</small>}</div>
+          </section>}
+
           <div className="assistant-next-card">
             {effectiveCurrent===2&&<><ShieldCheck/><div><strong>Validação automática e segura</strong><span>Confira dados do tomador, competência, valor, configuração fiscal e certificado A1 antes de preparar a DPS.</span></div></>}
             {effectiveCurrent===3&&<><FileText/><div><strong>DPS em foco</strong><span>Os campos editáveis estão logo acima. Salve a revisão para avançar automaticamente para a prévia.</span></div></>}
