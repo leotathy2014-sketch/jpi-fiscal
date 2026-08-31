@@ -656,6 +656,21 @@ export function IssuanceAssistant({onNavigate}:{onNavigate:(page:AppPage)=>void}
     }
   }
 
+  const selectedManualSender=whatsappInfo?.senders?.find(sender=>sender.id===manualSenderId)||null;
+  const canCurrentDelivery=deliveryChannel==="email"?canSendEmail:deliveryChannel==="whatsapp-manual"?canSendWhatsapp:canSendAgenda;
+  const currentDeliveryReady=deliveryChannel==="email"
+    ?canSendEmail&&Boolean(activeDocument)
+    :deliveryChannel==="whatsapp-manual"
+      ?canSendWhatsapp&&Boolean(activeDocument)&&Boolean(whatsappInfo?.ready)&&Boolean(selectedManualSender)
+      :canSendAgenda&&Boolean(activeDocument)&&Boolean(agendaEduInfo?.ready);
+  const deliveryRecipient=deliveryChannel==="email"
+    ?"Caixa interna de homologação"
+    :deliveryChannel==="whatsapp-manual"
+      ?whatsappInfo?.testRecipient||"Número interno não configurado"
+      :agendaEduInfo?.ready
+        ?"Responsáveis vinculados no Sandbox"
+        :"Aguardando Agenda Edu";
+
   function focusAndNavigate(target:"NFS-e"|"Enviar notas"|"Alunos e Responsáveis"){
     if(!selected)return;
     const focus=String(selected.id);
@@ -673,7 +688,7 @@ export function IssuanceAssistant({onNavigate}:{onNavigate:(page:AppPage)=>void}
     if(effectiveCurrent===4){void approvePreview();return}
     if(effectiveCurrent===5){void generateXmlInAssistant();return}
     if(effectiveCurrent===6){void sendHomologationFromAssistant();return}
-    if(effectiveCurrent>=8){focusAndNavigate("Enviar notas");return}
+    if(effectiveCurrent>=8){void sendCurrentDocument();return}
     focusAndNavigate("NFS-e");
   }
 
@@ -845,6 +860,78 @@ export function IssuanceAssistant({onNavigate}:{onNavigate:(page:AppPage)=>void}
             <div><span>HOMOLOGAÇÃO CONCLUÍDA</span><h3>NFS-e de teste confirmada pela SEFIN</h3><p>Chave: <strong>{selected.chave_nfse_homologacao}</strong></p>{selected.homologacao_emitida_em&&<small>Processada em {new Date(selected.homologacao_emitida_em).toLocaleString("pt-BR")}</small>}</div>
           </section>}
 
+          {effectiveCurrent>=7&&selected&&selected.chave_nfse_homologacao&&<section className="assistant-finalization">
+            <div className="assistant-workspace-head">
+              <div><span>CONCLUSÃO</span><h3>Documento fiscal de homologação</h3><p>A nota foi confirmada pela SEFIN. Confira o documento antes do envio.</p></div>
+              <span className="assistant-safe-tag"><Check size={15}/>Concluída</span>
+            </div>
+            <div className="assistant-finalization-body">
+              <div className="assistant-finalization-main">
+                <div><small>Aluno</small><strong>{selected.alunos?.nome||"—"}</strong></div>
+                <div><small>Competência</small><strong>{selected.competencia}</strong></div>
+                <div><small>Valor</small><strong>{money(selected.valor_nfse)}</strong></div>
+                <div><small>Chave SEFIN</small><strong className="assistant-key">{selected.chave_nfse_homologacao}</strong></div>
+              </div>
+              <div className="assistant-document-actions">
+                <button className="secondary" onClick={()=>void openCurrentDocument("pdf")} disabled={!activeDocument||Boolean(documentBusy)}><Eye size={16}/>{documentBusy==="pdf"?"Abrindo…":"Visualizar PDF"}</button>
+                <button className="secondary" onClick={()=>void openCurrentDocument("xml")} disabled={!activeDocument||Boolean(documentBusy)}><FileCode2 size={16}/>{documentBusy==="xml"?"Abrindo…":"Visualizar XML"}</button>
+                {!activeDocument&&<span>Preparando documento ativo…</span>}
+              </div>
+            </div>
+          </section>}
+
+          {effectiveCurrent>=8&&selected&&<section className="assistant-delivery-panel">
+            <div className="assistant-workspace-head">
+              <div><span>ETAPA 9 · ENVIAR</span><h3>Escolha como entregar a nota</h3><p>Os canais usam as mesmas integrações e o mesmo histórico da tela Enviar notas.</p></div>
+              <span className="assistant-safe-tag"><ShieldCheck size={15}/>Histórico ativo</span>
+            </div>
+            <div className="assistant-delivery-channels">
+              <button type="button" className={deliveryChannel==="email"?"active email":"email"} onClick={()=>{setDeliveryChannel("email");setError("");setMessage("")}}>
+                <span><Mail size={20}/></span><div><strong>E-mail</strong><small>{canSendEmail?"Disponível":"Sem permissão"}</small></div>
+              </button>
+              <button type="button" className={deliveryChannel==="whatsapp-manual"?"active whatsapp":"whatsapp"} onClick={()=>{setDeliveryChannel("whatsapp-manual");setError("");setMessage("")}}>
+                <span><MessageCircle size={20}/></span><div><strong>WhatsApp</strong><small>{whatsappInfo?.ready?"Manual gratuito":"Configuração necessária"}</small></div>
+              </button>
+              <button type="button" className={deliveryChannel==="agenda-edu"?"active agenda":"agenda"} onClick={()=>{setDeliveryChannel("agenda-edu");setError("");setMessage("")}}>
+                <span><CalendarDays size={20}/></span><div><strong>Agenda Edu</strong><small>{agendaEduInfo?.ready?"Sandbox disponível":"Aguardando Agenda Edu"}</small></div>
+              </button>
+            </div>
+
+            <div className="assistant-delivery-details">
+              <div className="assistant-delivery-recipient">
+                <small>DESTINO DE HOMOLOGAÇÃO</small>
+                <strong>{deliveryRecipient}</strong>
+                <span>{deliveryChannel==="email"?selected.alunos?.email||"E-mail do responsável não informado":deliveryChannel==="whatsapp-manual"?selected.alunos?.whatsapp||"WhatsApp do responsável não informado":selected.alunos?.agenda_edu_student_id?"Aluno vinculado à Agenda Edu":"Aluno ainda sem vínculo da Agenda Edu"}</span>
+              </div>
+
+              {deliveryChannel==="whatsapp-manual"&&<>
+                {whatsappInfo?.senders?.length?<div className="assistant-sender-list">
+                  <small>ESCOLHA O WHATSAPP DA ESCOLA</small>
+                  <div>{whatsappInfo.senders.map(sender=><button type="button" key={sender.id} className={manualSenderId===sender.id?"selected":""} onClick={()=>setManualSenderId(sender.id)}><MessageCircle size={16}/><span><strong>{sender.nome}</strong><small>{sender.numero}</small></span>{manualSenderId===sender.id&&<Check size={15}/>}</button>)}</div>
+                </div>:<div className="assistant-warning-box"><CircleAlert/><div><strong>Nenhum remetente disponível</strong><span>Cadastre o número da escola em Configurações → Integrações antes de usar o WhatsApp.</span></div></div>}
+              </>}
+
+              {deliveryChannel==="agenda-edu"&&!agendaEduInfo?.ready&&<div className="assistant-warning-box"><CircleAlert/><div><strong>Aguardando Agenda Edu</strong><span>{agendaEduInfo?.message||"A integração ainda depende das informações que a Agenda Edu precisa liberar."}</span></div></div>}
+
+              {manualPending&&deliveryChannel==="whatsapp-manual"&&<div className="assistant-manual-confirm">
+                <MessageCircle size={22}/>
+                <div><strong>Mensagem preparada no WhatsApp</strong><span>Destino de teste: {manualPending.actualRecipient}{manualPending.sender?" · Remetente: "+manualPending.sender.nome:""}</span><small>Depois de clicar em Enviar no WhatsApp, confirme abaixo para registrar o histórico.</small></div>
+                <div>
+                  {manualPending.whatsappUrl&&<button className="secondary" type="button" onClick={()=>window.open(manualPending.whatsappUrl||"","_blank","noopener,noreferrer")}>Abrir WhatsApp</button>}
+                  <button className="primary" type="button" onClick={()=>void finishManualDelivery("confirm")} disabled={deliveryBusy}>Confirmar envio</button>
+                  <button className="secondary" type="button" onClick={()=>void finishManualDelivery("cancel")} disabled={deliveryBusy}>Cancelar</button>
+                </div>
+              </div>}
+
+              {!manualPending&&<div className="assistant-delivery-send-row">
+                <div><small>Canal selecionado</small><strong>{deliveryChannel==="email"?"E-mail":deliveryChannel==="whatsapp-manual"?"WhatsApp manual":"Agenda Edu"}</strong><span>{currentDeliveryReady?"Pronto para enviar":"Ainda não está pronto para este envio"}</span></div>
+                <button className="primary" type="button" onClick={()=>void sendCurrentDocument()} disabled={!currentDeliveryReady||deliveryBusy}>
+                  <Send size={17}/>{deliveryBusy?"Enviando…":deliveryChannel==="whatsapp-manual"?"Preparar WhatsApp":"Enviar agora"}
+                </button>
+              </div>}
+            </div>
+          </section>}
+
           <div className="assistant-next-card">
             {effectiveCurrent===2&&<><ShieldCheck/><div><strong>Validação automática e segura</strong><span>Confira dados do tomador, competência, valor, configuração fiscal e certificado A1 antes de preparar a DPS.</span></div></>}
             {effectiveCurrent===3&&<><FileText/><div><strong>DPS em foco</strong><span>Os campos editáveis estão logo acima. Salve a revisão para avançar automaticamente para a prévia.</span></div></>}
@@ -856,13 +943,13 @@ export function IssuanceAssistant({onNavigate}:{onNavigate:(page:AppPage)=>void}
           </div>
 
           {!canPrepare&&effectiveCurrent>=2&&effectiveCurrent<8&&<div className="notice compact"><ShieldCheck/><span>Seu perfil pode acompanhar o processo, mas não possui permissão para preparar a NFS-e.</span></div>}
-          <div className="assistant-actions">
+          {effectiveCurrent<8&&<div className="assistant-actions">
             <button className="primary assistant-main-action" onClick={continueProcess} disabled={Boolean(busyAction)||(!canPrepare&&effectiveCurrent>=2&&effectiveCurrent<8)}>
               {busyAction==="validate"?"Validando…":busyAction==="save-dps"?"Salvando DPS…":busyAction==="approve"?"Aprovando…":busyAction==="xml"?"Gerando XML…":busyAction==="sefin"?"Enviando para homologação…":effectiveCurrent===2&&missing.length?"Corrigir cadastro":effectiveCurrent===2?"Validar nota":effectiveCurrent===3?"Salvar DPS e ver prévia":effectiveCurrent===4?"Aprovar prévia":effectiveCurrent===5?"Gerar e validar XML":effectiveCurrent===6?"Enviar para homologação":effectiveCurrent>=8?"Ir para envio":"Continuar processo"} <ChevronRight size={18}/>
             </button>
             {effectiveCurrent>2&&effectiveCurrent<8&&<button className="secondary" onClick={()=>focusAndNavigate("NFS-e")}>Abrir NFS-e atual</button>}
-            {progress?.finished&&<button className="secondary" onClick={()=>focusAndNavigate("Enviar notas")}>Ir direto para envio</button>}
-          </div>
+            {progress?.finished&&<button className="secondary" onClick={()=>focusAndNavigate("Enviar notas")}>Abrir central de envios</button>}
+          </div>}
         </>}
       </article>
     </section>}
