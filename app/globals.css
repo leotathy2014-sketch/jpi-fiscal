@@ -522,3 +522,17 @@
  .assistant-complete-card{grid-template-columns:1fr;align-items:flex-start}
  .assistant-complete-actions{justify-content:flex-start}
 }
+
+
+/* Retomada automática do Assistente */
+.assistant-resume-card{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:12px;align-items:center;padding:12px 14px;border:1px solid #cbdced;border-radius:13px;background:#f5f9ff;color:#34516e}
+.assistant-resume-card>svg{color:var(--blue)}
+.assistant-resume-card>div{display:grid;gap:3px;min-width:0}
+.assistant-resume-card span{font-size:7px;font-weight:900;letter-spacing:.07em;color:var(--blue)}
+.assistant-resume-card strong{font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.assistant-resume-card small{font-size:8px;color:var(--muted)}
+.assistant-resume-card button{display:inline-flex;align-items:center;gap:6px;white-space:nowrap}
+@media(max-width:720px){
+ .assistant-resume-card{grid-template-columns:1fr}
+ .assistant-resume-card button{justify-content:center}
+}
