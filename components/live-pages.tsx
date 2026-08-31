@@ -3,6 +3,7 @@
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Ban, CalendarDays, Check, CircleDollarSign, Clock3, CloudUpload, FileCheck2, FileText, Filter, Mail, MessageCircle, MoreHorizontal, Plus, RefreshCw, Search, Send, ShieldCheck, UsersRound, WalletCards, X } from "lucide-react";
 import { createSupabaseBrowserClient } from "@/lib/supabase";
+import { authenticatedFetch } from "@/lib/authenticated-fetch";
 import { buildDpsDraft, isValidCpfCnpj, NFSE_OWN_APP_SERIES } from "@/lib/nfse-dps";
 import type { Role } from "./app-shell";
 import { TransmissionProgress } from "./transmission-progress";
@@ -161,7 +162,7 @@ async function sendToHomologation(event:FormEvent<HTMLFormElement>){
   try{
     const {data:{session}}=await supabase.auth.getSession();
     if(!session)throw new Error("Sua sessão expirou. Entre novamente.");
-    const response=await fetch("/api/nfse/homologation/issue",{
+    const response=await authenticatedFetch("/api/nfse/homologation/issue",{
       method:"POST",
       headers:{Authorization:`Bearer ${session.access_token}`,"Content-Type":"application/json"},
       body:JSON.stringify({monthlyId:payment.id}),
@@ -219,7 +220,7 @@ async function sendToHomologation(event:FormEvent<HTMLFormElement>){
     results[index]={payment,status:"sending"};setBatchIssueItems([...results]);
     const controller=new AbortController();const timeout=window.setTimeout(()=>controller.abort(),55000);
     try{
-     const response=await fetch("/api/nfse/homologation/issue",{
+     const response=await authenticatedFetch("/api/nfse/homologation/issue",{
       method:"POST",
       headers:{Authorization:`Bearer ${session.access_token}`,"Content-Type":"application/json"},
       body:JSON.stringify({monthlyId:payment.id}),
@@ -257,7 +258,7 @@ async function sendToHomologation(event:FormEvent<HTMLFormElement>){
   if(reason.length<15){setError("Descreva o motivo do cancelamento com pelo menos 15 caracteres.");return}
   fiscalOperationInFlight.current=true;setFiscalOperationBusy(true);setError("");setMessage("");
   const controller=new AbortController();const timeout=window.setTimeout(()=>controller.abort(),55000);
-  try{const {data:{session}}=await supabase.auth.getSession();if(!session)throw new Error("Sua sessão expirou. Entre novamente.");const response=await fetch("/api/nfse/homologation/cancel",{method:"POST",headers:{Authorization:`Bearer ${session.access_token}`,"Content-Type":"application/json"},body:JSON.stringify({monthlyId:payment.id,reasonCode,reason}),signal:controller.signal,cache:"no-store"});const data=await response.json().catch(()=>({})) as FiscalOperationResult;if(!response.ok&&!data.confirmed)throw new Error(data.error||"A produção restrita não concluiu o cancelamento.");setCancellingPayment(null);setMessage(data.confirmed&&!data.ok?"Cancelamento confirmado pela SEFIN; os arquivos locais estão sendo sincronizados.":`NFS-e de teste de ${payment.alunos?.nome||"aluno"} cancelada com sucesso.`);await load()}catch(cause){setCancellingPayment(null);setError(await homologationErrorMessage(cause));await load()}finally{window.clearTimeout(timeout);fiscalOperationInFlight.current=false;setFiscalOperationBusy(false)}
+  try{const {data:{session}}=await supabase.auth.getSession();if(!session)throw new Error("Sua sessão expirou. Entre novamente.");const response=await authenticatedFetch("/api/nfse/homologation/cancel",{method:"POST",headers:{Authorization:`Bearer ${session.access_token}`,"Content-Type":"application/json"},body:JSON.stringify({monthlyId:payment.id,reasonCode,reason}),signal:controller.signal,cache:"no-store"});const data=await response.json().catch(()=>({})) as FiscalOperationResult;if(!response.ok&&!data.confirmed)throw new Error(data.error||"A produção restrita não concluiu o cancelamento.");setCancellingPayment(null);setMessage(data.confirmed&&!data.ok?"Cancelamento confirmado pela SEFIN; os arquivos locais estão sendo sincronizados.":`NFS-e de teste de ${payment.alunos?.nome||"aluno"} cancelada com sucesso.`);await load()}catch(cause){setCancellingPayment(null);setError(await homologationErrorMessage(cause));await load()}finally{window.clearTimeout(timeout);fiscalOperationInFlight.current=false;setFiscalOperationBusy(false)}
  }
  async function substituteHomologationInvoice(event:FormEvent<HTMLFormElement>){
   event.preventDefault();if(!supabase||!substitutingPayment||fiscalOperationInFlight.current)return;
@@ -265,7 +266,7 @@ async function sendToHomologation(event:FormEvent<HTMLFormElement>){
   if(!competence||competence>currentCompetenceInput()){setError("A competência não pode ser posterior ao mês atual.");return}if(amount<=0){setError("Informe um valor válido para a nota substituta.");return}if(!description){setError("Informe a descrição corrigida do serviço.");return}if(reason.length<15){setError("Descreva o motivo da substituição com pelo menos 15 caracteres.");return}
   fiscalOperationInFlight.current=true;setFiscalOperationBusy(true);setError("");setMessage("");
   const controller=new AbortController();const timeout=window.setTimeout(()=>controller.abort(),55000);
-  try{const {data:{session}}=await supabase.auth.getSession();if(!session)throw new Error("Sua sessão expirou. Entre novamente.");const response=await fetch("/api/nfse/homologation/issue",{method:"POST",headers:{Authorization:`Bearer ${session.access_token}`,"Content-Type":"application/json"},body:JSON.stringify({monthlyId:payment.id,operation:"substitute",competence:formatCompetence(competence),amount,description,reasonCode,reason}),signal:controller.signal,cache:"no-store"});const data=await response.json().catch(()=>({})) as FiscalOperationResult;if(!response.ok&&!data.confirmed)throw new Error(data.error||"A produção restrita não concluiu a substituição.");setSubstitutingPayment(null);setMessage(data.confirmed&&!data.ok?"Substituição confirmada pela SEFIN; os arquivos locais estão sendo sincronizados.":`Nota corrigida e substituída com sucesso. Nova chave: ${data.key}.`);await load()}catch(cause){setSubstitutingPayment(null);setError(await homologationErrorMessage(cause));await load()}finally{window.clearTimeout(timeout);fiscalOperationInFlight.current=false;setFiscalOperationBusy(false)}
+  try{const {data:{session}}=await supabase.auth.getSession();if(!session)throw new Error("Sua sessão expirou. Entre novamente.");const response=await authenticatedFetch("/api/nfse/homologation/issue",{method:"POST",headers:{Authorization:`Bearer ${session.access_token}`,"Content-Type":"application/json"},body:JSON.stringify({monthlyId:payment.id,operation:"substitute",competence:formatCompetence(competence),amount,description,reasonCode,reason}),signal:controller.signal,cache:"no-store"});const data=await response.json().catch(()=>({})) as FiscalOperationResult;if(!response.ok&&!data.confirmed)throw new Error(data.error||"A produção restrita não concluiu a substituição.");setSubstitutingPayment(null);setMessage(data.confirmed&&!data.ok?"Substituição confirmada pela SEFIN; os arquivos locais estão sendo sincronizados.":`Nota corrigida e substituída com sucesso. Nova chave: ${data.key}.`);await load()}catch(cause){setSubstitutingPayment(null);setError(await homologationErrorMessage(cause));await load()}finally{window.clearTimeout(timeout);fiscalOperationInFlight.current=false;setFiscalOperationBusy(false)}
  }
  const canManage=role==="Administrador"||role==="Financeiro";
  return <>
