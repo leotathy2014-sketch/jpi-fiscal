@@ -77,3 +77,30 @@
 .whatsapp-message-editor label{display:grid;gap:7px}.whatsapp-message-editor textarea{min-height:170px}
 .whatsapp-message-editor small b{display:inline-block;padding:1px 4px;border-radius:4px;background:#e6f5ed;color:#126b47;font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:9px}
 @media(max-width:760px){.whatsapp-sender-options{grid-template-columns:1fr}.whatsapp-selected-sender>div{grid-template-columns:1fr}.whatsapp-selected-sender b{grid-column:1}.whatsapp-step-badge{display:none}}
+
+
+/* Identidade visual global configurável */
+.brand-seal,.logo-mark{background:linear-gradient(145deg,var(--blue),var(--navy));box-shadow:0 10px 30px color-mix(in srgb,var(--blue) 24%,transparent)}
+.login-brand{background:linear-gradient(150deg,var(--navy),color-mix(in srgb,var(--navy) 68%,var(--blue)) 70%,var(--blue))}
+.input-wrap:focus-within,.data-form input:focus,.data-form select:focus,.data-form textarea:focus{border-color:var(--blue);box-shadow:0 0 0 3px color-mix(in srgb,var(--blue) 10%,transparent)}
+.primary{box-shadow:0 4px 12px color-mix(in srgb,var(--blue) 22%,transparent)}
+.primary:hover{background:color-mix(in srgb,var(--blue) 84%,#000)}
+.avatar{background:color-mix(in srgb,var(--blue) 14%,white);color:color-mix(in srgb,var(--blue) 78%,#000)}
+.help-heading-icon,.delivery-heading-icon,.company-logo-icon{background:color-mix(in srgb,var(--blue) 10%,white);color:var(--blue)}
+.status.emitida,.certificate-top-alert.safe,.access-toggle.blocked{color:color-mix(in srgb,var(--green) 82%,#000);background:color-mix(in srgb,var(--green) 10%,white);border-color:color-mix(in srgb,var(--green) 38%,white)}
+.manual-whatsapp-summary,.whatsapp-selected-sender{color:color-mix(in srgb,var(--green) 84%,#000);border-color:var(--green);background:color-mix(in srgb,var(--green) 12%,white)}
+.whatsapp-send-button{background:var(--green);box-shadow:0 4px 12px color-mix(in srgb,var(--green) 22%,transparent)}
+.whatsapp-send-button:hover{background:color-mix(in srgb,var(--green) 84%,#000)}
+
+.branding-control-panel{display:grid;gap:16px;padding:17px;border:1px solid color-mix(in srgb,var(--blue) 22%,var(--line));border-radius:12px;background:linear-gradient(180deg,color-mix(in srgb,var(--blue) 4%,white),white)}
+.branding-control-title{display:flex;align-items:center;gap:11px}.branding-control-title>div{display:grid;gap:3px}.branding-control-title h3{margin:0;font-size:15px}.branding-control-title p{margin:0;color:var(--muted);font-size:11px}
+.branding-control-grid{display:grid;grid-template-columns:minmax(280px,.9fr) minmax(320px,1.1fr);gap:18px;align-items:stretch}
+.branding-color-fields{display:grid;gap:12px}.branding-color-fields>label{display:grid;gap:6px;font-size:11px;font-weight:800;color:#4d5968}.branding-color-fields>label>small{font-weight:400;color:var(--muted)}
+.branding-color-input{height:44px;display:grid;grid-template-columns:52px 1fr;align-items:center;gap:10px;padding:5px 10px 5px 5px;border:1px solid #d8dfe8;border-radius:9px;background:white}
+.branding-color-input input[type=color]{width:46px;height:32px;border:0;border-radius:7px;padding:0;background:transparent;cursor:pointer}.branding-color-input input[type=color]::-webkit-color-swatch-wrapper{padding:0}.branding-color-input input[type=color]::-webkit-color-swatch{border:0;border-radius:6px}.branding-color-input strong{font:700 12px ui-monospace,SFMono-Regular,Consolas,monospace;color:#425066}
+.branding-live-preview{min-height:245px;display:grid;grid-template-columns:118px 1fr;border:1px solid var(--line);border-radius:12px;overflow:hidden;background:white;box-shadow:0 8px 24px #1c2d4110}
+.branding-preview-sidebar{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:9px;padding:18px 10px;text-align:center;background:var(--preview-sidebar);color:white}.branding-preview-sidebar .brand-seal.preview{width:62px;height:62px;border-radius:15px;background:linear-gradient(145deg,var(--preview-primary),var(--preview-sidebar));box-shadow:none}.branding-preview-sidebar strong{font-size:12px}.branding-preview-sidebar span{font-size:9px;opacity:.72}
+.branding-preview-content{display:flex;flex-direction:column;align-items:flex-start;justify-content:center;gap:13px;padding:24px}.branding-preview-content>strong{font-size:17px}.branding-preview-pill{padding:5px 8px;border-radius:999px;background:color-mix(in srgb,var(--preview-primary) 11%,white);color:var(--preview-primary);font-size:8px;font-weight:900;letter-spacing:.7px}.branding-preview-content button{min-height:37px;border:0;border-radius:8px;padding:0 13px;background:var(--preview-primary);color:white;font-size:10px;font-weight:800;pointer-events:none}.branding-preview-content small{display:flex;align-items:center;gap:6px;color:#687588}.branding-preview-content small i{width:9px;height:9px;border-radius:50%;background:var(--preview-success)}
+.file-field .company-logo-preview>.brand-seal.preview{width:48px;height:48px;border-radius:10px;flex:none;box-shadow:none}
+@media(max-width:900px){.branding-control-grid{grid-template-columns:1fr}.branding-live-preview{min-height:220px}}
+@media(max-width:540px){.branding-control-panel{padding:13px}.branding-live-preview{grid-template-columns:96px 1fr}.branding-preview-content{padding:17px}.branding-preview-sidebar .brand-seal.preview{width:52px;height:52px}}
