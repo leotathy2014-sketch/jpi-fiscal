@@ -32,7 +32,6 @@ export default function Home() {
     let active=true;
     const roles: Record<string, Role> = { master:"Master", admin: "Administrador", financeiro: "Financeiro", secretaria: "Secretaria", consulta: "Consulta" };
     const loadAccess=async()=>{
-      setAccessReady(false);
       const {data,error}=await supabase.rpc("get_my_access");
       if(!active)return;
       const payload=(data||{}) as {role?:string;permissions?:string[]};
