@@ -38,12 +38,12 @@ export async function authenticatedFetch(input: RequestInfo | URL, init: Request
   const token = await currentAccessToken(false);
   let response = await fetch(input, withBearer(init, token));
 
-  if (response.status !== 401 && response.status !== 403) return response;
+  if (response.status !== 401) return response;
 
   const freshToken = await currentAccessToken(true);
   response = await fetch(input, withBearer(init, freshToken));
 
-  if (response.status === 401 || response.status === 403) {
+  if (response.status === 401) {
     signalInvalidSession();
   }
   return response;
