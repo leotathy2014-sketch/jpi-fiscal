@@ -179,11 +179,21 @@ export function IssuanceAssistant({onNavigate}:{onNavigate:(page:AppPage)=>void}
   const progress=selected?statusOrder(selected):null;
 
   const steps=useMemo<AssistantStep[]>(()=>{
-    if(!selected||!progress)return [
-      {key:"student",label:"Aluno",short:"1",description:"Selecione uma mensalidade para iniciar.",state:"current"},
-      ...["Validação","DPS","Prévia","XML","SEFIN","Conclusão","Enviar"].map((label,index)=>({key:String(index),label,short:String(index+2),description:"Aguardando etapa anterior.",state:"pending" as StepState}))
-    ];
+    const labels=["Aluno","Mensalidade","Validação","DPS","Prévia","XML","SEFIN","Conclusão","Enviar"];
+    if(newEmissionOpen){
+      return labels.map((label,index)=>{
+        const state:StepState=index===0?(selectedStudent?"done":"current"):index===1?(selectedStudent?"current":"pending"):"pending";
+        const description=index===0?(selectedStudent?"Aluno cadastrado selecionado.":"Selecione um aluno já cadastrado."):index===1?(selectedStudent?"Informe competência, valor e situação do pagamento.":"Aguardando seleção do aluno."):"Aguardando etapa anterior.";
+        return {key:label.toLowerCase(),label,short:String(index+1),description,state};
+      });
+    }
+    if(!selected||!progress)return labels.map((label,index)=>({
+      key:label.toLowerCase(),label,short:String(index+1),
+      description:index===0?"Selecione uma emissão já iniciada.":"Aguardando etapa anterior.",
+      state:index===0?"current" as StepState:"pending" as StepState
+    }));
     const completion=[
+      true,
       true,
       progress.validationDone,
       progress.dpsDone,
@@ -194,9 +204,10 @@ export function IssuanceAssistant({onNavigate}:{onNavigate:(page:AppPage)=>void}
       Boolean(delivery),
     ];
     const firstIncomplete=completion.findIndex(done=>!done);
-    const current=firstIncomplete<0?7:firstIncomplete;
+    const current=firstIncomplete<0?8:firstIncomplete;
     const descriptions=[
-      missing.length?`Cadastro selecionado com ${missing.length} pendência(s).`:"Aluno e responsável selecionados.",
+      missing.length?"Cadastro selecionado com "+missing.length+" pendência(s).":"Aluno e responsável selecionados.",
+      "Mensalidade criada e vinculada à emissão.",
       progress.validationDone?"Dados fiscais já validados.":"Conferir cadastro, competência, valor e certificado.",
       progress.dpsDone?"DPS preparada.":"Preparar e revisar os dados editáveis da DPS.",
       progress.previewDone?"Prévia aprovada.":"Conferir a prévia e aprovar antes do XML.",
@@ -205,33 +216,73 @@ export function IssuanceAssistant({onNavigate}:{onNavigate:(page:AppPage)=>void}
       progress.finished?"Nota concluída no ambiente atual.":"Conferir retorno, chave e documento gerado.",
       delivery?"Nota já possui envio concluído.":"Escolher canal e enviar a nota ao responsável.",
     ];
-    const labels=["Aluno","Validação","DPS","Prévia","XML","SEFIN","Conclusão","Enviar"];
     return labels.map((label,index)=>({
-      key:label.toLowerCase(),
-      label,
-      short:String(index+1),
-      description:descriptions[index],
-      state:completion[index]?"done":index===current?(index===1&&missing.length?"warning":"current"):"pending",
+      key:label.toLowerCase(),label,short:String(index+1),description:descriptions[index],
+      state:completion[index]?"done":index===current?(index===2&&missing.length?"warning":"current"):"pending",
     }));
-  },[delivery,missing.length,progress,selected]);
+  },[delivery,missing.length,newEmissionOpen,progress,selected,selectedStudent]);
 
   const currentIndex=steps.findIndex(step=>step.state==="current"||step.state==="warning");
-  const effectiveCurrent=currentIndex<0?7:currentIndex;
-  const nextTitle=selected?[
-    "Aluno selecionado",
-    missing.length?"Corrigir cadastro antes de validar":"Validar dados da nota",
-    "Preparar / editar DPS",
-    "Aprovar prévia da DPS",
-    "Gerar e validar XML",
-    "Enviar para homologação",
-    "Conferir nota concluída",
-    delivery?"Envio concluído":"Enviar nota ao responsável",
-  ][effectiveCurrent]:"Selecione uma nota";
+  const effectiveCurrent=currentIndex<0?8:currentIndex;
+  const nextTitle=newEmissionOpen
+    ?selectedStudent?"Criar mensalidade e iniciar nota":"Selecionar aluno cadastrado"
+    :selected?[
+      "Aluno selecionado",
+      "Mensalidade criada",
+      missing.length?"Corrigir cadastro antes de validar":"Validar dados da nota",
+      "Preparar / editar DPS",
+      "Aprovar prévia da DPS",
+      "Gerar e validar XML",
+      "Enviar para homologação",
+      "Conferir nota concluída",
+      delivery?"Envio concluído":"Enviar nota ao responsável",
+    ][effectiveCurrent]:"Selecione uma emissão";
   useEffect(()=>{
-    if(effectiveCurrent!==3||fiscalContext||!canPrepare)return;
+    if(newEmissionOpen||effectiveCurrent!==4||fiscalContext||!canPrepare)return;
     void loadFiscalContext().catch(cause=>setError(cause instanceof Error?cause.message:"Não foi possível carregar a configuração fiscal."));
-  },[effectiveCurrent,fiscalContext,canPrepare]);
+  },[newEmissionOpen,effectiveCurrent,fiscalContext,canPrepare]);
 
+
+  async function createPaymentFromStudent(){
+    if(!supabase||!selectedStudent||!canCreatePayment)return;
+    setBusyAction("create-payment");setError("");setMessage("");
+    try{
+      if(!newCompetence||newCompetence>currentCompetenceInput())throw new Error("A competência não pode ser posterior ao mês atual.");
+      const amount=parseMoneyInput(newValue);
+      if(!Number.isFinite(amount)||amount<=0)throw new Error("Informe um valor válido para a mensalidade.");
+      const description=upper(newDescription||defaultServiceDescription(newCompetence,selectedStudent.segmento)).trim();
+      if(!description||description.length>1000)throw new Error("A descrição do serviço deve ter entre 1 e 1000 caracteres.");
+      const competence=formatCompetence(newCompetence);
+      const existing=await supabase.from("mensalidades").select("id").eq("aluno_id",selectedStudent.id).eq("competencia",competence).order("id",{ascending:false}).limit(1).maybeSingle();
+      if(existing.error)throw new Error(existing.error.message);
+      if(existing.data?.id){
+        const existingId=Number(existing.data.id);
+        setSelectedId(existingId);
+        localStorage.setItem("jpi-issuance-assistant-payment",String(existingId));
+        setNewEmissionOpen(false);
+        setMessage("Já existe uma mensalidade para este aluno nesta competência. O Assistente abriu o processo existente para evitar duplicidade.");
+        await load(true);
+        return;
+      }
+      const insert=await supabase.from("mensalidades").insert({
+        aluno_id:selectedStudent.id,
+        competencia,
+        valor_mensalidade:amount,
+        valor_nfse:amount,
+        descricao_servico:description,
+        status_pagamento:newPaymentStatus
+      }).select("id").single();
+      if(insert.error||!insert.data)throw new Error(insert.error?.message||"Não foi possível criar a mensalidade.");
+      const id=Number(insert.data.id);
+      setSelectedId(id);
+      localStorage.setItem("jpi-issuance-assistant-payment",String(id));
+      setNewEmissionOpen(false);
+      setMessage("Mensalidade criada e nota iniciada. O próximo passo é validar os dados fiscais.");
+      setNewValue("");setNewPaymentStatus("Aberto");setNewDescriptionEdited(false);
+      await load(true);
+    }catch(cause){setError(cause instanceof Error?cause.message:"Não foi possível iniciar a emissão.");}
+    finally{setBusyAction("")}
+  }
 
   async function loadFiscalContext(){
     if(!supabase)return null;
@@ -356,12 +407,13 @@ export function IssuanceAssistant({onNavigate}:{onNavigate:(page:AppPage)=>void}
     onNavigate(target);
   }
   function continueProcess(){
+    if(newEmissionOpen){void createPaymentFromStudent();return}
     if(!selected)return;
-    if(effectiveCurrent===1&&missing.length){focusAndNavigate("Alunos e Responsáveis");return}
-    if(effectiveCurrent===1){void validateSelected();return}
-    if(effectiveCurrent===2){void saveDps();return}
-    if(effectiveCurrent===3){void approvePreview();return}
-    if(effectiveCurrent>=7){focusAndNavigate("Enviar notas");return}
+    if(effectiveCurrent===2&&missing.length){focusAndNavigate("Alunos e Responsáveis");return}
+    if(effectiveCurrent===2){void validateSelected();return}
+    if(effectiveCurrent===3){void saveDps();return}
+    if(effectiveCurrent===4){void approvePreview();return}
+    if(effectiveCurrent>=8){focusAndNavigate("Enviar notas");return}
     focusAndNavigate("NFS-e");
   }
 
