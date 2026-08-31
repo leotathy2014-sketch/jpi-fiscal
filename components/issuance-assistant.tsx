@@ -114,6 +114,7 @@ export function IssuanceAssistant({onNavigate}:{onNavigate:(page:AppPage)=>void}
   const canSendAgenda=can("deliveries.send_agenda");
   const [students,setStudents]=useState<AssistantStudent[]>([]);
   const [newEmissionOpen,setNewEmissionOpen]=useState(true);
+  const [resumePaymentId,setResumePaymentId]=useState<number|null>(null);
   const [newStudentId,setNewStudentId]=useState<number|null>(null);
   const [studentQuery,setStudentQuery]=useState("");
   const [newCompetence,setNewCompetence]=useState(()=>currentCompetenceInput());
@@ -159,8 +160,12 @@ export function IssuanceAssistant({onNavigate}:{onNavigate:(page:AppPage)=>void}
       const nextPayments=(paymentsResult.data||[]) as unknown as AssistantPayment[];
       setPayments(nextPayments);
       setStudents(studentsResult.error?[]:(studentsResult.data||[]) as AssistantStudent[]);
-      setDeliveries(deliveriesResult.error?[]:(deliveriesResult.data||[]) as DeliveryState[]);
+      const nextDeliveries=deliveriesResult.error?[]:(deliveriesResult.data||[]) as DeliveryState[];
+      setDeliveries(nextDeliveries);
       const remembered=Number(localStorage.getItem("jpi-issuance-assistant-payment")||"0");
+      const rememberedPayment=nextPayments.find(item=>item.id===remembered);
+      const rememberedSent=remembered?nextDeliveries.some(item=>item.mensalidade_id===remembered&&item.status==="enviado"):false;
+      setResumePaymentId(rememberedPayment&&(!rememberedPayment.homologacao_emitida_em||!rememberedSent)?remembered:null);
       setSelectedId(current=>{
         if(current&&nextPayments.some(item=>item.id===current))return current;
         if(remembered&&nextPayments.some(item=>item.id===remembered))return remembered;
@@ -184,6 +189,7 @@ export function IssuanceAssistant({onNavigate}:{onNavigate:(page:AppPage)=>void}
     return students.filter(student=>normalize([student.nome,student.responsavel,student.turma,student.segmento,student.cpf_cnpj].filter(Boolean).join(" ")).includes(q));
   },[studentQuery,students]);
   const selectedStudent=useMemo(()=>students.find(student=>student.id===newStudentId)||null,[newStudentId,students]);
+  const resumePayment=useMemo(()=>payments.find(item=>item.id===resumePaymentId)||null,[payments,resumePaymentId]);
   const selected=useMemo(()=>payments.find(item=>item.id===selectedId)||null,[payments,selectedId]);
   useEffect(()=>{
     if(!selected){setDraftCompetence("");setDraftValue("");setDraftDescription("");return}
@@ -286,6 +292,7 @@ export function IssuanceAssistant({onNavigate}:{onNavigate:(page:AppPage)=>void}
       if(existing.data?.id){
         const existingId=Number(existing.data.id);
         setSelectedId(existingId);
+        setResumePaymentId(existingId);
         localStorage.setItem("jpi-issuance-assistant-payment",String(existingId));
         setNewEmissionOpen(false);
         setMessage("Já existe uma mensalidade para este aluno nesta competência. O Assistente abriu o processo existente para evitar duplicidade.");
@@ -303,6 +310,7 @@ export function IssuanceAssistant({onNavigate}:{onNavigate:(page:AppPage)=>void}
       if(insert.error||!insert.data)throw new Error(insert.error?.message||"Não foi possível criar a mensalidade.");
       const id=Number(insert.data.id);
       setSelectedId(id);
+      setResumePaymentId(id);
       localStorage.setItem("jpi-issuance-assistant-payment",String(id));
       setNewEmissionOpen(false);
       setMessage("Mensalidade criada e nota iniciada. O próximo passo é validar os dados fiscais.");
@@ -710,6 +718,11 @@ export function IssuanceAssistant({onNavigate}:{onNavigate:(page:AppPage)=>void}
         <div><span className="eyebrow">ETAPAS 1 E 2</span><h2>Aluno cadastrado → Mensalidade</h2><p>Escolha o aluno e crie a cobrança que dará origem à NFS-e.</p></div>
         {payments.length>0&&<button className="secondary" onClick={()=>{setNewEmissionOpen(false);setError("");setMessage("")}}>Continuar emissão existente</button>}
       </div>
+      {resumePayment&&<div className="assistant-resume-card">
+        <RefreshCw size={20}/>
+        <div><span>EMISSÃO EM ANDAMENTO</span><strong>{resumePayment.alunos?.nome||("Aluno #"+resumePayment.aluno_id)}</strong><small>{resumePayment.competencia} · {money(resumePayment.valor_nfse)} · {resumePayment.status_nfse}</small></div>
+        <button className="secondary" type="button" onClick={()=>{setSelectedId(resumePayment.id);setNewEmissionOpen(false);setError("");setMessage("")}}>Continuar de onde parei <ChevronRight size={16}/></button>
+      </div>}
       <div className="assistant-new-start-grid">
         <div className="assistant-new-students">
           <div className="search-input"><Search/><input value={studentQuery} onChange={e=>setStudentQuery(e.target.value)} placeholder="Buscar aluno, responsável, turma ou CPF"/></div>
@@ -889,7 +902,7 @@ export function IssuanceAssistant({onNavigate}:{onNavigate:(page:AppPage)=>void}
               <small>Último canal registrado: {delivery.canal.replace("_"," ")} · {new Date(delivery.created_at).toLocaleString("pt-BR")}</small>
             </div>
             <div className="assistant-complete-actions">
-              <button className="primary" type="button" onClick={()=>{setNewEmissionOpen(true);setNewStudentId(null);setNewCompetence(currentCompetenceInput());setNewValue("");setNewPaymentStatus("Aberto");setNewDescription("");setNewDescriptionEdited(false);setMessage("");setError("")}}><Plus size={16}/>Nova emissão</button>
+              <button className="primary" type="button" onClick={()=>{setNewEmissionOpen(true);setResumePaymentId(null);localStorage.removeItem("jpi-issuance-assistant-payment");setNewStudentId(null);setNewCompetence(currentCompetenceInput());setNewValue("");setNewPaymentStatus("Aberto");setNewDescription("");setNewDescriptionEdited(false);setMessage("");setError("")}}><Plus size={16}/>Nova emissão</button>
               <button className="secondary" type="button" onClick={()=>focusAndNavigate("Enviar notas")}>Ver histórico de envios</button>
             </div>
           </section>}
