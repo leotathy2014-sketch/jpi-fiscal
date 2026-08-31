@@ -93,12 +93,12 @@ export function IssuanceAssistant({onNavigate}:{onNavigate:(page:AppPage)=>void}
       supabase.from("mensalidades").select("id,aluno_id,competencia,valor_nfse,status_pagamento,status_nfse,dps_xml_path,dps_xml_id,nfse_homologacao_xml_path,chave_nfse_homologacao,homologacao_emitida_em,alunos(nome,responsavel,cpf_cnpj,email,whatsapp,cep,logradouro,numero,cidade,uf)").order("created_at",{ascending:false}),
       supabase.from("nfse_entregas").select("mensalidade_id,status,canal,created_at").order("created_at",{ascending:false}),
     ]);
-    if(paymentsResult.error||deliveriesResult.error){
-      setError(paymentsResult.error?.message||deliveriesResult.error?.message||"Não foi possível carregar o assistente.");
+    if(paymentsResult.error){
+      setError(paymentsResult.error.message||"Não foi possível carregar o assistente.");
     }else{
       const nextPayments=(paymentsResult.data||[]) as unknown as AssistantPayment[];
       setPayments(nextPayments);
-      setDeliveries((deliveriesResult.data||[]) as DeliveryState[]);
+      setDeliveries(deliveriesResult.error?[]:(deliveriesResult.data||[]) as DeliveryState[]);
       const remembered=Number(localStorage.getItem("jpi-issuance-assistant-payment")||"0");
       setSelectedId(current=>{
         if(current&&nextPayments.some(item=>item.id===current))return current;
