@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { sendSmtpEmail } from "@/lib/smtp";
 import { serializeAgendaEduCredentials, parseAgendaEduCredentials, testAgendaEduConnection } from "@/lib/agenda-edu";
+import { hasServerPermission } from "@/lib/server-permissions";
 
 export const runtime = "nodejs";
 export const maxDuration = 30;
@@ -23,8 +24,6 @@ async function authorizedClient(request:NextRequest){
   const supabase=createClient(supabaseUrl,supabaseKey,{global:{headers:{Authorization:authorization}},auth:{persistSession:false,autoRefreshToken:false}});
   const {data:{user},error:userError}=await supabase.auth.getUser(token);
   if(userError||!user?.email)return {ok:false as const,response:json({error:"Sessão expirada. Entre novamente."},401)};
-  const {data:access}=await supabase.from("app_users").select("role,active").eq("email",user.email).maybeSingle();
-  if(!access?.active||access.role!=="admin")return {ok:false as const,response:json({error:"Apenas o Administrador pode configurar as comunicações."},403)};
   return {ok:true as const,supabase,user};
 }
 
@@ -34,6 +33,7 @@ async function readConfig(supabase:SupabaseClient){
 
 export async function GET(request:NextRequest){
   const auth=await authorizedClient(request);if(!auth.ok)return auth.response;
+  if(!await hasServerPermission(auth.supabase,"settings.integrations.view")&&!await hasServerPermission(auth.supabase,"settings.integrations.edit"))return json({error:"Seu usuário não possui permissão para visualizar as integrações."},403);
   const {data,error}=await readConfig(auth.supabase);
   if(error||!data)return json({error:error?.message||"Configuração de comunicação não encontrada."},404);
   return json({ok:true,config:data});
@@ -41,6 +41,7 @@ export async function GET(request:NextRequest){
 
 export async function POST(request:NextRequest){
   const auth=await authorizedClient(request);if(!auth.ok)return auth.response;
+  if(!await hasServerPermission(auth.supabase,"settings.integrations.edit"))return json({error:"Seu usuário não possui permissão para configurar as integrações."},403);
   const backendSecret=process.env.JPI_BACKEND_SECRET;
   if(!backendSecret)return json({error:"O cofre de credenciais ainda não está configurado no servidor."},503);
   let body:Record<string,unknown>={};
