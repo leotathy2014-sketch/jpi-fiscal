@@ -13,7 +13,7 @@ const digits=(value:string)=>value.replace(/\D/g,"");
 const normalizeBrazilPhone=(value:string)=>{const phone=digits(value);return phone.length===10||phone.length===11?`55${phone}`:phone};
 const maskPhone=(value:string)=>value.length>=12?`+${value.slice(0,2)} (${value.slice(2,4)}) •••••-${value.slice(-4)}`:"Número interno configurado";
 
-type ManualConfig={whatsapp_test_recipient:string|null};
+type ManualConfig={whatsapp_test_recipient:string|null;whatsapp_manual_message_template:string|null};
 type ManualSender={id:number;nome:string;numero:string;ativo:boolean;ordem:number};
 type PaymentSource={id:number;competencia:string;valor_nfse:number;alunos:{nome:string;responsavel:string;whatsapp:string|null}|null};
 type DocumentSource={id:number;mensalidade_id:number;versao:number;chave_acesso:string;nfse_xml_path:string;estado:string};
@@ -37,16 +37,19 @@ async function readConfig(supabase:SupabaseClient,backendSecret:string){
   return {config,error:result.error};
 }
 
-function manualMessage(payment:PaymentSource,protectedUrl:string){
-  return [
-    "TESTE DE HOMOLOGAÇÃO — SEM VALIDADE FISCAL",
-    "",
-    `Olá, ${payment.alunos?.responsavel||"responsável"}.`,
-    `A NFS-e de ${payment.alunos?.nome||"aluno"}, competência ${payment.competencia}, está disponível no link privado abaixo:`,
-    protectedUrl,
-    "",
-    "O link é individual e válido por 30 dias. Não o encaminhe a terceiros.",
-  ].join("\n");
+const DEFAULT_MANUAL_MESSAGE="Olá, {responsavel}.\n\nSegue a NFS-e referente ao aluno(a) {aluno}, competência {competencia}.\n\nAcesse a nota pelo link seguro:\n{link}\n\nEste link é individual e válido por 30 dias.\n\nJardim Escola João Paulo I";
+
+function manualMessage(payment:PaymentSource,protectedUrl:string,template:string|null|undefined){
+  const values:Record<string,string>={
+    responsavel:payment.alunos?.responsavel||"responsável",
+    aluno:payment.alunos?.nome||"aluno",
+    competencia:payment.competencia,
+    valor:Number(payment.valor_nfse).toLocaleString("pt-BR",{style:"currency",currency:"BRL"}),
+    link:protectedUrl,
+  };
+  const source=(template||DEFAULT_MANUAL_MESSAGE).trim();
+  const body=source.replace(/\{(responsavel|aluno|competencia|valor|link)\}/g,(_match,key:string)=>values[key]||"");
+  return ["TESTE DE HOMOLOGAÇÃO — SEM VALIDADE FISCAL","",body].join("\n");
 }
 
 export async function GET(request:NextRequest){
@@ -123,7 +126,7 @@ export async function POST(request:NextRequest){
     const accessResult=await auth.supabase.rpc("create_nfse_delivery_access",{p_delivery_id:deliveryId,p_token_hash:accessTokenHash,p_xml_base64:xmlBuffer.toString("base64"),p_chave_acesso:document.chave_acesso,p_backend_secret:backendSecret});
     if(accessResult.error)throw new Error("Não foi possível criar o link protegido da NFS-e.");
     const protectedUrl=new URL(`/nota/${accessToken}`,request.nextUrl.origin).toString();
-    const whatsappUrl=new URL(`https://wa.me/${testRecipient}`);whatsappUrl.searchParams.set("text",manualMessage(payment,protectedUrl));
+    const whatsappUrl=new URL(`https://wa.me/${testRecipient}`);whatsappUrl.searchParams.set("text",manualMessage(payment,protectedUrl,config.whatsapp_manual_message_template));
     const openedAt=new Date().toISOString();
     const update=await auth.supabase.from("nfse_entregas").update({status:"aguardando_confirmacao",aberto_em:openedAt,updated_at:openedAt}).eq("id",deliveryId).select("id").maybeSingle();
     if(update.error||!update.data)throw new Error("O histórico do envio manual não pôde ser atualizado.");
