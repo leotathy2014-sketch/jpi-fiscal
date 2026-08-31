@@ -12,6 +12,7 @@ const json=(body:Record<string,unknown>,status=200)=>NextResponse.json(body,{sta
 const digits=(value:string)=>value.replace(/\D/g,"");
 const normalizeBrazilPhone=(value:string)=>{const phone=digits(value);return phone.length===10||phone.length===11?`55${phone}`:phone};
 const maskPhone=(value:string)=>value.length>=12?`+${value.slice(0,2)} (${value.slice(2,4)}) •••••-${value.slice(-4)}`:"Número interno configurado";
+const formatSchoolPhone=(value:string)=>{const phone=normalizeBrazilPhone(value);const national=phone.startsWith("55")?phone.slice(2):phone;if(national.length===11)return `+55 (${national.slice(0,2)}) ${national.slice(2,7)}-${national.slice(7)}`;if(national.length===10)return `+55 (${national.slice(0,2)}) ${national.slice(2,6)}-${national.slice(6)}`;return value};
 
 type ManualConfig={whatsapp_test_recipient:string|null;whatsapp_manual_message_template:string|null};
 type ManualSender={id:number;nome:string;numero:string;ativo:boolean;ordem:number};
@@ -60,7 +61,7 @@ export async function GET(request:NextRequest){
   const testRecipient=normalizeBrazilPhone(config.whatsapp_test_recipient||"");
   const {data:senderRows,error:senderError}=await auth.supabase.from("whatsapp_manual_senders").select("id,nome,numero,ativo,ordem").eq("ativo",true).order("ordem",{ascending:true}).order("id",{ascending:true}).limit(4);
   if(senderError)return json({error:"Não foi possível carregar os números remetentes do WhatsApp."},503);
-  const senders=((senderRows||[]) as ManualSender[]).map(sender=>({id:sender.id,nome:sender.nome,numero:maskPhone(sender.numero)}));
+  const senders=((senderRows||[]) as ManualSender[]).map(sender=>({id:sender.id,nome:sender.nome,numero:formatSchoolPhone(sender.numero)}));
   const recipientReady=brazilPhonePattern.test(testRecipient);
   return json({ok:true,ready:recipientReady&&senders.length>0,testRecipient:recipientReady?maskPhone(testRecipient):null,senders,mode:"manual",cost:"gratuito"});
 }
@@ -130,7 +131,7 @@ export async function POST(request:NextRequest){
     const openedAt=new Date().toISOString();
     const update=await auth.supabase.from("nfse_entregas").update({status:"aguardando_confirmacao",aberto_em:openedAt,updated_at:openedAt}).eq("id",deliveryId).select("id").maybeSingle();
     if(update.error||!update.data)throw new Error("O histórico do envio manual não pôde ser atualizado.");
-    return json({ok:true,status:"aguardando_confirmacao",deliveryId,whatsappUrl:whatsappUrl.toString(),expiresAt:accessResult.data,actualRecipient:maskPhone(testRecipient),intendedRecipient,sender:{id:sender.id,nome:sender.nome,numero:maskPhone(sender.numero)},message:"WhatsApp preparado. Confirme no sistema depois de enviar a mensagem."});
+    return json({ok:true,status:"aguardando_confirmacao",deliveryId,whatsappUrl:whatsappUrl.toString(),expiresAt:accessResult.data,actualRecipient:maskPhone(testRecipient),intendedRecipient,sender:{id:sender.id,nome:sender.nome,numero:formatSchoolPhone(sender.numero)},message:"WhatsApp preparado. Confirme no sistema depois de enviar a mensagem."});
   }catch{
     await auth.supabase.from("nfse_entregas").update({status:"erro",erro_mensagem:"Não foi possível preparar o link privado para o WhatsApp.",updated_at:new Date().toISOString()}).eq("id",deliveryId);
     return json({error:"Não foi possível preparar o link privado para o WhatsApp. Nenhum documento foi exposto."},400);
