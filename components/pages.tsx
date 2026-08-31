@@ -1200,7 +1200,7 @@ type CommunicationConfig = {
   agenda_edu_ultimo_status: string;
 };
 
-function CommunicationsSettings({accessToken,onClose,onChanged,canEdit}:{accessToken:string|null;onClose:()=>void;onChanged:(config:CommunicationConfig)=>void;canEdit:boolean}) {
+function CommunicationsSettings({accessToken,onChanged,canEdit,section}:{accessToken:string|null;onChanged:(config:CommunicationConfig)=>void;canEdit:boolean;section:"email"|"whatsapp"|"manual-whatsapp"|"agenda"}) {
   const supabase=useMemo(()=>createSupabaseBrowserClient(),[]);
   const [config,setConfig]=useState<CommunicationConfig|null>(null);
   const [loading,setLoading]=useState(true);
@@ -1267,13 +1267,19 @@ function CommunicationsSettings({accessToken,onClose,onChanged,canEdit}:{accessT
   async function saveAgenda(event:FormEvent<HTMLFormElement>){event.preventDefault();setBusy("save-agenda");setError("");setMessage("");try{setMessage(await run("save-agenda",{schoolIdentifier:agendaEduSchoolIdentifier,channelId:agendaEduChannelId,clientId:agendaEduClientId,clientSecret:agendaEduClientSecret,schoolToken:agendaEduSchoolToken}));setAgendaEduClientId("");setAgendaEduClientSecret("");setAgendaEduSchoolToken("");await load();}catch(requestError){setError(requestError instanceof Error?requestError.message:"Não foi possível salvar a Agenda Edu.");}finally{setBusy("");}}
   async function testAgenda(){setBusy("test-agenda");setError("");setMessage("");try{setMessage(await run("test-agenda",{}));await load();}catch(requestError){setError(requestError instanceof Error?requestError.message:"Não foi possível testar a Agenda Edu.");}finally{setBusy("");}}
   const disabled=loading||Boolean(busy)||!canEdit;
-  return <div className="modal-backdrop"><div className="modal-card communications-modal">
-    <div className="modal-head"><div><h2>Integrações de comunicação</h2><p>Configure os canais sem alterar o código do sistema.</p></div><button className="icon-button" onClick={onClose} disabled={Boolean(busy)} aria-label="Fechar"><X/></button></div>
-    <div className="communications-body">
-      {error&&<div className="error-box">{error}</div>}{message&&<div className="success-box">{message}</div>}
-      <div className="notice compact"><KeyRound/><span>{canEdit?"Chaves e tokens são criptografados no cofre do servidor. Depois de salvos, eles nunca voltam a ser exibidos no navegador.":"Modo somente leitura: seu perfil pode conferir o estado dos canais, mas não pode salvar, testar ou alterar credenciais."}</span></div>
-      {loading?<div className="communications-loading">Carregando configurações…</div>:<div className="communication-settings-grid">
-        <form className="communication-channel-card data-form" onSubmit={saveEmail}>
+  const sectionCopy={
+    email:{title:"E-mail",description:"Servidor, remetente, credencial e teste de entrega por e-mail.",Icon:Mail},
+    whatsapp:{title:"WhatsApp API",description:"Integração oficial da Meta Cloud API e dados de homologação.",Icon:MessageCircle},
+    "manual-whatsapp":{title:"WhatsApps da escola",description:"Contas usadas no envio manual e mensagem padrão enviada aos responsáveis.",Icon:MessageCircle},
+    agenda:{title:"Agenda Edu",description:"Credenciais do Sandbox e integração de mensagens com responsáveis.",Icon:CalendarDays},
+  }[section];
+  const SectionIcon=sectionCopy.Icon;
+  return <div className="integration-detail-panel">
+    <div className="integration-detail-heading"><span className={`integration-icon ${section==="agenda"?"purple":section==="email"?"blue":"green"}`}><SectionIcon/></span><div><h2>{sectionCopy.title}</h2><p>{sectionCopy.description}</p></div></div>
+    {error&&<div className="error-box">{error}</div>}{message&&<div className="success-box">{message}</div>}
+    <div className="notice compact"><KeyRound/><span>{canEdit?"Chaves e tokens ficam protegidos no cofre do servidor. Depois de salvos, não voltam a ser exibidos no navegador.":"Modo somente leitura: seu perfil pode consultar esta integração, mas não pode alterar credenciais ou configurações."}</span></div>
+    {loading?<div className="communications-loading">Carregando configuração…</div>:<div className="integration-single-content">
+      {section==="email"&&<><form className="communication-channel-card data-form" onSubmit={saveEmail}>
           <div className="communication-channel-head"><span className="integration-icon blue"><Mail/></span><div><h3>E-mail</h3><small>{emailProvider==="resend"?"Resend":emailProvider==="locaweb_smtp"?"SMTP Locaweb":"E-mail Locaweb"}</small></div><Status>{config?.email_ultimo_status==="conectado"?"Conectado":config?.email_credencial_configurada?"Configurar":"Pendente"}</Status></div>
           <label>Provedor de envio<select value={emailProvider} onChange={event=>{const provider=event.target.value;setEmailProvider(provider);if(provider==="locaweb_email")setSmtpUsername(fromAddress);}}><option value="locaweb_email">E-mail Locaweb</option><option value="locaweb_smtp">SMTP Locaweb contratado</option><option value="resend">Resend</option></select><small>Para a caixa atual, selecione E-mail Locaweb.</small></label>
           <label>Nome do remetente<input value={fromName} onChange={event=>setFromName(event.target.value)} required maxLength={100}/></label>
@@ -1285,8 +1291,8 @@ function CommunicationsSettings({accessToken,onClose,onChanged,canEdit}:{accessT
           <button className="primary full" disabled={disabled}>{busy==="save-email"?"Salvando…":"Salvar configuração de e-mail"}</button>
           <div className="communication-test"><label>Destinatário do teste<input type="email" value={testRecipient} onChange={event=>setTestRecipient(event.target.value)}/></label><button type="button" className="secondary full" onClick={testEmail} disabled={disabled||!config?.email_credencial_configurada}>{busy==="test-email"?"Enviando teste…":"Enviar e-mail de teste"}</button></div>
           {config?.email_testada_em&&<small className="last-test">Último teste: {new Date(config.email_testada_em).toLocaleString("pt-BR")}</small>}
-        </form>
-        <form className="communication-channel-card data-form" onSubmit={saveWhatsapp}>
+        </form></>}
+      {section==="whatsapp"&&<><form className="communication-channel-card data-form" onSubmit={saveWhatsapp}>
           <div className="communication-channel-head"><span className="integration-icon green"><MessageCircle/></span><div><h3>WhatsApp</h3><small>Meta Cloud API</small></div><Status>{config?.whatsapp_ultimo_status==="conectado"?"Conectado":config?.whatsapp_token_configurado?"Configurar":"Pendente"}</Status></div>
           <label>ID do número do WhatsApp<input inputMode="numeric" value={phoneNumberId} onChange={event=>setPhoneNumberId(event.target.value)} required placeholder="Phone Number ID"/></label>
           <label>ID da conta comercial<input inputMode="numeric" value={businessAccountId} onChange={event=>setBusinessAccountId(event.target.value)} required placeholder="WhatsApp Business Account ID"/></label>
@@ -1297,8 +1303,9 @@ function CommunicationsSettings({accessToken,onClose,onChanged,canEdit}:{accessT
           <button className="primary full" disabled={disabled}>{busy==="save-whatsapp"?"Salvando…":"Salvar configuração do WhatsApp"}</button>
           <button type="button" className="secondary full" onClick={testWhatsapp} disabled={disabled||!config?.whatsapp_token_configurado}>{busy==="test-whatsapp"?"Testando conexão…":"Testar conexão sem enviar mensagem"}</button>
           {config?.whatsapp_testada_em&&<small className="last-test">Último teste: {new Date(config.whatsapp_testada_em).toLocaleString("pt-BR")}</small>}
-        </form><div className="communication-channel-card data-form"><div className="communication-channel-head"><span className="integration-icon green"><MessageCircle/></span><div><h3>WhatsApps da escola</h3><small>Envio manual pelo Web ou app</small></div><Status>{manualSenders.length?String(manualSenders.length)+"/4":"Pendente"}</Status></div><div className="notice compact"><ShieldCheck/><span>Cadastre até 4 contas da escola, por exemplo Secretaria e Central de Matrícula. Antes de cada envio, o usuário escolherá qual conta utilizar.</span></div><div className="whatsapp-message-editor"><label>Mensagem padrão para os responsáveis<textarea value={manualWhatsappMessage} onChange={event=>setManualWhatsappMessage(event.target.value)} maxLength={2000} rows={9} placeholder={DEFAULT_WHATSAPP_MANUAL_MESSAGE}/><small>Você pode usar: <b>{"{responsavel}"}</b>, <b>{"{aluno}"}</b>, <b>{"{competencia}"}</b>, <b>{"{valor}"}</b> e <b>{"{link}"}</b>. A variável <b>{"{link}"}</b> é obrigatória.</small></label><div className="form-actions"><button type="button" className="secondary" onClick={()=>setManualWhatsappMessage(DEFAULT_WHATSAPP_MANUAL_MESSAGE)} disabled={disabled}>Restaurar mensagem padrão</button><button type="button" className="primary" onClick={saveManualWhatsappMessage} disabled={disabled||manualWhatsappMessage.trim().length<20}>{busy==="save-manual-message"?"Salvando…":"Salvar mensagem do WhatsApp"}</button></div></div>{manualSenders.map((sender,index)=><div className="panel compact-panel" key={sender.id||index}><div className="form-row"><label>Identificação<input value={sender.nome} onChange={event=>updateManualSender(index,"nome",event.target.value)} maxLength={60} placeholder={index===0?"Secretaria":"Central de Matrícula"}/></label><label>Número com WhatsApp<input inputMode="tel" value={sender.numero} onChange={event=>updateManualSender(index,"numero",maskWhatsappPhone(event.target.value))} maxLength={15} placeholder="(21) 99999-9999"/></label></div><div className="form-actions"><label className="checkbox-line"><input type="checkbox" checked={sender.ativo} onChange={event=>updateManualSender(index,"ativo",event.target.checked)}/>Ativo para escolha</label><button type="button" className="secondary" onClick={()=>removeManualSender(index)} disabled={disabled}>Remover</button></div></div>)}<div className="form-actions"><button type="button" className="secondary" onClick={addManualSender} disabled={disabled||manualSenders.length>=4}><Plus size={17}/>Adicionar número</button><button type="button" className="primary" onClick={saveManualSenders} disabled={disabled||!manualSenders.length}>{busy==="save-manual-senders"?"Salvando…":"Salvar WhatsApps da escola"}</button></div><small>O WhatsApp Web/app precisa estar conectado na mesma conta escolhida no JPI Fiscal.</small></div>
-        <form className="communication-channel-card data-form" onSubmit={saveAgenda}>
+        </form></>}
+      {section==="manual-whatsapp"&&<><div className="communication-channel-card data-form"><div className="communication-channel-head"><span className="integration-icon green"><MessageCircle/></span><div><h3>WhatsApps da escola</h3><small>Envio manual pelo Web ou app</small></div><Status>{manualSenders.length?String(manualSenders.length)+"/4":"Pendente"}</Status></div><div className="notice compact"><ShieldCheck/><span>Cadastre até 4 contas da escola, por exemplo Secretaria e Central de Matrícula. Antes de cada envio, o usuário escolherá qual conta utilizar.</span></div><div className="whatsapp-message-editor"><label>Mensagem padrão para os responsáveis<textarea value={manualWhatsappMessage} onChange={event=>setManualWhatsappMessage(event.target.value)} maxLength={2000} rows={9} placeholder={DEFAULT_WHATSAPP_MANUAL_MESSAGE}/><small>Você pode usar: <b>{"{responsavel}"}</b>, <b>{"{aluno}"}</b>, <b>{"{competencia}"}</b>, <b>{"{valor}"}</b> e <b>{"{link}"}</b>. A variável <b>{"{link}"}</b> é obrigatória.</small></label><div className="form-actions"><button type="button" className="secondary" onClick={()=>setManualWhatsappMessage(DEFAULT_WHATSAPP_MANUAL_MESSAGE)} disabled={disabled}>Restaurar mensagem padrão</button><button type="button" className="primary" onClick={saveManualWhatsappMessage} disabled={disabled||manualWhatsappMessage.trim().length<20}>{busy==="save-manual-message"?"Salvando…":"Salvar mensagem do WhatsApp"}</button></div></div>{manualSenders.map((sender,index)=><div className="panel compact-panel" key={sender.id||index}><div className="form-row"><label>Identificação<input value={sender.nome} onChange={event=>updateManualSender(index,"nome",event.target.value)} maxLength={60} placeholder={index===0?"Secretaria":"Central de Matrícula"}/></label><label>Número com WhatsApp<input inputMode="tel" value={sender.numero} onChange={event=>updateManualSender(index,"numero",maskWhatsappPhone(event.target.value))} maxLength={15} placeholder="(21) 99999-9999"/></label></div><div className="form-actions"><label className="checkbox-line"><input type="checkbox" checked={sender.ativo} onChange={event=>updateManualSender(index,"ativo",event.target.checked)}/>Ativo para escolha</label><button type="button" className="secondary" onClick={()=>removeManualSender(index)} disabled={disabled}>Remover</button></div></div>)}<div className="form-actions"><button type="button" className="secondary" onClick={addManualSender} disabled={disabled||manualSenders.length>=4}><Plus size={17}/>Adicionar número</button><button type="button" className="primary" onClick={saveManualSenders} disabled={disabled||!manualSenders.length}>{busy==="save-manual-senders"?"Salvando…":"Salvar WhatsApps da escola"}</button></div><small>O WhatsApp Web/app precisa estar conectado na mesma conta escolhida no JPI Fiscal.</small></div></>}
+      {section==="agenda"&&<><div className="integration-agenda-stack"><form className="communication-channel-card data-form" onSubmit={saveAgenda}>
           <div className="communication-channel-head"><span className="integration-icon purple"><CalendarDays/></span><div><h3>Agenda Edu</h3><small>Mensagens com os responsáveis</small></div><Status>{config?.agenda_edu_ultimo_status==="conectado"?"Conectado":config?.agenda_edu_credencial_configurada?"Testar":"Configurar"}</Status></div>
           <div className="notice compact"><ShieldCheck/><span>Documentação oficial v2 confirmada. A conexão usará somente o Sandbox até concluirmos os testes dos responsáveis e anexos.</span></div>
           <label>Identificação da escola (opcional)<input value={agendaEduSchoolIdentifier} onChange={event=>setAgendaEduSchoolIdentifier(event.target.value)} maxLength={100} placeholder="Jardim Escola João Paulo I"/><small>É apenas um nome interno para facilitar a conferência.</small></label>
@@ -1311,25 +1318,24 @@ function CommunicationsSettings({accessToken,onClose,onChanged,canEdit}:{accessT
           <button className="primary full" disabled={disabled}>{busy==="save-agenda"?"Salvando…":"Salvar configuração da Agenda Edu"}</button>
           <button type="button" className="secondary full" onClick={testAgenda} disabled={disabled||!config?.agenda_edu_credencial_configurada}>{busy==="test-agenda"?"Testando conexão…":"Testar conexão sem enviar mensagem"}</button>
           {config?.agenda_edu_testada_em&&<small className="last-test">Último teste: {new Date(config.agenda_edu_testada_em).toLocaleString("pt-BR")}</small>}
-        </form>
-        <AgendaEduStudentLinks/>
-      </div>}
-      <div className="form-actions"><button type="button" className="secondary" onClick={onClose} disabled={Boolean(busy)}>Fechar</button></div>
-    </div>
-  </div></div>;
+        </form></div><AgendaEduStudentLinks/></>}
+    </div>}
+  </div>;
 }
+
+type IntegrationSection="overview"|"nfse"|"email"|"whatsapp"|"manual-whatsapp"|"agenda";
 
 function Integrations({accessToken}:{accessToken:string|null}) {
   const {can}=useAccess();const canEdit=can("settings.integrations.edit");const canTestFiscal=can("nfse.test_connection");
-  const [open, setOpen] = useState(false);
-  const [communicationsOpen,setCommunicationsOpen]=useState(false);
+  const [section,setSection]=useState<IntegrationSection>("overview");
   const [communicationConfig,setCommunicationConfig]=useState<CommunicationConfig|null>(null);
-  const [busy, setBusy] = useState(false);
-  const [tested, setTested] = useState(false);
-  const [error, setError] = useState("");
-  const [message, setMessage] = useState("");
-  const [elapsed, setElapsed] = useState(0);
-  const [connectionStage, setConnectionStage] = useState("");
+  const [busy,setBusy]=useState(false);
+  const [tested,setTested]=useState(false);
+  const [error,setError]=useState("");
+  const [message,setMessage]=useState("");
+  const [elapsed,setElapsed]=useState(0);
+  const [connectionStage,setConnectionStage]=useState("");
+
   useEffect(()=>{
     if(!accessToken)return;
     let active=true;
@@ -1339,101 +1345,99 @@ function Integrations({accessToken}:{accessToken:string|null}) {
       .catch(()=>undefined);
     return()=>{active=false;};
   },[accessToken]);
-  useEffect(() => {
-    if (!busy) return;
-    const startedAt = Date.now() - elapsed * 1000;
-    const timer = window.setInterval(() => setElapsed(Math.floor((Date.now() - startedAt) / 1000)), 250);
-    return () => window.clearInterval(timer);
-  }, [busy, elapsed]);
-  useEffect(() => {
-    if (!busy) return;
-    const watchdog = window.setTimeout(() => {
-      setBusy(false);
-      setConnectionStage("");
+
+  useEffect(()=>{
+    setError("");setMessage("");
+  },[section]);
+
+  useEffect(()=>{
+    if(!busy)return;
+    const startedAt=Date.now()-elapsed*1000;
+    const timer=window.setInterval(()=>setElapsed(Math.floor((Date.now()-startedAt)/1000)),250);
+    return()=>window.clearTimeout(timer);
+  },[busy,elapsed]);
+
+  useEffect(()=>{
+    if(!busy)return;
+    const watchdog=window.setTimeout(()=>{
+      setBusy(false);setConnectionStage("");
       setError("A preparação da conexão foi encerrada após 25 segundos. Atualize a página e entre novamente se o problema continuar.");
-    }, 25000);
-    return () => window.clearTimeout(watchdog);
-  }, [busy]);
-  const elapsedLabel = `${String(Math.floor(elapsed / 60)).padStart(2, "0")}:${String(elapsed % 60).padStart(2, "0")}`;
-  async function testHomologation(event: FormEvent<HTMLFormElement>) {
+    },25000);
+    return()=>window.clearTimeout(watchdog);
+  },[busy]);
+
+  const elapsedLabel=`${String(Math.floor(elapsed/60)).padStart(2,"0")}:${String(elapsed%60).padStart(2,"0")}`;
+
+  async function testHomologation(event:FormEvent<HTMLFormElement>){
     event.preventDefault();
     setElapsed(0);setBusy(true);setError("");setMessage("");setConnectionStage("Preparando certificado A1…");
-    const token = accessToken;
-    if (!token) { setError("Sessão expirada. Saia do sistema e entre novamente.");setBusy(false);setConnectionStage("");return; }
-    let timeout = 0;
-    try {
+    const token=accessToken;
+    if(!token){setError("Sessão expirada. Saia do sistema e entre novamente.");setBusy(false);setConnectionStage("");return}
+    let timeout=0;
+    try{
       setConnectionStage("Conectando ao Emissor Nacional de testes…");
-      const response = await Promise.race([
-        authenticatedFetch("/api/nfse/homologation/test", {
-          method: "POST",
-          headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
-          body: JSON.stringify({ action: "test-connection" }),
-          cache: "no-store",
-        }),
-        new Promise<never>((_, reject) => { timeout = window.setTimeout(() => reject(new Error("JPI_CONNECTION_TIMEOUT")), 25000); }),
+      const response=await Promise.race([
+        authenticatedFetch("/api/nfse/homologation/test",{method:"POST",headers:{Authorization:`Bearer ${token}`,"Content-Type":"application/json"},body:JSON.stringify({action:"test-connection"}),cache:"no-store"}),
+        new Promise<never>((_,reject)=>{timeout=window.setTimeout(()=>reject(new Error("JPI_CONNECTION_TIMEOUT")),25000)})
       ]);
-      const data = await response.json().catch(() => ({})) as { ok?:boolean;environment?:string;error?:string;ready?:boolean;issuanceStatus?:number };
+      const data=await response.json().catch(()=>({})) as {ok?:boolean;environment?:string;error?:string;ready?:boolean;issuanceStatus?:number};
       window.dispatchEvent(new Event("jpi-sefin-status-updated"));
-      if (!response.ok || !data?.ok) { setError(data?.error || "Não foi possível testar a integração.");return; }
-      if (!data.ready) { setError("O servidor de emissão está instável. Não tente enviar a nota agora.");return; }
-      setTested(true);setMessage(`Certificado confirmado e servidor de emissão da SEFIN respondendo no ambiente de ${data.environment}. Você pode tentar a homologação; nenhuma nota foi emitida neste teste.`);
-    } catch (requestError) {
-      const timedOut = requestError instanceof Error && (requestError.message === "JPI_CONNECTION_TIMEOUT" || requestError.name === "AbortError");
-      setError(timedOut ? "A conexão foi encerrada após 25 segundos sem resposta. O ambiente nacional ou o acesso ao certificado não respondeu." : "A conexão foi interrompida. Confira sua internet e tente novamente.");
-    } finally {
-      if (timeout) window.clearTimeout(timeout);setBusy(false);setConnectionStage("");
-    }
+      if(!response.ok||!data?.ok){setError(data?.error||"Não foi possível testar a integração.");return}
+      if(!data.ready){setError("O servidor de emissão está instável. Não tente enviar a nota agora.");return}
+      setTested(true);setMessage(`Certificado confirmado e servidor da SEFIN respondendo no ambiente de ${data.environment}. Nenhuma nota foi emitida neste teste.`);
+    }catch(requestError){
+      const timedOut=requestError instanceof Error&&(requestError.message==="JPI_CONNECTION_TIMEOUT"||requestError.name==="AbortError");
+      setError(timedOut?"A conexão foi encerrada após 25 segundos sem resposta.":"A conexão foi interrompida. Confira sua internet e tente novamente.");
+    }finally{if(timeout)window.clearTimeout(timeout);setBusy(false);setConnectionStage("")}
   }
-  return (
-    <><div className="settings-grid">
-      <article className="integration-card">
-        <div className="integration-head">
-          <span className="integration-icon green">
-            <Building2 />
-          </span>
-          <Status>Conectado</Status>
-        </div>
-        <h3>Supabase</h3>
-        <p>Banco de dados, autenticação e sessões do JPI Fiscal.</p>
-        <div className="integration-meta">
-          <span>Ambiente atual</span>
-          <strong>Produção</strong>
-        </div>
-        <button className="secondary full">Ver configuração</button>
-      </article>
-      <article className="integration-card">
-        <div className="integration-head">
-          <span className="integration-icon blue">
-            <FileCheck2 />
-          </span>
-          <Status>{tested ? "Conectado" : "Homologação"}</Status>
-        </div>
-        <h3>Provedor de NFS-e</h3>
-        <p>Integração municipal preparada, sem envio fiscal real.</p>
-        <div className="integration-meta">
-          <span>Emissão real</span>
-          <strong className="amber-text">Desativada</strong>
-        </div>
-        {canTestFiscal?<button className="secondary full" onClick={() => { setOpen(true);setError("");setMessage(""); }}>Testar conexão segura</button>:<span className="integration-readonly-note">Teste fiscal não liberado para este perfil.</span>}
-      </article>
-      <article className="integration-card">
-        <div className="integration-head">
-          <span className="integration-icon purple">
-            <Link2 />
-          </span>
-          <Status>{communicationConfig?.email_ultimo_status==="conectado"||communicationConfig?.whatsapp_ultimo_status==="conectado"?"Conectado":"Pendente"}</Status>
-        </div>
-        <h3>Comunicações</h3>
-        <p>Configure e-mail, WhatsApp e Agenda Edu para recibos e avisos.</p>
-        <div className="integration-meta">
-          <span>Canal</span>
-          <strong>{communicationConfig?.agenda_edu_ultimo_status==="conectado"?"3 canais conectados":communicationConfig?.email_credencial_configurada&&communicationConfig?.whatsapp_token_configurado?"E-mail e WhatsApp":communicationConfig?.email_credencial_configurada?"E-mail configurado":communicationConfig?.whatsapp_token_configurado?"WhatsApp configurado":"Não configurado"}</strong>
-        </div>
-        <button className="secondary full" onClick={()=>setCommunicationsOpen(true)}>{canEdit?"Configurar canais":"Visualizar canais"}</button>
-      </article>
-    </div>{communicationsOpen&&<CommunicationsSettings accessToken={accessToken} onClose={()=>setCommunicationsOpen(false)} onChanged={setCommunicationConfig} canEdit={canEdit}/>} {canTestFiscal&&open&&<div className="modal-backdrop"><div className="modal-card small-modal"><div className="modal-head"><h2>Testar ambiente de homologação</h2><button className="icon-button" onClick={()=>setOpen(false)}><X/></button></div><form className="data-form" onSubmit={testHomologation}>{error&&<div className="error-box">{error}</div>}{message&&<div className="success-box">{message}</div>}<div className="notice compact warning"><ShieldCheck/><span>Este teste usa o certificado A1 e a senha protegida no cofre somente para autenticar a conexão com a produção restrita. Nenhuma DPS ou NFS-e será enviada.</span></div>{(busy||elapsed>0)&&<div className="connection-timer"><Clock3/><span>{busy?(connectionStage||"Iniciando conexão…"):"Tempo da tentativa"}</span><strong>{elapsedLabel}</strong></div>}{busy&&<TransmissionProgress kind="connection"/>}<div className="notice compact"><KeyRound/><span>A senha será recuperada somente pelo servidor e não será exibida no navegador.</span></div><div className="form-actions"><button type="button" className="secondary" onClick={()=>setOpen(false)} disabled={busy}>Fechar</button><button className="primary" disabled={busy||tested}>{busy?`Conectando · ${elapsedLabel}`:tested?"Conexão confirmada":"Testar conexão"}</button></div></form></div></div>}</>
-  );
+
+  const integrationItems=[
+    {key:"overview" as const,label:"Visão geral",Icon:SlidersHorizontal,status:""},
+    {key:"nfse" as const,label:"NFS-e",Icon:FileCheck2,status:tested?"Conectado":"Homologação"},
+    {key:"email" as const,label:"E-mail",Icon:Mail,status:communicationConfig?.email_ultimo_status==="conectado"?"Conectado":communicationConfig?.email_credencial_configurada?"Configurar":"Pendente"},
+    {key:"whatsapp" as const,label:"WhatsApp API",Icon:MessageCircle,status:communicationConfig?.whatsapp_ultimo_status==="conectado"?"Conectado":communicationConfig?.whatsapp_token_configurado?"Configurar":"Pendente"},
+    {key:"manual-whatsapp" as const,label:"WhatsApps da escola",Icon:MessageCircle,status:"Manual"},
+    {key:"agenda" as const,label:"Agenda Edu",Icon:CalendarDays,status:communicationConfig?.agenda_edu_ultimo_status==="conectado"?"Conectado":communicationConfig?.agenda_edu_credencial_configurada?"Testar":"Configurar"},
+  ];
+
+  return <>
+    <div className="integration-navigation" aria-label="Menu de integrações">
+      {integrationItems.map(item=><button type="button" key={item.key} className={section===item.key?"active":""} onClick={()=>setSection(item.key)}>
+        <span className="integration-nav-icon"><item.Icon/></span>
+        <span><strong>{item.label}</strong>{item.status&&<small>{item.status}</small>}</span>
+      </button>)}
+    </div>
+
+    {section==="overview"&&<div className="integration-overview">
+      <div className="integration-overview-heading"><div><h2>Integrações do sistema</h2><p>Escolha uma integração no menu acima para abrir somente as configurações daquele canal.</p></div><Status>{canEdit?"Gerenciável":"Somente leitura"}</Status></div>
+      <div className="integration-overview-grid">
+        <button type="button" className="integration-overview-card" onClick={()=>setSection("nfse")}><span className="integration-icon blue"><FileCheck2/></span><div><strong>NFS-e / SEFIN</strong><small>Certificado, ambiente e teste de conexão fiscal.</small></div><Status>{tested?"Conectado":"Homologação"}</Status></button>
+        <button type="button" className="integration-overview-card" onClick={()=>setSection("email")}><span className="integration-icon blue"><Mail/></span><div><strong>E-mail</strong><small>Locaweb, remetente, senha e teste de entrega.</small></div><Status>{communicationConfig?.email_ultimo_status==="conectado"?"Conectado":"Pendente"}</Status></button>
+        <button type="button" className="integration-overview-card" onClick={()=>setSection("whatsapp")}><span className="integration-icon green"><MessageCircle/></span><div><strong>WhatsApp API</strong><small>Meta Cloud API e dados de homologação.</small></div><Status>{communicationConfig?.whatsapp_ultimo_status==="conectado"?"Conectado":"Pendente"}</Status></button>
+        <button type="button" className="integration-overview-card" onClick={()=>setSection("manual-whatsapp")}><span className="integration-icon green"><MessageCircle/></span><div><strong>WhatsApps da escola</strong><small>Números manuais e mensagem padrão para responsáveis.</small></div><Status>Manual</Status></button>
+        <button type="button" className="integration-overview-card" onClick={()=>setSection("agenda")}><span className="integration-icon purple"><CalendarDays/></span><div><strong>Agenda Edu</strong><small>Sandbox, credenciais e canal escolar.</small></div><Status>{communicationConfig?.agenda_edu_ultimo_status==="conectado"?"Conectado":"Configurar"}</Status></button>
+        <div className="integration-overview-card static"><span className="integration-icon green"><Building2/></span><div><strong>Supabase</strong><small>Banco de dados, autenticação e sessões.</small></div><Status>Conectado</Status></div>
+      </div>
+    </div>}
+
+    {section==="nfse"&&<div className="integration-detail-panel">
+      <div className="integration-detail-heading"><span className="integration-icon blue"><FileCheck2/></span><div><h2>NFS-e / SEFIN</h2><p>Ambiente fiscal, certificado A1 e teste de comunicação com o Emissor Nacional.</p></div><Status>{tested?"Conectado":"Homologação"}</Status></div>
+      {error&&<div className="error-box">{error}</div>}{message&&<div className="success-box">{message}</div>}
+      <div className="integration-nfse-summary"><div><span>Ambiente atual</span><strong>Produção restrita / Homologação</strong></div><div><span>Emissão real</span><strong className="amber-text">Desativada</strong></div><div><span>Segurança</span><strong>Certificado A1 + TLS</strong></div></div>
+      {canTestFiscal?<form className="data-form integration-test-form" onSubmit={testHomologation}>
+        <div className="notice compact warning"><ShieldCheck/><span>O teste usa o certificado A1 apenas para autenticar a conexão. Nenhuma DPS ou NFS-e será enviada.</span></div>
+        {(busy||elapsed>0)&&<div className="connection-timer"><Clock3/><span>{busy?(connectionStage||"Iniciando conexão…"):"Tempo da tentativa"}</span><strong>{elapsedLabel}</strong></div>}
+        {busy&&<TransmissionProgress kind="connection"/>}
+        <div className="notice compact"><KeyRound/><span>A senha é recuperada somente pelo servidor e não é exibida no navegador.</span></div>
+        <div className="form-actions"><button className="primary" disabled={busy||tested}>{busy?`Conectando · ${elapsedLabel}`:tested?"Conexão confirmada":"Testar conexão segura"}</button></div>
+      </form>:<div className="notice compact"><ShieldCheck/><span>Seu perfil não possui permissão para testar a integração fiscal.</span></div>}
+    </div>}
+
+    {(section==="email"||section==="whatsapp"||section==="manual-whatsapp"||section==="agenda")&&
+      <CommunicationsSettings accessToken={accessToken} onChanged={setCommunicationConfig} canEdit={canEdit} section={section}/>}
+  </>;
 }
+
 type ManagedRole="master"|"admin"|"financeiro"|"secretaria"|"consulta";
 type ManagedUser = {
   id: number;
