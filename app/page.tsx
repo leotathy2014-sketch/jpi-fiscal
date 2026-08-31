@@ -7,6 +7,8 @@ import { Login, SetPassword } from "@/components/login";
 import { BrandLogo } from "@/components/branding";
 import { AccessProvider } from "@/components/access";
 
+const APP_URL="https://jpi-fiscal.vercel.app";
+
 export default function Home() {
   const supabase = useMemo(() => createSupabaseBrowserClient(), []);
   const [loading, setLoading] = useState(true);
@@ -22,9 +24,51 @@ export default function Home() {
 
   useEffect(() => {
     if (!supabase) { setLoading(false); return; }
-    supabase.auth.getSession().then(({ data }) => { setEmail(data.session?.user.email ?? null);setAccessToken(data.session?.access_token ?? null);setNeedsPassword(data.session?.user.user_metadata?.needs_password===true); setLoading(false); });
-    const { data } = supabase.auth.onAuthStateChange((event, session) => {setEmail(session?.user.email ?? null);setAccessToken(session?.access_token ?? null);setNeedsPassword(session?.user.user_metadata?.needs_password===true);if(!session)setAccessReady(false);if(event==="PASSWORD_RECOVERY")setPasswordRecovery(true)});
-    return () => data.subscription.unsubscribe();
+    let active=true;
+    const initialize=async()=>{
+      try{
+        const url=new URL(window.location.href);
+        const code=url.searchParams.get("code");
+        if(code){
+          const {data,error}=await supabase.auth.exchangeCodeForSession(code);
+          if(!active)return;
+          if(error||!data.session){
+            setAuthError("Este link de recuperação é inválido ou expirou. Solicite um novo link em “Esqueci minha senha”.");
+            setPasswordRecovery(false);
+            window.history.replaceState({},document.title,window.location.pathname);
+            setLoading(false);
+            return;
+          }
+          setEmail(data.session.user.email??null);
+          setAccessToken(data.session.access_token);
+          setNeedsPassword(false);
+          setPasswordRecovery(true);
+          setAuthError("");
+          window.history.replaceState({},document.title,window.location.pathname);
+          setLoading(false);
+          return;
+        }
+        const {data}=await supabase.auth.getSession();
+        if(!active)return;
+        setEmail(data.session?.user.email??null);
+        setAccessToken(data.session?.access_token??null);
+        setNeedsPassword(data.session?.user.user_metadata?.needs_password===true);
+      }catch{
+        if(active)setAuthError("Não foi possível validar o link de recuperação. Solicite um novo link.");
+      }finally{
+        if(active)setLoading(false);
+      }
+    };
+    void initialize();
+    const { data } = supabase.auth.onAuthStateChange((event, session) => {
+      if(!active)return;
+      setEmail(session?.user.email ?? null);
+      setAccessToken(session?.access_token ?? null);
+      setNeedsPassword(session?.user.user_metadata?.needs_password===true);
+      if(!session)setAccessReady(false);
+      if(event==="PASSWORD_RECOVERY")setPasswordRecovery(true);
+    });
+    return () => {active=false;data.subscription.unsubscribe();};
   }, [supabase]);
 
   useEffect(() => {
@@ -96,8 +140,15 @@ export default function Home() {
     };
   }, [supabase, email]);
 
-  async function requestPasswordReset(inputEmail:string){if(!supabase)throw new Error("Recuperação indisponível no modo de apresentação.");const {error}=await supabase.auth.resetPasswordForEmail(inputEmail.trim().toLowerCase(),{redirectTo:window.location.origin});if(error)throw error}
-  async function definePassword(password:string){if(!supabase)return;const {error}=await supabase.auth.updateUser({password,data:{needs_password:false}});if(error)throw error;setNeedsPassword(false);setPasswordRecovery(false)}
+  async function requestPasswordReset(inputEmail:string){if(!supabase)throw new Error("Recuperação indisponível no modo de apresentação.");const {error}=await supabase.auth.resetPasswordForEmail(inputEmail.trim().toLowerCase(),{redirectTo:`${APP_URL}/?recovery=1`});if(error)throw error}
+  async function definePassword(password:string){
+    if(!supabase)return;
+    const {error}=await supabase.auth.updateUser({password,data:{needs_password:false}});
+    if(error)throw error;
+    await supabase.auth.signOut({scope:"local"});
+    setNeedsPassword(false);setPasswordRecovery(false);setAccessReady(false);setPermissions([]);setAccessToken(null);setEmail(null);
+    setAuthError("Senha alterada com sucesso. Entre novamente com a nova senha.");
+  }
 
   if (loading) return <div className="splash"><BrandLogo/><p>Carregando sistema…</p></div>;
   const demoSession = typeof window !== "undefined" && localStorage.getItem("jpi-demo-session") === "1";
