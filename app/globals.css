@@ -279,7 +279,7 @@
 /* Assistente de emissão NFS-e */
 .issuance-assistant-page{display:grid;gap:16px}
 .assistant-heading{align-items:flex-start}
-.assistant-stepper{display:grid;grid-template-columns:repeat(8,minmax(110px,1fr));gap:8px;padding:12px;border:1px solid var(--border);background:#fff;border-radius:16px;overflow-x:auto}
+.assistant-stepper{display:grid;grid-template-columns:repeat(9,minmax(105px,1fr));gap:8px;padding:12px;border:1px solid var(--border);background:#fff;border-radius:16px;overflow-x:auto}
 .assistant-step{min-width:110px;position:relative;display:flex;align-items:flex-start;gap:8px;padding:10px;border-radius:12px;background:#f7f9fc;color:#778497}
 .assistant-step>div{display:grid;gap:3px;min-width:0}
 .assistant-step strong{font-size:11px;color:inherit}
@@ -333,7 +333,7 @@
 .assistant-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:18px}
 .assistant-main-action{display:inline-flex;align-items:center;gap:8px}
 @media(max-width:1100px){
- .assistant-stepper{grid-template-columns:repeat(8,140px)}
+ .assistant-stepper{grid-template-columns:repeat(9,135px)}
  .assistant-grid{grid-template-columns:1fr}
  .assistant-selector,.assistant-action-panel{min-height:auto}
  .assistant-payment-list{max-height:320px}
@@ -359,8 +359,8 @@
 .assistant-edit-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
 .assistant-dps-editor label{display:grid;gap:6px}
 .assistant-dps-editor label>span{font-size:9px;font-weight:800;color:#4b5a6b}
-.assistant-dps-editor input,.assistant-dps-editor textarea{width:100%;border:1px solid #ccd7e3;border-radius:10px;background:#fff;padding:11px 12px;font:inherit;font-size:11px;color:var(--text);outline:none}
-.assistant-dps-editor input:focus,.assistant-dps-editor textarea:focus{border-color:var(--blue);box-shadow:0 0 0 3px color-mix(in srgb,var(--blue) 10%,transparent)}
+.assistant-dps-editor input,.assistant-dps-editor textarea,.assistant-dps-editor select{width:100%;border:1px solid #ccd7e3;border-radius:10px;background:#fff;padding:11px 12px;font:inherit;font-size:11px;color:var(--text);outline:none}
+.assistant-dps-editor input:focus,.assistant-dps-editor textarea:focus,.assistant-dps-editor select:focus{border-color:var(--blue);box-shadow:0 0 0 3px color-mix(in srgb,var(--blue) 10%,transparent)}
 .assistant-description-field textarea{min-height:112px;resize:vertical;line-height:1.55}
 .assistant-description-field>span{display:flex;align-items:center;justify-content:space-between;gap:10px}
 .assistant-description-field em{font-style:normal;border-radius:999px;padding:4px 7px;background:#edf4ff;color:#1466df;font-size:7px;font-weight:900}
@@ -398,4 +398,18 @@
  .assistant-preview-grid{grid-template-columns:1fr 1fr}
  .assistant-preview-grid>div,.assistant-preview-grid>div:nth-child(3n){border-right:1px solid #edf1f5}
  .assistant-preview-fiscal{grid-template-columns:1fr 1fr}
+}
+
+
+/* Entrada Nova emissão / Continuar emissão */
+.assistant-mode-switch{display:grid;grid-template-columns:1fr 1fr;gap:7px;margin-bottom:14px;padding:5px;border-radius:13px;background:#f2f5f9;border:1px solid #e1e7ee}
+.assistant-mode-switch button{border:1px solid transparent;background:transparent;border-radius:10px;padding:9px;display:flex;align-items:center;gap:8px;text-align:left;font-family:inherit;color:#6b7888;cursor:pointer}
+.assistant-mode-switch button>span{display:grid;gap:2px;min-width:0}
+.assistant-mode-switch button strong{font-size:9px}
+.assistant-mode-switch button small{font-size:7px;color:inherit}
+.assistant-mode-switch button.active{background:#fff;border-color:#cbd8e6;color:var(--blue);box-shadow:0 2px 8px rgba(36,64,96,.06)}
+.assistant-new-payment{margin-top:16px}
+.assistant-new-payment .assistant-dps-editor>label:not(.assistant-description-field){max-width:320px}
+@media(max-width:620px){
+ .assistant-mode-switch{grid-template-columns:1fr}
 }
