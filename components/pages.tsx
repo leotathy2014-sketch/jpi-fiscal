@@ -1181,6 +1181,7 @@ function CommunicationsSettings({accessToken,onClose,onChanged}:{accessToken:str
     try{
       const response=await fetch("/api/integrations/communications",{headers:{Authorization:`Bearer ${accessToken}`},cache:"no-store"});
       const data=await response.json().catch(()=>({})) as {config?:CommunicationConfig;error?:string};
+      if(response.status===401)window.dispatchEvent(new Event("jpi-session-invalid"));
       if(!response.ok||!data.config)throw new Error(data.error||"Não foi possível carregar as integrações.");
       const current=data.config;setConfig(current);onChanged(current);
       setFromName(current.email_from_name||"JPI Fiscal");setFromAddress(current.email_from_address||"nfse@jejoaopaulo.com.br");setReplyTo(current.email_reply_to||"");setEmailProvider(current.email_provider||"locaweb_email");setSmtpUsername(current.email_smtp_username||current.email_from_address||"nfse@jejoaopaulo.com.br");
@@ -1197,6 +1198,7 @@ function CommunicationsSettings({accessToken,onClose,onChanged}:{accessToken:str
     if(!accessToken)throw new Error("Sessão expirada. Entre novamente.");
     const response=await fetch("/api/integrations/communications",{method:"POST",headers:{Authorization:`Bearer ${accessToken}`,"Content-Type":"application/json"},body:JSON.stringify({action,...payload}),cache:"no-store"});
     const data=await response.json().catch(()=>({})) as {message?:string;error?:string};
+    if(response.status===401)window.dispatchEvent(new Event("jpi-session-invalid"));
     if(!response.ok)throw new Error(data.error||"Não foi possível concluir a operação.");
     return data.message||"Operação concluída.";
   }
@@ -1277,7 +1279,7 @@ function Integrations({accessToken}:{accessToken:string|null}) {
     if(!accessToken)return;
     let active=true;
     fetch("/api/integrations/communications",{headers:{Authorization:`Bearer ${accessToken}`},cache:"no-store"})
-      .then(async response=>({response,data:await response.json().catch(()=>({})) as {config?:CommunicationConfig}}))
+      .then(async response=>{if(response.status===401)window.dispatchEvent(new Event("jpi-session-invalid"));return {response,data:await response.json().catch(()=>({})) as {config?:CommunicationConfig}}})
       .then(({response,data})=>{if(active&&response.ok&&data.config)setCommunicationConfig(data.config);})
       .catch(()=>undefined);
     return()=>{active=false;};
