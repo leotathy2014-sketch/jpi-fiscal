@@ -7,6 +7,7 @@ import type { ConnectionOptions } from "node:tls";
 import { gzipSync, gunzipSync } from "node:zlib";
 import { SignedXml } from "xml-crypto";
 import { hasValidCnpj, isValidCpfCnpj, NFSE_OWN_APP_SERIES, NFSE_RESTRICTED_ENDPOINT } from "@/lib/nfse-dps";
+import { hasServerPermission } from "@/lib/server-permissions";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -415,8 +416,7 @@ export async function POST(request: NextRequest) {
   });
   const { data: { user }, error: userError } = await supabase.auth.getUser(token);
   if (userError || !user?.email) return json({ error: "Sessão expirada. Entre novamente." }, 401);
-  const { data: access } = await supabase.from("app_users").select("role,active").eq("email", user.email).maybeSingle();
-  if (!access?.active || !["admin", "financeiro"].includes(access.role)) {
+  if (!await hasServerPermission(supabase,"nfse.issue")) {
     return json({ error: "Seu usuário não possui permissão para emitir em homologação." }, 403);
   }
 
