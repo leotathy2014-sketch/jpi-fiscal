@@ -1,11 +1,12 @@
 "use client";
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
-import { AlertCircle, ArrowUpRight, Building2, CalendarDays, Check, CircleDollarSign, Clock3, FileCheck2, FilePlus2, Filter, KeyRound, Link2, Mail, MessageCircle, MoreHorizontal, Plus, Search, ShieldCheck, SlidersHorizontal, Trash2, UploadCloud, UserCog, UsersRound, WalletCards, X } from "lucide-react";
+import { AlertCircle, ArrowUpRight, Building2, CalendarDays, Check, CircleDollarSign, Clock3, FileCheck2, FilePlus2, Filter, KeyRound, Link2, Mail, MessageCircle, MoreHorizontal, Palette, Plus, Search, ShieldCheck, SlidersHorizontal, Trash2, UploadCloud, UserCog, UsersRound, WalletCards, X } from "lucide-react";
 import type { Role } from "./app-shell";
 import { createSupabaseBrowserClient } from "@/lib/supabase";
 import { authenticatedFetch } from "@/lib/authenticated-fetch";
 import { TransmissionProgress } from "./transmission-progress";
 import { AgendaEduStudentLinks } from "./agenda-edu-student-links";
+import { BrandLogo } from "./branding";
 
 const money = (n: number) => n.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 const onlyDigits = (value: string, limit: number) => value.replace(/\D/g, "").slice(0, limit);
@@ -431,6 +432,10 @@ type CompanyConfig = {
     curso?: string;
     complemento?: string;
   }>;
+  tema_cor_primaria: string;
+  tema_cor_lateral: string;
+  tema_cor_sucesso: string;
+  branding_updated_at: string;
   updated_at: string;
 };
 type Tab = "Empresa" | "Certificado A1" | "Integrações" | "Usuários e Permissões";
@@ -467,7 +472,9 @@ function CompanySettings() {
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
-  const [logoLoaded, setLogoLoaded] = useState(false);
+  const [themePrimary,setThemePrimary]=useState("#1466DF");
+  const [themeSidebar,setThemeSidebar]=useState("#14263D");
+  const [themeSuccess,setThemeSuccess]=useState("#16875F");
   useEffect(() => {
     if (!supabase) return;
     supabase
@@ -477,7 +484,7 @@ function CompanySettings() {
       .single()
       .then(({ data, error }) => {
         if (error) setError(error.message);
-        else setConfig(data as CompanyConfig);
+        else {const current=data as CompanyConfig;setConfig(current);setThemePrimary(current.tema_cor_primaria||"#1466DF");setThemeSidebar(current.tema_cor_lateral||"#14263D");setThemeSuccess(current.tema_cor_sucesso||"#16875F");}
       });
   }, [supabase]);
   async function save(e: FormEvent<HTMLFormElement>) {
@@ -490,6 +497,8 @@ function CompanySettings() {
     const text = (name: string) => String(f.get(name) || "").trim();
     const pisRate = Number(text("pis_aliquota").replace(",", "."));
     const cofinsRate = Number(text("cofins_aliquota").replace(",", "."));
+    const primaryColor=themePrimary.toUpperCase();const sidebarColor=themeSidebar.toUpperCase();const successColor=themeSuccess.toUpperCase();
+    if(!/^#[0-9A-F]{6}$/.test(primaryColor)||!/^#[0-9A-F]{6}$/.test(sidebarColor)||!/^#[0-9A-F]{6}$/.test(successColor)){setError("Escolha cores válidas para a identidade visual.");setBusy(false);return;}
     if (!Number.isFinite(pisRate) || pisRate < 0 || pisRate > 100 || !Number.isFinite(cofinsRate) || cofinsRate < 0 || cofinsRate > 100) {
       setError("Informe alíquotas válidas de PIS e COFINS entre 0 e 100%.");
       setBusy(false);
@@ -528,6 +537,10 @@ function CompanySettings() {
       cofins_aliquota: cofinsRate,
       pis_cofins_cst: onlyDigits(text("pis_cofins_cst"), 2),
       pis_cofins_retencao: Number(text("pis_cofins_retencao")),
+      tema_cor_primaria: primaryColor,
+      tema_cor_lateral: sidebarColor,
+      tema_cor_sucesso: successColor,
+      branding_updated_at: new Date().toISOString(),
       email: text("email").toLocaleLowerCase("pt-BR"),
       telefone: maskPhone(text("telefone")),
       whatsapp: maskPhone(text("whatsapp")),
@@ -546,12 +559,10 @@ function CompanySettings() {
       setError(error.message);
       return;
     }
-    setConfig(data as CompanyConfig);
-    setMessage(logo?.size ? "Dados e logomarca salvos. Atualize a página para visualizar a nova identidade." : "Configurações da empresa salvas com sucesso.");
+    const saved=data as CompanyConfig;setConfig(saved);setThemePrimary(saved.tema_cor_primaria||primaryColor);setThemeSidebar(saved.tema_cor_lateral||sidebarColor);setThemeSuccess(saved.tema_cor_sucesso||successColor);window.dispatchEvent(new Event("jpi-branding-updated"));
+    setMessage(logo?.size ? "Dados, logomarca e identidade visual salvos. A nova logo será aplicada em todo o sistema." : "Configurações e identidade visual salvas com sucesso.");
   }
   if (!config) return <div className="panel">{error || "Carregando dados da empresa…"}</div>;
-  const publicLogoUrl = supabase?.storage.from("logos-empresa").getPublicUrl("empresa/logo").data.publicUrl;
-  const currentLogoUrl = publicLogoUrl ? `${publicLogoUrl}?v=${encodeURIComponent(config.updated_at)}` : null;
   return (
     <div className="company-settings">
       <form className="panel data-form company-form" onSubmit={save} key={config.updated_at}>
@@ -561,14 +572,28 @@ function CompanySettings() {
             <p>Informações cadastrais usadas na preparação fiscal.</p>
           </div>
         </div>
+        <section className="branding-control-panel">
+          <div className="branding-control-title"><span className="integration-icon blue"><Palette/></span><div><h3>Identidade visual global</h3><p>A logo e as cores salvas aqui serão usadas na tela de login e em todo o JPI Fiscal.</p></div></div>
+          <div className="branding-control-grid">
+            <div className="branding-color-fields">
+              <label>Cor principal<div className="branding-color-input"><input type="color" name="tema_cor_primaria" value={themePrimary} onChange={event=>setThemePrimary(event.target.value.toUpperCase())}/><strong>{themePrimary}</strong></div><small>Botões, destaques, abas e elementos principais.</small></label>
+              <label>Cor do menu e login<div className="branding-color-input"><input type="color" name="tema_cor_lateral" value={themeSidebar} onChange={event=>setThemeSidebar(event.target.value.toUpperCase())}/><strong>{themeSidebar}</strong></div><small>Menu lateral e fundo institucional da tela de acesso.</small></label>
+              <label>Cor de sucesso e WhatsApp<div className="branding-color-input"><input type="color" name="tema_cor_sucesso" value={themeSuccess} onChange={event=>setThemeSuccess(event.target.value.toUpperCase())}/><strong>{themeSuccess}</strong></div><small>Confirmações, status positivos e elementos do WhatsApp.</small></label>
+              <button type="button" className="secondary" onClick={()=>{setThemePrimary("#1466DF");setThemeSidebar("#14263D");setThemeSuccess("#16875F")}} disabled={busy}>Restaurar cores padrão</button>
+            </div>
+            <div className="branding-live-preview" style={{"--preview-primary":themePrimary,"--preview-sidebar":themeSidebar,"--preview-success":themeSuccess} as React.CSSProperties}>
+              <div className="branding-preview-sidebar"><BrandLogo preview/><strong>JPI Fiscal</strong><span>Pré-visualização</span></div>
+              <div className="branding-preview-content"><span className="branding-preview-pill">COR PRINCIPAL</span><strong>Identidade do sistema</strong><button type="button" tabIndex={-1}>Botão principal</button><small><i/> Status conectado</small></div>
+            </div>
+          </div>
+        </section>
         {error && <div className="error-box">{error}</div>}
         {message && <div className="success-box">{message}</div>}
         <label className="file-field">
           <span>Logomarca da empresa</span>
-          <div className={`company-logo-preview ${logoLoaded ? "loaded" : ""}`}>
-            <span className="company-logo-icon"><Building2 size={22} /></span>
-            {currentLogoUrl && <img src={currentLogoUrl} alt="Logomarca atualmente cadastrada" onLoad={() => setLogoLoaded(true)} onError={() => setLogoLoaded(false)} />}
-            <section><strong>Logomarca atual</strong><small>{logoLoaded ? "Imagem cadastrada no sistema" : "Nenhuma imagem encontrada"}</small></section>
+          <div className="company-logo-preview loaded">
+            <BrandLogo preview/>
+            <section><strong>Logomarca global atual</strong><small>Esta mesma logo aparece no login, menu e demais áreas do sistema.</small></section>
           </div>
           <div>
             <UploadCloud />
