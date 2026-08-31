@@ -1038,7 +1038,7 @@ function CertificateSettings() {
           <div className="panel-title">
             <div>
               <h2>{active ? "Substituir certificado A1" : "Anexar certificado A1"}</h2>
-              <p>Arquivo privado acessível somente ao Administrador.</p>
+              <p>Arquivo privado acessível somente a perfis autorizados pelo Master.</p>
             </div>
           </div>
           {error && <div className="error-box">{error}</div>}
