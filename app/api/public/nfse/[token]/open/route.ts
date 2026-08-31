@@ -9,7 +9,8 @@ export async function POST(request:NextRequest,context:{params:Promise<{token:st
     const secret=backendSecret();const supabase=publicSupabase();
     const {data,error}=await supabase.rpc("open_nfse_delivery_access",{p_token_hash:tokenHash(token),p_backend_secret:secret});
     const record=(Array.isArray(data)?data[0]:data) as {chave_acesso:string}|undefined;
-    if(error||!record)return NextResponse.json({error:"Este link é inválido ou expirou."},{status:404});
+    if(error){console.error("[nfse-public] Falha ao abrir link protegido",{code:error.code});return NextResponse.json({error:"Não foi possível abrir o documento agora."},{status:503})}
+    if(!record)return NextResponse.json({error:"Este link é inválido ou expirou."},{status:404});
     const response=NextResponse.json({ok:true},{headers:{"Cache-Control":"no-store","Referrer-Policy":"no-referrer"}});
     response.cookies.set(protectedViewCookie,createViewCookie(token,secret),{httpOnly:true,secure:request.nextUrl.protocol==="https:",sameSite:"strict",maxAge:30*60,path:`/api/public/nfse/${token}`});
     return response;

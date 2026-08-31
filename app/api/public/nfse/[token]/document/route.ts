@@ -14,7 +14,8 @@ export async function GET(request:NextRequest,context:{params:Promise<{token:str
     if(!verifyViewCookie(request.cookies.get(protectedViewCookie)?.value,token,secret))return json("Toque primeiro em Visualizar NFS-e para liberar o documento.",403);
     const {data,error}=await publicSupabase().rpc("read_nfse_delivery_access",{p_token_hash:tokenHash(token),p_backend_secret:secret});
     const record=(Array.isArray(data)?data[0]:data) as {chave_acesso:string;xml_base64:string}|undefined;
-    if(error||!record)return json("Este link é inválido ou expirou.",404);
+    if(error){console.error("[nfse-public] Falha ao ler documento protegido",{code:error.code});return json("Não foi possível preparar o documento agora.",503)}
+    if(!record)return json("Este link é inválido ou expirou.",404);
     const xml=Buffer.from(record.xml_base64,"base64");if(!xml.length||xml.length>10*1024*1024)return json("Documento inválido.",422);
     const selectedFormat=format as "pdf"|"xml";const body=selectedFormat==="pdf"?buildDanfsePdf(xml.toString("utf8"),record.chave_acesso).pdf:xml;
     return new NextResponse(new Uint8Array(body),{headers:{"Content-Type":selectedFormat==="pdf"?"application/pdf":"application/xml; charset=utf-8","Content-Disposition":`${disposition}; filename="${filename(record.chave_acesso,selectedFormat)}"`,"Cache-Control":"private, no-store, max-age=0","X-Content-Type-Options":"nosniff","Referrer-Policy":"no-referrer","X-Robots-Tag":"noindex, nofollow"}});
