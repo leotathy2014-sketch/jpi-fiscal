@@ -5,6 +5,7 @@ import { createSupabaseBrowserClient, hasSupabaseConfig } from "@/lib/supabase";
 import { AppShell, type AppPage, type Role } from "@/components/app-shell";
 import { Login, SetPassword } from "@/components/login";
 import { BrandLogo } from "@/components/branding";
+import { AccessProvider } from "@/components/access";
 
 export default function Home() {
   const supabase = useMemo(() => createSupabaseBrowserClient(), []);
@@ -14,6 +15,7 @@ export default function Home() {
   const [role, setRole] = useState<Role>("Consulta");
   const [page, setPage] = useState<AppPage>("Painel");
   const [accessReady, setAccessReady] = useState(false);
+  const [permissions,setPermissions]=useState<string[]>([]);
   const [needsPassword, setNeedsPassword] = useState(false);
   const [passwordRecovery, setPasswordRecovery] = useState(false);
   const [authError, setAuthError] = useState("");
@@ -27,25 +29,38 @@ export default function Home() {
 
   useEffect(() => {
     if (!supabase || !email) return;
-    setAccessReady(false);
-    supabase.from("app_users").select("role,active").eq("email", email).maybeSingle()
-      .then(({ data, error }) => {
-        const roles: Record<string, Role> = { admin: "Administrador", financeiro: "Financeiro", secretaria: "Secretaria", consulta: "Consulta" };
-        if (error) { setAuthError("Não foi possível validar suas permissões agora. Tente novamente."); return; }
-        if (!data?.active || !data.role || !roles[data.role]) {void supabase.auth.signOut({ scope: "local" });setEmail(null);setAccessToken(null);setAuthError("Seu acesso está bloqueado ou ainda não foi autorizado.");return}
-        setAuthError("");setRole(roles[data.role]);setAccessReady(true);
-      });
+    let active=true;
+    const roles: Record<string, Role> = { master:"Master", admin: "Administrador", financeiro: "Financeiro", secretaria: "Secretaria", consulta: "Consulta" };
+    const loadAccess=async()=>{
+      setAccessReady(false);
+      const {data,error}=await supabase.rpc("get_my_access");
+      if(!active)return;
+      const payload=(data||{}) as {role?:string;permissions?:string[]};
+      if(error||!payload.role||!roles[payload.role]){
+        if(error){setAuthError("Não foi possível validar suas permissões agora. Tente novamente.");return}
+        await supabase.auth.signOut({scope:"local"});
+        if(!active)return;
+        setPermissions([]);setEmail(null);setAccessToken(null);setAuthError("Seu acesso está bloqueado ou ainda não foi autorizado.");return;
+      }
+      setAuthError("");setRole(roles[payload.role]);setPermissions(Array.isArray(payload.permissions)?payload.permissions:[]);setAccessReady(true);
+    };
+    const refresh=()=>void loadAccess();
+    void loadAccess();
+    const timer=window.setInterval(refresh,60000);
+    window.addEventListener("focus",refresh);
+    window.addEventListener("jpi-permissions-updated",refresh);
+    return()=>{active=false;window.clearInterval(timer);window.removeEventListener("focus",refresh);window.removeEventListener("jpi-permissions-updated",refresh)};
   }, [supabase, email]);
 
   async function signIn(inputEmail: string, password: string, remember: boolean) {
     setAuthError("");
-    if (!supabase) { localStorage.setItem("jpi-demo-session", "1");setRole("Administrador");setAccessReady(true); setEmail(inputEmail); return; }
+    if (!supabase) { localStorage.setItem("jpi-demo-session", "1");setRole("Master");setPermissions([]);setAccessReady(true); setEmail(inputEmail); return; }
     if (remember) localStorage.setItem("jpi-remembered-email", inputEmail); else localStorage.removeItem("jpi-remembered-email");
     const { error } = await supabase.auth.signInWithPassword({ email: inputEmail, password });
     if (error) throw error;
   }
 
-  async function signOut() { if (supabase) await supabase.auth.signOut({ scope: "local" }); localStorage.removeItem("jpi-demo-session"); setAccessReady(false);setAccessToken(null);setEmail(null); }
+  async function signOut() { if (supabase) await supabase.auth.signOut({ scope: "local" }); localStorage.removeItem("jpi-demo-session"); setAccessReady(false);setPermissions([]);setAccessToken(null);setEmail(null); }
   useEffect(() => {
     if (!supabase || !email) return;
     let active = true;
@@ -90,5 +105,5 @@ export default function Home() {
   if (!email && !demoSession) return <Login onSignIn={signIn} onResetPassword={requestPasswordReset} configured={hasSupabaseConfig()} externalError={authError} />;
   if (email&&(needsPassword||passwordRecovery)) return <SetPassword onSave={definePassword} recovery={passwordRecovery}/>;
   if (email&&!accessReady) return <div className="splash"><BrandLogo/><p>Verificando permissões…</p></div>;
-  return <AppShell email={email ?? "administrador@jpi.edu.br"} accessToken={accessToken} role={role} page={page} onPageChange={setPage} onSignOut={signOut} />;
+  return <AccessProvider role={role} permissions={permissions}><AppShell email={email ?? "administrador@jpi.edu.br"} accessToken={accessToken} role={role} page={page} onPageChange={setPage} onSignOut={signOut} /></AccessProvider>;
 }
