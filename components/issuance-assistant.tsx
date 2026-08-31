@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Check, ChevronRight, CircleAlert, FileCode2, FileText, GraduationCap, MailCheck, Plus, ReceiptText, RefreshCw, Search, Send, ShieldCheck, Sparkles, UsersRound, WalletCards } from "lucide-react";
 import { createSupabaseBrowserClient } from "@/lib/supabase";
-import { isValidCpfCnpj } from "@/lib/nfse-dps";
+import { buildDpsDraft, isValidCpfCnpj, NFSE_OWN_APP_SERIES } from "@/lib/nfse-dps";
 import type { AppPage } from "./app-shell";
 import { useAccess } from "./access";
 
@@ -52,6 +52,7 @@ const upper=(value:string)=>value.toLocaleUpperCase("pt-BR");
 const fiscalServiceForSegment=(segment?:string|null)=>{const normalized=normalize(segment||"");if(normalized.includes("medio"))return {code:"08.01.01",description:"Ensino regular médio",nbs:"122013000"};if(normalized.includes("1º")||normalized.includes("6º")||normalized.includes("fundamental"))return {code:"08.01.01",description:"Ensino regular fundamental",nbs:"122012000"};return {code:"08.01.01",description:"Ensino regular pré-escolar",nbs:"122011200"}};
 const defaultServiceDescription=(competence:string,segment?:string|null)=>"MENSALIDADE ESCOLAR - COMPETÊNCIA "+formatCompetence(competence)+" - "+fiscalServiceForSegment(segment).description.toLocaleUpperCase("pt-BR");
 const parseMoneyInput=(value:string)=>{const clean=value.replace(/R\$/g,"").replace(/\s/g,"");if(clean.includes(","))return Number(clean.replace(/\./g,"").replace(",","."));return Number(clean)};
+const dpsDraftVersionPath=(paymentId:number,draftId:string)=>{const timestamp=new Date().toISOString().replace(/\D/g,"").slice(0,17);const revision=timestamp+"-"+crypto.randomUUID().slice(0,8);return "dps/"+paymentId+"/rascunhos/"+revision+"/"+draftId+".xml"};
 
 function statusOrder(payment:AssistantPayment){
   const status=normalize(payment.status_nfse||"");
@@ -115,7 +116,7 @@ export function IssuanceAssistant({onNavigate}:{onNavigate:(page:AppPage)=>void}
   const [refreshing,setRefreshing]=useState(false);
   const [error,setError]=useState("");
   const [message,setMessage]=useState("");
-  const [busyAction,setBusyAction]=useState<""|"create-payment"|"validate"|"save-dps"|"approve">("");
+  const [busyAction,setBusyAction]=useState<""|"create-payment"|"validate"|"save-dps"|"approve"|"xml">("");
   const [draftCompetence,setDraftCompetence]=useState("");
   const [draftValue,setDraftValue]=useState("");
   const [draftDescription,setDraftDescription]=useState("");
@@ -398,6 +399,86 @@ export function IssuanceAssistant({onNavigate}:{onNavigate:(page:AppPage)=>void}
     finally{setBusyAction("")}
   }
 
+  async function generateXmlInAssistant(){
+    if(!supabase||!selected||!canPrepare||selected.chave_nfse_homologacao)return;
+    setBusyAction("xml");setError("");setMessage("");
+    let storedPath="";
+    try{
+      if(selected.status_nfse!=="Prévia DPS aprovada")throw new Error("A prévia da DPS precisa estar aprovada antes de gerar o XML.");
+      const context=fiscalContext||await loadFiscalContext();
+      if(!context)throw new Error("Configuração fiscal indisponível.");
+      const service=fiscalServiceForSegment(selected.alunos?.segmento);
+      const description=upper(selected.descricao_servico||draftDescription||defaultServiceDescription(competenceInput(selected.competencia),selected.alunos?.segmento)).trim();
+      const draft=buildDpsDraft({
+        municipalityCode:"3304557",
+        series:NFSE_OWN_APP_SERIES,
+        number:String(selected.id),
+        competence:selected.competencia,
+        provider:{
+          cnpj:context.cnpj||"",
+          municipalRegistration:null,
+          name:context.razao_social
+        },
+        taker:{
+          taxId:selected.alunos?.cpf_cnpj||"",
+          name:selected.alunos?.responsavel||"",
+          email:selected.alunos?.email,
+          phone:selected.alunos?.whatsapp
+        },
+        service:{
+          nationalTaxCode:service.code,
+          nbs:service.nbs,
+          description,
+          amount:Number(selected.valor_nfse),
+          issRate:5,
+          federalTaxes:{
+            cst:context.pis_cofins_cst,
+            pisRate:Number(context.pis_aliquota),
+            cofinsRate:Number(context.cofins_aliquota),
+            withholdingType:Number(context.pis_cofins_retencao)
+          },
+          ibsCbs:{
+            operationIndicator:"030101",
+            taxStatus:"200",
+            taxClassification:"200028"
+          }
+        }
+      });
+      storedPath=dpsDraftVersionPath(selected.id,draft.id);
+      const blob=new Blob([draft.xml],{type:"application/xml"});
+      const upload=await supabase.storage.from("documentos-nfse").upload(storedPath,blob,{contentType:"application/xml",upsert:false});
+      if(upload.error)throw new Error("Não foi possível guardar o XML: "+upload.error.message);
+      const generatedAt=new Date().toISOString();
+      const update=await supabase.from("mensalidades").update({
+        status_nfse:"XML DPS armazenado",
+        descricao_servico:description,
+        dps_xml_path:storedPath,
+        dps_xml_id:draft.id,
+        dps_xml_gerado_em:generatedAt
+      }).eq("id",selected.id).eq("status_nfse","Prévia DPS aprovada").is("chave_nfse_homologacao",null).select("id").maybeSingle();
+      if(update.error||!update.data){
+        await supabase.storage.from("documentos-nfse").remove([storedPath]);
+        throw new Error(update.error?.message||"A nota foi alterada por outro usuário antes da geração do XML.");
+      }
+      const history=await supabase.from("historico_nfse").insert({
+        mensalidade_id:selected.id,
+        evento:"xml_dps_armazenado",
+        valor_anterior:selected.valor_nfse,
+        valor_novo:selected.valor_nfse,
+        detalhes:"XML DPS "+draft.version+" gerado pelo Assistente com Lucro Presumido, PIS/COFINS e IBS/CBS; arquivo privado "+storedPath+"; identificador "+draft.id+". Nenhuma transmissão realizada."
+      });
+      if(history.error)throw new Error("O XML foi guardado, mas o histórico não pôde ser gravado: "+history.error.message);
+      setMessage("XML da DPS gerado, validado e guardado no sistema. A próxima etapa é a homologação na SEFIN.");
+      await load(true);
+    }catch(cause){
+      if(storedPath){
+        const latest=payments.find(item=>item.id===selected.id);
+        if(!latest?.dps_xml_path)await supabase.storage.from("documentos-nfse").remove([storedPath]).catch(()=>undefined);
+      }
+      setError(cause instanceof Error?cause.message:"Não foi possível gerar o XML da DPS.");
+    }finally{setBusyAction("")}
+  }
+
   function focusAndNavigate(target:"NFS-e"|"Enviar notas"|"Alunos e Responsáveis"){
     if(!selected)return;
     const focus=String(selected.id);
@@ -413,6 +494,7 @@ export function IssuanceAssistant({onNavigate}:{onNavigate:(page:AppPage)=>void}
     if(effectiveCurrent===2){void validateSelected();return}
     if(effectiveCurrent===3){void saveDps();return}
     if(effectiveCurrent===4){void approvePreview();return}
+    if(effectiveCurrent===5){void generateXmlInAssistant();return}
     if(effectiveCurrent>=8){focusAndNavigate("Enviar notas");return}
     focusAndNavigate("NFS-e");
   }
@@ -574,7 +656,7 @@ export function IssuanceAssistant({onNavigate}:{onNavigate:(page:AppPage)=>void}
           {!canPrepare&&effectiveCurrent>=2&&effectiveCurrent<8&&<div className="notice compact"><ShieldCheck/><span>Seu perfil pode acompanhar o processo, mas não possui permissão para preparar a NFS-e.</span></div>}
           <div className="assistant-actions">
             <button className="primary assistant-main-action" onClick={continueProcess} disabled={Boolean(busyAction)||(!canPrepare&&effectiveCurrent>=2&&effectiveCurrent<8)}>
-              {busyAction==="validate"?"Validando…":busyAction==="save-dps"?"Salvando DPS…":busyAction==="approve"?"Aprovando…":effectiveCurrent===2&&missing.length?"Corrigir cadastro":effectiveCurrent===2?"Validar nota":effectiveCurrent===3?"Salvar DPS e ver prévia":effectiveCurrent===4?"Aprovar prévia":effectiveCurrent>=8?"Ir para envio":"Continuar processo"} <ChevronRight size={18}/>
+              {busyAction==="validate"?"Validando…":busyAction==="save-dps"?"Salvando DPS…":busyAction==="approve"?"Aprovando…":busyAction==="xml"?"Gerando XML…":effectiveCurrent===2&&missing.length?"Corrigir cadastro":effectiveCurrent===2?"Validar nota":effectiveCurrent===3?"Salvar DPS e ver prévia":effectiveCurrent===4?"Aprovar prévia":effectiveCurrent===5?"Gerar e validar XML":effectiveCurrent>=8?"Ir para envio":"Continuar processo"} <ChevronRight size={18}/>
             </button>
             {effectiveCurrent>2&&effectiveCurrent<8&&<button className="secondary" onClick={()=>focusAndNavigate("NFS-e")}>Abrir NFS-e atual</button>}
             {progress?.finished&&<button className="secondary" onClick={()=>focusAndNavigate("Enviar notas")}>Ir direto para envio</button>}
