@@ -219,11 +219,8 @@ export function IssuanceAssistant({onNavigate}:{onNavigate:(page:AppPage)=>void}
     if(!supabase||!selected||!canPrepare)return;
     setBusyAction("validate");setError("");setMessage("");
     try{
-      const results=await Promise.all([
-        supabase.from("configuracoes_empresa").select("cnpj,razao_social,cidade,uf,regime_tributario,pis_aliquota,cofins_aliquota,pis_cofins_cst,pis_cofins_retencao").eq("id",true).maybeSingle(),
-        supabase.from("certificados_a1").select("validade,status,cnpj,senha_configurada").eq("status","ATIVO").order("created_at",{ascending:false}).limit(1).maybeSingle()
-      ]);
-      const companyResult=results[0];const certificateResult=results[1];
+      const companyResult=await supabase.from("configuracoes_empresa").select("cnpj,razao_social,cidade,uf,regime_tributario,pis_aliquota,cofins_aliquota,pis_cofins_cst,pis_cofins_retencao").eq("id",true).maybeSingle();
+      const certificateResult=await supabase.from("certificados_a1").select("validade,status,cnpj,senha_configurada").eq("status","ATIVO").order("created_at",{ascending:false}).limit(1).maybeSingle();
       if(companyResult.error||certificateResult.error)throw new Error(companyResult.error?.message||certificateResult.error?.message||"Não foi possível conferir os dados fiscais.");
       const company=companyResult.data as FiscalContext|null;
       const certificate=certificateResult.data as {validade:string;senha_configurada:boolean}|null;
