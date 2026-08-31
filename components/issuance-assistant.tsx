@@ -82,8 +82,7 @@ function statusOrder(payment:AssistantPayment){
   return {validationDone,dpsDone,previewDone,xmlDone,sefinDone,finished};
 }
 
-function missingStudentFields(payment:AssistantPayment){
-  const student=payment.alunos;
+function missingFieldsForStudent(student:AssistantStudent|AssistantPayment["alunos"]){
   if(!student)return ["cadastro do aluno"];
   const missing:string[]=[];
   if(!student.responsavel)missing.push("responsável financeiro");
@@ -92,6 +91,7 @@ function missingStudentFields(payment:AssistantPayment){
   if(!student.cep||!student.logradouro||!student.numero||!student.cidade||!student.uf)missing.push("endereço completo");
   return missing;
 }
+function missingStudentFields(payment:AssistantPayment){return missingFieldsForStudent(payment.alunos)}
 
 export function IssuanceAssistant({onNavigate}:{onNavigate:(page:AppPage)=>void}){
   const supabase=useMemo(()=>createSupabaseBrowserClient(),[]);
@@ -161,6 +161,7 @@ export function IssuanceAssistant({onNavigate}:{onNavigate:(page:AppPage)=>void}
     return students.filter(student=>normalize([student.nome,student.responsavel,student.turma,student.segmento,student.cpf_cnpj].filter(Boolean).join(" ")).includes(q));
   },[studentQuery,students]);
   const selectedStudent=useMemo(()=>students.find(student=>student.id===newStudentId)||null,[newStudentId,students]);
+  const newStudentMissing=selectedStudent?missingFieldsForStudent(selectedStudent):[];
   const selected=useMemo(()=>payments.find(item=>item.id===selectedId)||null,[payments,selectedId]);
   useEffect(()=>{
     if(!selected){setDraftCompetence("");setDraftValue("");setDraftDescription("");return}
