@@ -1,6 +1,6 @@
 "use client";
 import { FormEvent, useState } from "react";
-import { Eye, EyeOff, LockKeyhole, Mail } from "lucide-react";
+import { ArrowRight, Eye, EyeOff, KeyRound, LockKeyhole, Mail, ShieldCheck } from "lucide-react";
 import { BrandLogo } from "./branding";
 
 export function Login({ onSignIn, onResetPassword, configured, externalError="" }: { onSignIn: (email: string, password: string, remember: boolean) => Promise<void>; onResetPassword:(email:string)=>Promise<void>; configured: boolean; externalError?:string }) {
@@ -24,6 +24,22 @@ export function Login({ onSignIn, onResetPassword, configured, externalError="" 
       <button className="primary full" disabled={busy}>{busy?"Entrando…":"Entrar no sistema"}</button>
       <p className="privacy">Seus dados são tratados com segurança e conforme a LGPD.</p>
     </form></section>
+  </main>;
+}
+
+export function RecoveryConfirm({onContinue,onCancel}:{onContinue:()=>Promise<void>;onCancel:()=>void}){
+  const [busy,setBusy]=useState(false);const [error,setError]=useState("");
+  async function proceed(){if(busy)return;setBusy(true);setError("");try{await onContinue()}catch(err){setError(err instanceof Error?err.message:"Não foi possível validar o link de recuperação.");setBusy(false)}}
+  return <main className="login-page recovery-confirm-page">
+    <section className="login-brand"><div><BrandLogo/><h1>JPI Fiscal</h1><p>Recuperação segura de acesso.</p></div><small>Jardim Escola João Paulo I</small></section>
+    <section className="login-panel"><div className="login-card recovery-confirm-card">
+      <div className="recovery-security-icon"><KeyRound/></div>
+      <div><span className="eyebrow">RECUPERAÇÃO DE SENHA</span><h2>Confirme para continuar</h2><p className="muted">Por segurança, o link só será validado quando você clicar no botão abaixo. Depois, você poderá criar uma nova senha.</p></div>
+      <div className="notice compact"><ShieldCheck/><span>Use somente o e-mail de recuperação mais recente. Cada link é de uso único e pode expirar.</span></div>
+      {error&&<div className="error-box">{error}</div>}
+      <button type="button" className="primary full recovery-continue" disabled={busy} onClick={proceed}>{busy?"Validando link…":<>Continuar recuperação <ArrowRight size={18}/></>}</button>
+      <button type="button" className="recovery-back-link recovery-back-button" onClick={onCancel}>Voltar para o acesso ao sistema</button>
+    </div></section>
   </main>;
 }
 
