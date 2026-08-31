@@ -179,11 +179,21 @@ export function IssuanceAssistant({onNavigate}:{onNavigate:(page:AppPage)=>void}
   const progress=selected?statusOrder(selected):null;
 
   const steps=useMemo<AssistantStep[]>(()=>{
-    if(!selected||!progress)return [
-      {key:"student",label:"Aluno",short:"1",description:"Selecione uma mensalidade para iniciar.",state:"current"},
-      ...["Validação","DPS","Prévia","XML","SEFIN","Conclusão","Enviar"].map((label,index)=>({key:String(index),label,short:String(index+2),description:"Aguardando etapa anterior.",state:"pending" as StepState}))
-    ];
+    const labels=["Aluno","Mensalidade","Validação","DPS","Prévia","XML","SEFIN","Conclusão","Enviar"];
+    if(mode==="new"){
+      return labels.map((label,index)=>{
+        const state:StepState=index===0?(selectedStudent?"done":"current"):index===1?(selectedStudent?"current":"pending"):"pending";
+        const description=index===0?(selectedStudent?"Aluno cadastrado selecionado.":"Selecione um aluno já cadastrado."):index===1?(selectedStudent?"Informe competência, valor e situação do pagamento.":"Aguardando seleção do aluno."):"Aguardando etapa anterior.";
+        return {key:label.toLowerCase(),label,short:String(index+1),description,state};
+      });
+    }
+    if(!selected||!progress)return labels.map((label,index)=>({
+      key:label.toLowerCase(),label,short:String(index+1),
+      description:index===0?"Selecione uma emissão já iniciada.":"Aguardando etapa anterior.",
+      state:index===0?"current":"pending"
+    }));
     const completion=[
+      true,
       true,
       progress.validationDone,
       progress.dpsDone,
@@ -194,9 +204,10 @@ export function IssuanceAssistant({onNavigate}:{onNavigate:(page:AppPage)=>void}
       Boolean(delivery),
     ];
     const firstIncomplete=completion.findIndex(done=>!done);
-    const current=firstIncomplete<0?7:firstIncomplete;
+    const current=firstIncomplete<0?8:firstIncomplete;
     const descriptions=[
       missing.length?`Cadastro selecionado com ${missing.length} pendência(s).`:"Aluno e responsável selecionados.",
+      "Mensalidade criada e vinculada à emissão.",
       progress.validationDone?"Dados fiscais já validados.":"Conferir cadastro, competência, valor e certificado.",
       progress.dpsDone?"DPS preparada.":"Preparar e revisar os dados editáveis da DPS.",
       progress.previewDone?"Prévia aprovada.":"Conferir a prévia e aprovar antes do XML.",
@@ -205,32 +216,34 @@ export function IssuanceAssistant({onNavigate}:{onNavigate:(page:AppPage)=>void}
       progress.finished?"Nota concluída no ambiente atual.":"Conferir retorno, chave e documento gerado.",
       delivery?"Nota já possui envio concluído.":"Escolher canal e enviar a nota ao responsável.",
     ];
-    const labels=["Aluno","Validação","DPS","Prévia","XML","SEFIN","Conclusão","Enviar"];
     return labels.map((label,index)=>({
       key:label.toLowerCase(),
       label,
       short:String(index+1),
       description:descriptions[index],
-      state:completion[index]?"done":index===current?(index===1&&missing.length?"warning":"current"):"pending",
+      state:completion[index]?"done":index===current?(index===2&&missing.length?"warning":"current"):"pending",
     }));
-  },[delivery,missing.length,progress,selected]);
+  },[delivery,missing.length,mode,progress,selected,selectedStudent]);
 
   const currentIndex=steps.findIndex(step=>step.state==="current"||step.state==="warning");
-  const effectiveCurrent=currentIndex<0?7:currentIndex;
-  const nextTitle=selected?[
-    "Aluno selecionado",
-    missing.length?"Corrigir cadastro antes de validar":"Validar dados da nota",
-    "Preparar / editar DPS",
-    "Aprovar prévia da DPS",
-    "Gerar e validar XML",
-    "Enviar para homologação",
-    "Conferir nota concluída",
-    delivery?"Envio concluído":"Enviar nota ao responsável",
-  ][effectiveCurrent]:"Selecione uma nota";
+  const effectiveCurrent=currentIndex<0?8:currentIndex;
+  const nextTitle=mode==="new"
+    ?selectedStudent?"Criar mensalidade e iniciar nota":"Selecionar aluno cadastrado"
+    :selected?[
+      "Aluno selecionado",
+      "Mensalidade criada",
+      missing.length?"Corrigir cadastro antes de validar":"Validar dados da nota",
+      "Preparar / editar DPS",
+      "Aprovar prévia da DPS",
+      "Gerar e validar XML",
+      "Enviar para homologação",
+      "Conferir nota concluída",
+      delivery?"Envio concluído":"Enviar nota ao responsável",
+    ][effectiveCurrent]:"Selecione uma emissão";
   useEffect(()=>{
-    if(effectiveCurrent!==3||fiscalContext||!canPrepare)return;
+    if(mode!=="continue"||effectiveCurrent!==4||fiscalContext||!canPrepare)return;
     void loadFiscalContext().catch(cause=>setError(cause instanceof Error?cause.message:"Não foi possível carregar a configuração fiscal."));
-  },[effectiveCurrent,fiscalContext,canPrepare]);
+  },[mode,effectiveCurrent,fiscalContext,canPrepare]);
 
 
   async function loadFiscalContext(){
