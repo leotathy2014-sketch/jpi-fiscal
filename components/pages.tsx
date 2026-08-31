@@ -1463,7 +1463,6 @@ const roleLabels:Record<ManagedRole,string>={
   secretaria:"Secretaria",
   consulta:"Consulta",
 };
-const editablePermissionRoles=["admin","financeiro","secretaria","consulta"] as const;
 
 function Permissions() {
   const supabase=useMemo(()=>createSupabaseBrowserClient(),[]);
