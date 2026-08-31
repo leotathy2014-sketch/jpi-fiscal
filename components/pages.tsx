@@ -809,7 +809,7 @@ async function savePasswordInVault(certificateId: string, password: string, acce
   if (!response.ok || !result.ok) throw new Error(result.error || "Não foi possível guardar a senha no cofre seguro.");
 }
 function CertificateSettings() {
-  const supabase = useMemo(() => createSupabaseBrowserClient(), []);
+  const supabase = useMemo(() => createSupabaseBrowserClient(), []);const {can}=useAccess();const canManage=can("settings.certificate.manage");
   const [items, setItems] = useState<CertificateRow[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -826,7 +826,7 @@ function CertificateSettings() {
   }, [load]);
   async function upload(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    if (!supabase) return;
+    if (!supabase||!canManage) return;
     setBusy(true);
     setError("");
     setMessage("");
@@ -945,7 +945,7 @@ function CertificateSettings() {
   }
   async function saveCurrentPassword(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!supabase || !active) return;
+    if (!supabase || !active || !canManage) return;
     const form = event.currentTarget;
     const password = String(new FormData(form).get("senha_atual") || "");
     if (!password) {
@@ -974,7 +974,7 @@ function CertificateSettings() {
     }
   }
   async function deleteCertificate() {
-    if (!supabase || items.length === 0) return;
+    if (!supabase || items.length === 0 || !canManage) return;
     const confirmed = window.confirm("EXCLUSÃO DEFINITIVA\n\nEsta ação apagará o certificado A1, todos os arquivos armazenados, o histórico e o aviso de validade. Deseja continuar?");
     if (!confirmed) return;
     setBusy(true);
@@ -1032,8 +1032,9 @@ function CertificateSettings() {
           <span>O certificado será utilizado somente depois da homologação da integração NFS-e.</span>
         </div>
       </div>
+      {!canManage&&<div className="notice compact"><ShieldCheck/><span>Seu perfil pode consultar o certificado e a validade, mas não pode anexar, substituir, excluir ou alterar a senha protegida.</span></div>}
       <div className="company-settings">
-        <form className="panel data-form company-form" onSubmit={upload}>
+        <form className={`panel data-form company-form ${!canManage?"settings-readonly":""}`} onSubmit={upload}>
           <div className="panel-title">
             <div>
               <h2>{active ? "Substituir certificado A1" : "Anexar certificado A1"}</h2>
@@ -1046,13 +1047,13 @@ function CertificateSettings() {
             <span>Arquivo do certificado</span>
             <div>
               <UploadCloud />
-              <input name="certificado" type="file" accept=".pfx,.p12,application/x-pkcs12,application/pkcs12" required />
+              <input name="certificado" type="file" accept=".pfx,.p12,application/x-pkcs12,application/pkcs12" required disabled={!canManage} />
               <small>Formatos .PFX ou .P12 — máximo 5 MB</small>
             </div>
           </label>
           <label>
             Senha do certificado
-            <input name="senha" type="password" autoComplete="off" placeholder="Informe a senha do arquivo A1" required />
+            <input name="senha" type="password" autoComplete="off" placeholder="Informe a senha do arquivo A1" required disabled={!canManage} />
           </label>
           <div className="notice compact">
             <KeyRound />
@@ -1068,11 +1069,11 @@ function CertificateSettings() {
               <small>Emissor: {metadata.issuer || "Não informado"}</small>
             </div>
           )}
-          <div className="form-actions">
+          {canManage&&<div className="form-actions">
             <button className="primary" disabled={busy}>
               {busy ? "Enviando…" : active ? "Substituir certificado" : "Salvar certificado"}
             </button>
-          </div>
+          </div>}
         </form>
         <div className="company-side">
           <article className="panel certificate-current">
@@ -1109,7 +1110,7 @@ function CertificateSettings() {
                     ? `Senha protegida no cofre${active.senha_configurada_em ? ` desde ${new Date(active.senha_configurada_em).toLocaleString("pt-BR")}` : ""}. As homologações usarão o A1 automaticamente.`
                     : "Senha automática ainda não configurada. Informe-a uma única vez abaixo para liberar as homologações sem nova digitação."}</span>
                 </div>
-                <form className="data-form certificate-password-form" onSubmit={saveCurrentPassword}>
+                {canManage&&<form className="data-form certificate-password-form" onSubmit={saveCurrentPassword}>
                   <label>
                     {active.senha_configurada ? "Atualizar senha protegida" : "Guardar senha do certificado"}
                     <input name="senha_atual" type="password" autoComplete="off" maxLength={256} placeholder="Informe a senha do A1 atual" required />
@@ -1118,7 +1119,7 @@ function CertificateSettings() {
                     <KeyRound size={17} />
                     {busy ? "Protegendo…" : active.senha_configurada ? "Conferir e atualizar senha" : "Guardar senha com segurança"}
                   </button>
-                </form>
+                </form>}
               </>
             ) : (
               <div className="empty-certificate">
@@ -1126,7 +1127,7 @@ function CertificateSettings() {
                 <span>Nenhum certificado anexado.</span>
               </div>
             )}
-            {items.length > 0 && (
+            {canManage&&items.length > 0 && (
               <button type="button" className="danger full certificate-delete" disabled={busy} onClick={deleteCertificate}>
                 <Trash2 size={17} />
                 {busy ? "Excluindo…" : "Excluir certificado completamente"}
@@ -1199,7 +1200,7 @@ type CommunicationConfig = {
   agenda_edu_ultimo_status: string;
 };
 
-function CommunicationsSettings({accessToken,onClose,onChanged}:{accessToken:string|null;onClose:()=>void;onChanged:(config:CommunicationConfig)=>void}) {
+function CommunicationsSettings({accessToken,onClose,onChanged,canEdit}:{accessToken:string|null;onClose:()=>void;onChanged:(config:CommunicationConfig)=>void;canEdit:boolean}) {
   const supabase=useMemo(()=>createSupabaseBrowserClient(),[]);
   const [config,setConfig]=useState<CommunicationConfig|null>(null);
   const [loading,setLoading]=useState(true);
@@ -1246,6 +1247,7 @@ function CommunicationsSettings({accessToken,onClose,onChanged}:{accessToken:str
   useEffect(()=>{load();},[load]);
 
   async function run(action:string,payload:Record<string,string>){
+    if(!canEdit)throw new Error("Seu perfil possui acesso somente para visualizar as integrações.");
     if(!accessToken)throw new Error("Sessão expirada. Entre novamente.");
     const response=await authenticatedFetch("/api/integrations/communications",{method:"POST",headers:{Authorization:`Bearer ${accessToken}`,"Content-Type":"application/json"},body:JSON.stringify({action,...payload}),cache:"no-store"});
     const data=await response.json().catch(()=>({})) as {message?:string;error?:string};
@@ -1264,12 +1266,12 @@ function CommunicationsSettings({accessToken,onClose,onChanged}:{accessToken:str
   async function testWhatsapp(){setBusy("test-whatsapp");setError("");setMessage("");try{setMessage(await run("test-whatsapp",{}));await load();}catch(requestError){setError(requestError instanceof Error?requestError.message:"Não foi possível testar o WhatsApp.");}finally{setBusy("");}}
   async function saveAgenda(event:FormEvent<HTMLFormElement>){event.preventDefault();setBusy("save-agenda");setError("");setMessage("");try{setMessage(await run("save-agenda",{schoolIdentifier:agendaEduSchoolIdentifier,channelId:agendaEduChannelId,clientId:agendaEduClientId,clientSecret:agendaEduClientSecret,schoolToken:agendaEduSchoolToken}));setAgendaEduClientId("");setAgendaEduClientSecret("");setAgendaEduSchoolToken("");await load();}catch(requestError){setError(requestError instanceof Error?requestError.message:"Não foi possível salvar a Agenda Edu.");}finally{setBusy("");}}
   async function testAgenda(){setBusy("test-agenda");setError("");setMessage("");try{setMessage(await run("test-agenda",{}));await load();}catch(requestError){setError(requestError instanceof Error?requestError.message:"Não foi possível testar a Agenda Edu.");}finally{setBusy("");}}
-  const disabled=loading||Boolean(busy);
+  const disabled=loading||Boolean(busy)||!canEdit;
   return <div className="modal-backdrop"><div className="modal-card communications-modal">
     <div className="modal-head"><div><h2>Integrações de comunicação</h2><p>Configure os canais sem alterar o código do sistema.</p></div><button className="icon-button" onClick={onClose} disabled={Boolean(busy)} aria-label="Fechar"><X/></button></div>
     <div className="communications-body">
       {error&&<div className="error-box">{error}</div>}{message&&<div className="success-box">{message}</div>}
-      <div className="notice compact"><KeyRound/><span>Chaves e tokens são criptografados no cofre do servidor. Depois de salvos, eles nunca voltam a ser exibidos no navegador.</span></div>
+      <div className="notice compact"><KeyRound/><span>{canEdit?"Chaves e tokens são criptografados no cofre do servidor. Depois de salvos, eles nunca voltam a ser exibidos no navegador.":"Modo somente leitura: seu perfil pode conferir o estado dos canais, mas não pode salvar, testar ou alterar credenciais."}</span></div>
       {loading?<div className="communications-loading">Carregando configurações…</div>:<div className="communication-settings-grid">
         <form className="communication-channel-card data-form" onSubmit={saveEmail}>
           <div className="communication-channel-head"><span className="integration-icon blue"><Mail/></span><div><h3>E-mail</h3><small>{emailProvider==="resend"?"Resend":emailProvider==="locaweb_smtp"?"SMTP Locaweb":"E-mail Locaweb"}</small></div><Status>{config?.email_ultimo_status==="conectado"?"Conectado":config?.email_credencial_configurada?"Configurar":"Pendente"}</Status></div>
@@ -1318,6 +1320,7 @@ function CommunicationsSettings({accessToken,onClose,onChanged}:{accessToken:str
 }
 
 function Integrations({accessToken}:{accessToken:string|null}) {
+  const {can}=useAccess();const canEdit=can("settings.integrations.edit");const canTestFiscal=can("nfse.test_connection");
   const [open, setOpen] = useState(false);
   const [communicationsOpen,setCommunicationsOpen]=useState(false);
   const [communicationConfig,setCommunicationConfig]=useState<CommunicationConfig|null>(null);
@@ -1411,7 +1414,7 @@ function Integrations({accessToken}:{accessToken:string|null}) {
           <span>Emissão real</span>
           <strong className="amber-text">Desativada</strong>
         </div>
-        <button className="secondary full" onClick={() => { setOpen(true);setError("");setMessage(""); }}>Testar conexão segura</button>
+        {canTestFiscal?<button className="secondary full" onClick={() => { setOpen(true);setError("");setMessage(""); }}>Testar conexão segura</button>:<span className="integration-readonly-note">Teste fiscal não liberado para este perfil.</span>}
       </article>
       <article className="integration-card">
         <div className="integration-head">
@@ -1426,9 +1429,9 @@ function Integrations({accessToken}:{accessToken:string|null}) {
           <span>Canal</span>
           <strong>{communicationConfig?.agenda_edu_ultimo_status==="conectado"?"3 canais conectados":communicationConfig?.email_credencial_configurada&&communicationConfig?.whatsapp_token_configurado?"E-mail e WhatsApp":communicationConfig?.email_credencial_configurada?"E-mail configurado":communicationConfig?.whatsapp_token_configurado?"WhatsApp configurado":"Não configurado"}</strong>
         </div>
-        <button className="secondary full" onClick={()=>setCommunicationsOpen(true)}>Configurar canais</button>
+        <button className="secondary full" onClick={()=>setCommunicationsOpen(true)}>{canEdit?"Configurar canais":"Visualizar canais"}</button>
       </article>
-    </div>{communicationsOpen&&<CommunicationsSettings accessToken={accessToken} onClose={()=>setCommunicationsOpen(false)} onChanged={setCommunicationConfig}/>} {open&&<div className="modal-backdrop"><div className="modal-card small-modal"><div className="modal-head"><h2>Testar ambiente de homologação</h2><button className="icon-button" onClick={()=>setOpen(false)}><X/></button></div><form className="data-form" onSubmit={testHomologation}>{error&&<div className="error-box">{error}</div>}{message&&<div className="success-box">{message}</div>}<div className="notice compact warning"><ShieldCheck/><span>Este teste usa o certificado A1 e a senha protegida no cofre somente para autenticar a conexão com a produção restrita. Nenhuma DPS ou NFS-e será enviada.</span></div>{(busy||elapsed>0)&&<div className="connection-timer"><Clock3/><span>{busy?(connectionStage||"Iniciando conexão…"):"Tempo da tentativa"}</span><strong>{elapsedLabel}</strong></div>}{busy&&<TransmissionProgress kind="connection"/>}<div className="notice compact"><KeyRound/><span>A senha será recuperada somente pelo servidor e não será exibida no navegador.</span></div><div className="form-actions"><button type="button" className="secondary" onClick={()=>setOpen(false)} disabled={busy}>Fechar</button><button className="primary" disabled={busy||tested}>{busy?`Conectando · ${elapsedLabel}`:tested?"Conexão confirmada":"Testar conexão"}</button></div></form></div></div>}</>
+    </div>{communicationsOpen&&<CommunicationsSettings accessToken={accessToken} onClose={()=>setCommunicationsOpen(false)} onChanged={setCommunicationConfig} canEdit={canEdit}/>} {canTestFiscal&&open&&<div className="modal-backdrop"><div className="modal-card small-modal"><div className="modal-head"><h2>Testar ambiente de homologação</h2><button className="icon-button" onClick={()=>setOpen(false)}><X/></button></div><form className="data-form" onSubmit={testHomologation}>{error&&<div className="error-box">{error}</div>}{message&&<div className="success-box">{message}</div>}<div className="notice compact warning"><ShieldCheck/><span>Este teste usa o certificado A1 e a senha protegida no cofre somente para autenticar a conexão com a produção restrita. Nenhuma DPS ou NFS-e será enviada.</span></div>{(busy||elapsed>0)&&<div className="connection-timer"><Clock3/><span>{busy?(connectionStage||"Iniciando conexão…"):"Tempo da tentativa"}</span><strong>{elapsedLabel}</strong></div>}{busy&&<TransmissionProgress kind="connection"/>}<div className="notice compact"><KeyRound/><span>A senha será recuperada somente pelo servidor e não será exibida no navegador.</span></div><div className="form-actions"><button type="button" className="secondary" onClick={()=>setOpen(false)} disabled={busy}>Fechar</button><button className="primary" disabled={busy||tested}>{busy?`Conectando · ${elapsedLabel}`:tested?"Conexão confirmada":"Testar conexão"}</button></div></form></div></div>}</>
   );
 }
 type ManagedRole="master"|"admin"|"financeiro"|"secretaria"|"consulta";
