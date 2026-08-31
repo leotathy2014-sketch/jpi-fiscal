@@ -6,6 +6,7 @@ const apiSource=readFileSync(new URL("../app/api/deliveries/whatsapp-manual/rout
 const settingsApiSource=readFileSync(new URL("../app/api/integrations/communications/route.ts",import.meta.url),"utf8");
 const uiSource=readFileSync(new URL("../components/delivery-center.tsx",import.meta.url),"utf8");
 const migrationSource=readFileSync(new URL("../supabase/migrations/20260828203000_habilitar_whatsapp_manual_gratuito.sql",import.meta.url),"utf8");
+const protectedAccessFixSource=readFileSync(new URL("../supabase/migrations/20260828221500_corrigir_acesso_link_protegido_nfse.sql",import.meta.url),"utf8");
 
 test("prepara o WhatsApp manual sem chamar a API paga da Meta",()=>{
   assert.match(apiSource,/new URL\(`https:\/\/wa\.me\/\$\{testRecipient\}`\)/);
@@ -58,4 +59,14 @@ test("libera o modo manual cadastrando somente o número interno, sem exigir a M
   assert.match(uiSource,/Salvar e liberar os botões/);
   assert.match(uiSource,/Configurar número de teste/);
   assert.match(uiSource,/action:"save-whatsapp-manual"/);
+});
+
+test("permite abrir o PDF protegido sem expor tabelas do schema privado",()=>{
+  assert.match(protectedAccessFixSource,/grant usage on schema private to anon/);
+  assert.match(protectedAccessFixSource,/revoke create on schema private from anon/);
+  assert.match(protectedAccessFixSource,/revoke all on all tables in schema private from anon/);
+  assert.match(protectedAccessFixSource,/revoke execute on all functions in schema private from anon/);
+  assert.match(protectedAccessFixSource,/inspect_nfse_delivery_access_internal\(text,text\)/);
+  assert.match(protectedAccessFixSource,/open_nfse_delivery_access_internal\(text,text\)/);
+  assert.match(protectedAccessFixSource,/read_nfse_delivery_access_internal\(text,text\)/);
 });
