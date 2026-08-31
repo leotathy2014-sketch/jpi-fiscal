@@ -58,6 +58,9 @@ export function BrandingProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     applyTheme(branding);
+  }, [branding]);
+
+  useEffect(() => {
     void loadBranding();
     const refresh = () => void loadBranding();
     const onVisible = () => {
@@ -73,7 +76,7 @@ export function BrandingProvider({ children }: { children: ReactNode }) {
       window.removeEventListener("jpi-branding-updated", refresh);
       document.removeEventListener("visibilitychange", onVisible);
     };
-  }, [branding, loadBranding]);
+  }, [loadBranding]);
 
   return <BrandingContext.Provider value={branding}>{children}</BrandingContext.Provider>;
 }
