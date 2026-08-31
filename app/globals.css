@@ -230,3 +230,16 @@
  .integration-detail-heading{align-items:flex-start;flex-wrap:wrap}
  .nfse-status-pair.detail{width:100%;max-width:none;justify-content:flex-start;padding-left:46px;flex-wrap:nowrap;overflow-x:auto}
 }
+
+
+/* Corrige precedência do grid do cartão: estados NFS-e sempre lado a lado */
+.integration-overview-card>.nfse-status-pair{
+  display:flex;
+  flex-direction:row;
+  align-items:center;
+  justify-content:flex-end;
+  gap:8px;
+  flex-wrap:nowrap;
+  white-space:nowrap;
+  width:auto;
+}
