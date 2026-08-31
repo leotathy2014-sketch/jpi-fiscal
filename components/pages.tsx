@@ -1431,202 +1431,188 @@ function Integrations({accessToken}:{accessToken:string|null}) {
     </div>{communicationsOpen&&<CommunicationsSettings accessToken={accessToken} onClose={()=>setCommunicationsOpen(false)} onChanged={setCommunicationConfig}/>} {open&&<div className="modal-backdrop"><div className="modal-card small-modal"><div className="modal-head"><h2>Testar ambiente de homologação</h2><button className="icon-button" onClick={()=>setOpen(false)}><X/></button></div><form className="data-form" onSubmit={testHomologation}>{error&&<div className="error-box">{error}</div>}{message&&<div className="success-box">{message}</div>}<div className="notice compact warning"><ShieldCheck/><span>Este teste usa o certificado A1 e a senha protegida no cofre somente para autenticar a conexão com a produção restrita. Nenhuma DPS ou NFS-e será enviada.</span></div>{(busy||elapsed>0)&&<div className="connection-timer"><Clock3/><span>{busy?(connectionStage||"Iniciando conexão…"):"Tempo da tentativa"}</span><strong>{elapsedLabel}</strong></div>}{busy&&<TransmissionProgress kind="connection"/>}<div className="notice compact"><KeyRound/><span>A senha será recuperada somente pelo servidor e não será exibida no navegador.</span></div><div className="form-actions"><button type="button" className="secondary" onClick={()=>setOpen(false)} disabled={busy}>Fechar</button><button className="primary" disabled={busy||tested}>{busy?`Conectando · ${elapsedLabel}`:tested?"Conexão confirmada":"Testar conexão"}</button></div></form></div></div>}</>
   );
 }
+type ManagedRole="master"|"admin"|"financeiro"|"secretaria"|"consulta";
 type ManagedUser = {
   id: number;
   user_id: string | null;
   nome: string | null;
   email: string;
-  role: "admin" | "financeiro" | "secretaria" | "consulta";
+  role: ManagedRole;
   active: boolean;
   created_at: string;
   last_sign_in_at: string | null;
   invited_at: string | null;
 };
-const roleLabels = {
-  admin: "Administrador",
-  financeiro: "Financeiro",
-  secretaria: "Secretaria",
-  consulta: "Consulta",
-} as const;
+type PermissionDefinition={
+  permission_key:string;
+  module_key:string;
+  module_label:string;
+  action_key:string;
+  action_label:string;
+  description:string;
+  sort_order:number;
+};
+type RolePermissionRow={role:"admin"|"financeiro"|"secretaria"|"consulta";permission_key:string;allowed:boolean};
+const roleLabels:Record<ManagedRole,string>={
+  master:"Master",
+  admin:"Administrador",
+  financeiro:"Financeiro",
+  secretaria:"Secretaria",
+  consulta:"Consulta",
+};
+const editablePermissionRoles=["admin","financeiro","secretaria","consulta"] as const;
+
 function Permissions() {
-  const supabase = useMemo(() => createSupabaseBrowserClient(), []);
-  const [rows, setRows] = useState<ManagedUser[]>([]);
-  const [open, setOpen] = useState(false);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState("");
-  const [message, setMessage] = useState("");
-  const load = useCallback(async () => {
-    if (!supabase) return;
+  const supabase=useMemo(()=>createSupabaseBrowserClient(),[]);
+  const {isMaster,can}=useAccess();
+  const canViewUsers=can("settings.users.view")||can("settings.users.manage");
+  const canManageUsers=can("settings.users.manage");
+  const [section,setSection]=useState<"users"|"profiles">("users");
+  const [rows,setRows]=useState<ManagedUser[]>([]);
+  const [definitions,setDefinitions]=useState<PermissionDefinition[]>([]);
+  const [rolePermissions,setRolePermissions]=useState<RolePermissionRow[]>([]);
+  const [open,setOpen]=useState(false);
+  const [busy,setBusy]=useState(false);
+  const [permissionBusy,setPermissionBusy]=useState("");
+  const [error,setError]=useState("");
+  const [message,setMessage]=useState("");
+
+  const loadUsers=useCallback(async()=>{
+    if(!supabase||!canViewUsers)return;
     setError("");
-    const { data, error } = await supabase.functions.invoke("manage-users", {
-      body: { action: "list" },
+    const {data,error}=await supabase.functions.invoke("manage-users",{body:{action:"list"}});
+    if(error||data?.error)setError(data?.error||error?.message||"Não foi possível carregar os usuários.");
+    else setRows((data.users||[]) as ManagedUser[]);
+  },[supabase,canViewUsers]);
+
+  const loadMatrix=useCallback(async()=>{
+    if(!supabase||!isMaster)return;
+    const [permissionResult,roleResult]=await Promise.all([
+      supabase.from("jpi_permissions").select("permission_key,module_key,module_label,action_key,action_label,description,sort_order").order("sort_order",{ascending:true}),
+      supabase.from("jpi_role_permissions").select("role,permission_key,allowed"),
+    ]);
+    if(permissionResult.error||roleResult.error){
+      setError(permissionResult.error?.message||roleResult.error?.message||"Não foi possível carregar a matriz de permissões.");
+      return;
+    }
+    setDefinitions((permissionResult.data||[]) as PermissionDefinition[]);
+    setRolePermissions((roleResult.data||[]) as RolePermissionRow[]);
+  },[supabase,isMaster]);
+
+  useEffect(()=>{void loadUsers()},[loadUsers]);
+  useEffect(()=>{if(isMaster)void loadMatrix()},[isMaster,loadMatrix]);
+
+  const modules=useMemo(()=>{
+    const grouped=new Map<string,{label:string;items:PermissionDefinition[]}>();
+    for(const item of definitions){
+      const current=grouped.get(item.module_key)||{label:item.module_label,items:[]};
+      current.items.push(item);grouped.set(item.module_key,current);
+    }
+    return Array.from(grouped.entries()).map(([key,value])=>({key,...value}));
+  },[definitions]);
+
+  function permissionEnabled(role:RolePermissionRow["role"],permissionKey:string){
+    return rolePermissions.find(item=>item.role===role&&item.permission_key===permissionKey)?.allowed===true;
+  }
+
+  async function togglePermission(role:RolePermissionRow["role"],permissionKey:string){
+    if(!supabase||!isMaster)return;
+    const next=!permissionEnabled(role,permissionKey);
+    const busyKey=`${role}:${permissionKey}`;setPermissionBusy(busyKey);setError("");setMessage("");
+    const {error}=await supabase.rpc("set_role_permission",{p_role:role,p_permission_key:permissionKey,p_allowed:next});
+    setPermissionBusy("");
+    if(error){setError(error.message);return}
+    setRolePermissions(current=>{
+      const exists=current.some(item=>item.role===role&&item.permission_key===permissionKey);
+      if(exists)return current.map(item=>item.role===role&&item.permission_key===permissionKey?{...item,allowed:next}:item);
+      return [...current,{role,permission_key:permissionKey,allowed:next}];
     });
-    if (error || data?.error) setError(data?.error || error?.message || "Não foi possível carregar os usuários.");
-    else setRows(data.users || []);
-  }, [supabase]);
-  useEffect(() => {
-    load();
-  }, [load]);
-  async function invite(e: FormEvent<HTMLFormElement>) {
+    setMessage(`Permissão ${next?"liberada":"bloqueada"} para ${roleLabels[role]}.`);
+    window.dispatchEvent(new Event("jpi-permissions-updated"));
+  }
+
+  async function invite(e:FormEvent<HTMLFormElement>){
     e.preventDefault();
-    if (!supabase) return;
-    setBusy(true);
-    setError("");
-    setMessage("");
-    const f = new FormData(e.currentTarget);
-    const { data, error } = await supabase.functions.invoke("manage-users", {
-      body: {
-        action: "invite",
-        nome: f.get("nome"),
-        email: String(f.get("email") || "").toLowerCase(),
-        role: f.get("role"),
-      },
-    });
+    if(!supabase||!canManageUsers)return;
+    setBusy(true);setError("");setMessage("");
+    const form=new FormData(e.currentTarget);
+    const {data,error}=await supabase.functions.invoke("manage-users",{body:{
+      action:"invite",
+      nome:form.get("nome"),
+      email:String(form.get("email")||"").toLowerCase(),
+      role:form.get("role"),
+    }});
     setBusy(false);
-    if (error || data?.error) {
-      setError(data?.error || error?.message || "Não foi possível enviar o convite.");
-      return;
-    }
-    setOpen(false);
-    setMessage("Convite enviado por e-mail com sucesso.");
-    await load();
+    if(error||data?.error){setError(data?.error||error?.message||"Não foi possível enviar o convite.");return}
+    setOpen(false);setMessage("Convite enviado por e-mail com sucesso.");await loadUsers();
   }
-  async function updateUser(user: ManagedUser, changes: Partial<Pick<ManagedUser, "role" | "active">>) {
-    if (!supabase) return;
-    setBusy(true);
-    setError("");
-    setMessage("");
-    const next = {
-      role: changes.role ?? user.role,
-      active: changes.active ?? user.active,
-    };
-    const { data, error } = await supabase.functions.invoke("manage-users", {
-      body: { action: "update", id: user.id, ...next },
-    });
+
+  async function updateUser(user:ManagedUser,changes:Partial<Pick<ManagedUser,"role"|"active">>){
+    if(!supabase||!canManageUsers||user.role==="master")return;
+    setBusy(true);setError("");setMessage("");
+    const next={role:changes.role??user.role,active:changes.active??user.active};
+    const {data,error}=await supabase.functions.invoke("manage-users",{body:{action:"update",id:user.id,...next}});
     setBusy(false);
-    if (error || data?.error) {
-      setError(data?.error || error?.message || "Não foi possível atualizar o usuário.");
-      return;
-    }
-    setMessage("Permissões atualizadas com sucesso.");
-    await load();
+    if(error||data?.error){setError(data?.error||error?.message||"Não foi possível atualizar o usuário.");return}
+    setMessage("Usuário atualizado com sucesso.");await loadUsers();
   }
-  return (
-    <>
-      {error && <div className="error-box page-error">{error}</div>}
-      {message && <div className="success-box settings-message">{message}</div>}
+
+  if(!canViewUsers)return <div className="notice warning"><ShieldCheck/><span>Seu perfil não possui permissão para visualizar usuários.</span></div>;
+
+  return <>
+    {error&&<div className="error-box page-error">{error}</div>}
+    {message&&<div className="success-box settings-message">{message}</div>}
+    <div className="permission-admin-header">
+      <div><ShieldCheck/><span><strong>Controle de acesso do JPI Fiscal</strong><small>O Master define o que cada perfil pode visualizar e executar em cada módulo.</small></span></div>
+      {isMaster&&<div className="master-protection-badge"><KeyRound/><span><strong>MASTER</strong><small>Acesso total e protegido</small></span></div>}
+    </div>
+    <div className="permission-section-tabs">
+      <button className={section==="users"?"active":""} onClick={()=>setSection("users")}><UsersRound/>Usuários</button>
+      {isMaster&&<button className={section==="profiles"?"active":""} onClick={()=>setSection("profiles")}><SlidersHorizontal/>Permissões por perfil</button>}
+    </div>
+
+    {section==="users"&&<>
       <div className="permission-legend">
-        <div>
-          <ShieldCheck />
-          <div>
-            <strong>Controle por nível de acesso</strong>
-            <p>Administrador gerencia tudo; Financeiro opera cobranças e NFS-e; Secretaria cuida dos cadastros; Consulta apenas visualiza.</p>
-          </div>
-        </div>
-        <button className="primary" onClick={() => setOpen(true)}>
-          <Plus />
-          Convidar usuário
-        </button>
+        <div><UserCog/><div><strong>Usuários do sistema</strong><p>Cada funcionário deve possuir seu próprio acesso. O perfil Master não pode ser rebaixado ou bloqueado por esta tela.</p></div></div>
+        {canManageUsers&&<button className="primary" onClick={()=>setOpen(true)}><Plus/>Convidar usuário</button>}
       </div>
-      <div className="table-card">
-        <table>
-          <thead>
-            <tr>
-              <th>Usuário</th>
-              <th>Nível de acesso</th>
-              <th>Status</th>
-              <th>Último acesso</th>
-              <th>Acesso</th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((u) => (
-              <tr key={u.id}>
-                <td>
-                  <div className="name-cell">
-                    <div className="avatar soft">{(u.nome || u.email)[0].toUpperCase()}</div>
-                    <div>
-                      <strong>{u.nome || "USUÁRIO CONVIDADO"}</strong>
-                      <span className="subcell">{u.email}</span>
-                    </div>
-                  </div>
-                </td>
-                <td>
-                  <select
-                    className="role-select"
-                    value={u.role}
-                    disabled={busy}
-                    onChange={(e) =>
-                      updateUser(u, {
-                        role: e.target.value as ManagedUser["role"],
-                      })
-                    }
-                  >
-                    {Object.entries(roleLabels).map(([value, label]) => (
-                      <option key={value} value={value}>
-                        {label}
-                      </option>
-                    ))}
-                  </select>
-                </td>
-                <td>
-                  <Status>{u.active ? "Ativo" : "Bloqueado"}</Status>
-                </td>
-                <td>{u.last_sign_in_at ? new Date(u.last_sign_in_at).toLocaleString("pt-BR") : u.invited_at ? "Convite pendente" : "Nunca acessou"}</td>
-                <td>
-                  <button className={`access-toggle ${u.active ? "active" : "blocked"}`} disabled={busy} onClick={() => updateUser(u, { active: !u.active })}>
-                    {u.active ? "Bloquear" : "Ativar"}
-                  </button>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-        {rows.length === 0 && !error && <div className="empty-row">Carregando usuários…</div>}
+      <div className="table-card permission-users-table"><table>
+        <thead><tr><th>Usuário</th><th>Perfil</th><th>Status</th><th>Último acesso</th><th>Acesso</th></tr></thead>
+        <tbody>{rows.map(user=><tr key={user.id} className={user.role==="master"?"master-user-row":""}>
+          <td><div className="name-cell"><div className="avatar soft">{(user.nome||user.email)[0].toUpperCase()}</div><div><strong>{user.nome||"USUÁRIO CONVIDADO"}{user.role==="master"&&<span className="inline-master-tag">MASTER</span>}</strong><span className="subcell">{user.email}</span></div></div></td>
+          <td>{user.role==="master"?<span className="role-master-static"><KeyRound/>Master</span>:<select className="role-select" value={user.role} disabled={busy||!canManageUsers} onChange={event=>updateUser(user,{role:event.target.value as ManagedUser["role"]})}>
+            <option value="admin">Administrador</option><option value="financeiro">Financeiro</option><option value="secretaria">Secretaria</option><option value="consulta">Consulta</option>
+          </select>}</td>
+          <td><Status>{user.active?"Ativo":"Bloqueado"}</Status></td>
+          <td>{user.last_sign_in_at?new Date(user.last_sign_in_at).toLocaleString("pt-BR"):user.invited_at?"Convite pendente":"Nunca acessou"}</td>
+          <td>{user.role==="master"?<span className="master-lock"><ShieldCheck/>Protegido</span>:canManageUsers?<button className={`access-toggle ${user.active?"active":"blocked"}`} disabled={busy} onClick={()=>updateUser(user,{active:!user.active})}>{user.active?"Bloquear":"Ativar"}</button>:<span className="muted">Somente leitura</span>}</td>
+        </tr>)}</tbody>
+      </table>{rows.length===0&&!error&&<div className="empty-row">Nenhum usuário encontrado.</div>}</div>
+    </>}
+
+    {section==="profiles"&&isMaster&&<>
+      <div className="permission-master-note"><KeyRound/><div><strong>Master possui acesso total permanente</strong><span>As opções abaixo alteram apenas Administrador, Financeiro, Secretaria e Consulta. As mudanças são aplicadas aos usuários desses perfis automaticamente.</span></div></div>
+      <div className="permission-matrix">
+        <div className="permission-matrix-head"><div><strong>Módulo / função</strong><small>Controle individual</small></div>{editablePermissionRoles.map(role=><div key={role}><strong>{roleLabels[role]}</strong><small>{role==="admin"?"Operacional":role==="financeiro"?"Fiscal/financeiro":role==="secretaria"?"Secretaria":"Somente o liberado"}</small></div>)}</div>
+        {modules.map(module=><section className="permission-module" key={module.key}>
+          <div className="permission-module-title"><strong>{module.label}</strong><span>{module.items.length} {module.items.length===1?"permissão":"permissões"}</span></div>
+          {module.items.map(permission=><div className="permission-matrix-row" key={permission.permission_key}>
+            <div><strong>{permission.action_label}</strong><small>{permission.description}</small></div>
+            {editablePermissionRoles.map(role=>{const enabled=permissionEnabled(role,permission.permission_key);const busyKey=`${role}:${permission.permission_key}`;return <button type="button" key={role} className={`permission-toggle ${enabled?"enabled":"disabled"}`} disabled={permissionBusy===busyKey} onClick={()=>void togglePermission(role,permission.permission_key)} aria-pressed={enabled}><span className="permission-toggle-track"><i/></span><b>{permissionBusy===busyKey?"Salvando…":enabled?"Permitido":"Bloqueado"}</b></button>})}
+          </div>)}
+        </section>)}
       </div>
-      {open && (
-        <div className="modal-backdrop">
-          <div className="modal-card small-modal">
-            <div className="modal-head">
-              <h2>Convidar usuário</h2>
-              <button className="icon-button" onClick={() => setOpen(false)}>
-                <X />
-              </button>
-            </div>
-            <form className="data-form" onSubmit={invite}>
-              <label>
-                Nome completo
-                <input name="nome" onInput={upperCompanyInput} required />
-              </label>
-              <label>
-                E-mail
-                <input name="email" type="email" onInput={(e) => (e.currentTarget.value = e.currentTarget.value.toLocaleLowerCase("pt-BR"))} required />
-              </label>
-              <label>
-                Nível de acesso
-                <select name="role" defaultValue="consulta">
-                  <option value="admin">Administrador</option>
-                  <option value="financeiro">Financeiro</option>
-                  <option value="secretaria">Secretaria</option>
-                  <option value="consulta">Consulta</option>
-                </select>
-              </label>
-              <div className="notice compact">
-                <ShieldCheck />
-                <span>O usuário receberá um link seguro para acessar e definir sua senha.</span>
-              </div>
-              <div className="form-actions">
-                <button type="button" className="secondary" onClick={() => setOpen(false)}>
-                  Cancelar
-                </button>
-                <button className="primary" disabled={busy}>
-                  {busy ? "Enviando…" : "Enviar convite"}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-    </>
-  );
+    </>}
+
+    {open&&canManageUsers&&<div className="modal-backdrop"><div className="modal-card small-modal">
+      <div className="modal-head"><h2>Convidar usuário</h2><button className="icon-button" onClick={()=>setOpen(false)}><X/></button></div>
+      <form className="data-form" onSubmit={invite}>
+        <label>Nome completo<input name="nome" onInput={upperCompanyInput} required/></label>
+        <label>E-mail<input name="email" type="email" onInput={event=>(event.currentTarget.value=event.currentTarget.value.toLocaleLowerCase("pt-BR"))} required/></label>
+        <label>Perfil<select name="role" defaultValue="consulta"><option value="admin">Administrador</option><option value="financeiro">Financeiro</option><option value="secretaria">Secretaria</option><option value="consulta">Consulta</option></select></label>
+        <div className="notice compact"><ShieldCheck/><span>O usuário receberá um link seguro para definir sua própria senha. O perfil Master não é criado por convite comum.</span></div>
+        <div className="form-actions"><button type="button" className="secondary" onClick={()=>setOpen(false)}>Cancelar</button><button className="primary" disabled={busy}>{busy?"Enviando…":"Enviar convite"}</button></div>
+      </form>
+    </div></div>}
+  </>;
 }
