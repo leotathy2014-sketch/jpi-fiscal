@@ -3,6 +3,7 @@ import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import { AlertCircle, ArrowUpRight, Building2, CalendarDays, Check, CircleDollarSign, Clock3, FileCheck2, FilePlus2, Filter, KeyRound, Link2, Mail, MessageCircle, MoreHorizontal, Plus, Search, ShieldCheck, SlidersHorizontal, Trash2, UploadCloud, UserCog, UsersRound, WalletCards, X } from "lucide-react";
 import type { Role } from "./app-shell";
 import { createSupabaseBrowserClient } from "@/lib/supabase";
+import { authenticatedFetch } from "@/lib/authenticated-fetch";
 import { TransmissionProgress } from "./transmission-progress";
 import { AgendaEduStudentLinks } from "./agenda-edu-student-links";
 
@@ -752,7 +753,7 @@ type CertificateMetadata = {
   serialNumber: string;
 };
 async function savePasswordInVault(certificateId: string, password: string, accessToken: string) {
-  const response = await fetch("/api/certificates/password", {
+  const response = await authenticatedFetch("/api/certificates/password", {
     method: "POST",
     headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
     body: JSON.stringify({ certificateId, password }),
@@ -814,7 +815,7 @@ function CertificateSettings() {
     const inspectForm = new FormData();
     inspectForm.set("certificate", file);
     inspectForm.set("password", password);
-    const inspectResponse = await fetch("/api/certificates/inspect", {
+    const inspectResponse = await authenticatedFetch("/api/certificates/inspect", {
       method: "POST",
       headers: { Authorization: `Bearer ${accessToken}` },
       body: inspectForm,
@@ -1179,7 +1180,7 @@ function CommunicationsSettings({accessToken,onClose,onChanged}:{accessToken:str
   const load=useCallback(async()=>{
     if(!accessToken){setError("Sessão expirada. Entre novamente.");setLoading(false);return;}
     try{
-      const response=await fetch("/api/integrations/communications",{headers:{Authorization:`Bearer ${accessToken}`},cache:"no-store"});
+      const response=await authenticatedFetch("/api/integrations/communications",{headers:{Authorization:`Bearer ${accessToken}`},cache:"no-store"});
       const data=await response.json().catch(()=>({})) as {config?:CommunicationConfig;error?:string};
       if(response.status===401)window.dispatchEvent(new Event("jpi-session-invalid"));
       if(!response.ok||!data.config)throw new Error(data.error||"Não foi possível carregar as integrações.");
@@ -1196,7 +1197,7 @@ function CommunicationsSettings({accessToken,onClose,onChanged}:{accessToken:str
 
   async function run(action:string,payload:Record<string,string>){
     if(!accessToken)throw new Error("Sessão expirada. Entre novamente.");
-    const response=await fetch("/api/integrations/communications",{method:"POST",headers:{Authorization:`Bearer ${accessToken}`,"Content-Type":"application/json"},body:JSON.stringify({action,...payload}),cache:"no-store"});
+    const response=await authenticatedFetch("/api/integrations/communications",{method:"POST",headers:{Authorization:`Bearer ${accessToken}`,"Content-Type":"application/json"},body:JSON.stringify({action,...payload}),cache:"no-store"});
     const data=await response.json().catch(()=>({})) as {message?:string;error?:string};
     if(response.status===401)window.dispatchEvent(new Event("jpi-session-invalid"));
     if(!response.ok)throw new Error(data.error||"Não foi possível concluir a operação.");
@@ -1278,7 +1279,7 @@ function Integrations({accessToken}:{accessToken:string|null}) {
   useEffect(()=>{
     if(!accessToken)return;
     let active=true;
-    fetch("/api/integrations/communications",{headers:{Authorization:`Bearer ${accessToken}`},cache:"no-store"})
+    authenticatedFetch("/api/integrations/communications",{headers:{Authorization:`Bearer ${accessToken}`},cache:"no-store"})
       .then(async response=>{if(response.status===401)window.dispatchEvent(new Event("jpi-session-invalid"));return {response,data:await response.json().catch(()=>({})) as {config?:CommunicationConfig}}})
       .then(({response,data})=>{if(active&&response.ok&&data.config)setCommunicationConfig(data.config);})
       .catch(()=>undefined);
@@ -1309,7 +1310,7 @@ function Integrations({accessToken}:{accessToken:string|null}) {
     try {
       setConnectionStage("Conectando ao Emissor Nacional de testes…");
       const response = await Promise.race([
-        fetch("/api/nfse/homologation/test", {
+        authenticatedFetch("/api/nfse/homologation/test", {
           method: "POST",
           headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
           body: JSON.stringify({ action: "test-connection" }),
