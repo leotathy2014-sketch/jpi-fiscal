@@ -12,6 +12,7 @@ import {
   signXmlElement,
 } from "@/lib/nfse-node";
 import { NFSE_RESTRICTED_ENDPOINT } from "@/lib/nfse-dps";
+import { hasServerPermission } from "@/lib/server-permissions";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -43,8 +44,7 @@ export async function POST(request: NextRequest) {
   });
   const { data: { user }, error: userError } = await supabase.auth.getUser(token);
   if (userError || !user?.email) return json({ error: "Sessão expirada. Entre novamente." }, 401);
-  const { data: access } = await supabase.from("app_users").select("role,active").eq("email", user.email).maybeSingle();
-  if (!access?.active || !["admin", "financeiro"].includes(access.role)) return json({ error: "Seu usuário não possui permissão para cancelar notas de teste." }, 403);
+  if (!await hasServerPermission(supabase,"nfse.cancel")) return json({ error: "Seu usuário não possui permissão para cancelar notas de teste." }, 403);
 
   let monthlyId = 0;
   let reasonCode = "";
