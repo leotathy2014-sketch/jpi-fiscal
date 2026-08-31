@@ -191,7 +191,7 @@ export function IssuanceAssistant({onNavigate}:{onNavigate:(page:AppPage)=>void}
     if(!selected||!progress)return labels.map((label,index)=>({
       key:label.toLowerCase(),label,short:String(index+1),
       description:index===0?"Selecione uma emissão já iniciada.":"Aguardando etapa anterior.",
-      state:index===0?"current" as StepState:"pending" as StepState
+      state:(index===0?"current":"pending") as StepState
     }));
     const completion=[
       true,
@@ -219,7 +219,7 @@ export function IssuanceAssistant({onNavigate}:{onNavigate:(page:AppPage)=>void}
     ];
     return labels.map((label,index)=>({
       key:label.toLowerCase(),label,short:String(index+1),description:descriptions[index],
-      state:completion[index]?"done":index===current?(index===2&&missing.length?"warning":"current"):"pending",
+      state:(completion[index]?"done":index===current?(index===2&&missing.length?"warning":"current"):"pending") as StepState,
     }));
   },[delivery,missing.length,newEmissionOpen,progress,selected,selectedStudent]);
 
