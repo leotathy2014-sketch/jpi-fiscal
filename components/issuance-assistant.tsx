@@ -345,6 +345,7 @@ export function IssuanceAssistant({onNavigate}:{onNavigate:(page:AppPage)=>void}
 
     <div className="notice warning"><ShieldCheck/><div><strong>Implantação segura e não destrutiva</strong><span>As telas atuais de NFS-e e Enviar notas continuam funcionando. O assistente apenas organiza e direciona o processo.</span></div></div>
     {error&&<div className="error-box">{error}</div>}
+    {message&&<div className="success-box" role="status">{message}</div>}
 
     <section className="assistant-stepper" aria-label="Etapas da emissão">
       {steps.map((step,index)=><div className={`assistant-step ${step.state}`} key={step.key}>
@@ -386,6 +387,51 @@ export function IssuanceAssistant({onNavigate}:{onNavigate:(page:AppPage)=>void}
 
           {missing.length>0&&effectiveCurrent<=1&&<div className="assistant-warning-box"><CircleAlert/><div><strong>Cadastro precisa de atenção</strong><span>Complete: {missing.join(", ")}. O assistente não recomenda avançar antes disso.</span></div></div>}
 
+
+          {selected&&canPrepare&&!selected.chave_nfse_homologacao&&effectiveCurrent>=2&&effectiveCurrent<=3&&<section className="assistant-dps-workspace">
+            <div className="assistant-workspace-head">
+              <div>
+                <span>{effectiveCurrent===2?"EDIÇÃO DA DPS":"PRÉVIA PARA APROVAÇÃO"}</span>
+                <h3>{effectiveCurrent===2?"Revise somente o que pode ser alterado":"Confira tudo antes de aprovar"}</h3>
+                <p>{effectiveCurrent===2?"Os dados do aluno e do responsável permanecem protegidos no cadastro. Aqui você ajusta competência, valor e descrição do serviço.":"Depois da aprovação, qualquer alteração deve ser feita antes da geração do XML."}</p>
+              </div>
+              <span className="assistant-safe-tag"><ShieldCheck size={15}/>Sem transmissão</span>
+            </div>
+            {effectiveCurrent===2?<div className="assistant-dps-editor">
+              <div className="assistant-edit-grid">
+                <label><span>Competência</span><input type="month" max={currentCompetenceInput()} value={draftCompetence} onChange={e=>setDraftCompetence(e.target.value)}/></label>
+                <label><span>Valor da NFS-e</span><input type="text" inputMode="decimal" value={draftValue} onChange={e=>setDraftValue(e.target.value.replace(/[^0-9.,]/g,""))}/></label>
+              </div>
+              <label className="assistant-description-field"><span>Descrição do serviço <em>Editável</em></span><textarea rows={5} maxLength={1000} value={draftDescription} onChange={e=>setDraftDescription(e.target.value)}/><small>{draftDescription.length}/1000 caracteres</small></label>
+              <div className="assistant-protected-data">
+                <strong>Dados protegidos pelo cadastro</strong>
+                <div>
+                  <span>Aluno<b>{selected.alunos?.nome||"—"}</b></span>
+                  <span>Responsável<b>{selected.alunos?.responsavel||"—"}</b></span>
+                  <span>CPF/CNPJ<b>{selected.alunos?.cpf_cnpj||"—"}</b></span>
+                  <span>Serviço fiscal<b>{fiscalServiceForSegment(selected.alunos?.segmento).code}</b></span>
+                </div>
+              </div>
+            </div>:<div className="assistant-preview-sheet">
+              <div className="assistant-preview-title"><div><strong>JPI Fiscal · Prévia DPS</strong><span>Documento para conferência — ainda não transmitido</span></div><span>#{selected.id}</span></div>
+              <div className="assistant-preview-grid">
+                <div><small>Aluno</small><strong>{selected.alunos?.nome||"—"}</strong></div>
+                <div><small>Responsável / tomador</small><strong>{selected.alunos?.responsavel||"—"}</strong></div>
+                <div><small>CPF/CNPJ</small><strong>{selected.alunos?.cpf_cnpj||"—"}</strong></div>
+                <div><small>Competência</small><strong>{formatCompetence(draftCompetence)}</strong></div>
+                <div><small>Valor do serviço</small><strong>{money(Number(draftValue.replace(",","."))||0)}</strong></div>
+                <div><small>Código do serviço</small><strong>{fiscalServiceForSegment(selected.alunos?.segmento).code}</strong></div>
+              </div>
+              <div className="assistant-preview-description"><small>Descrição do serviço</small><p>{upper(draftDescription)||"—"}</p></div>
+              <div className="assistant-preview-fiscal">
+                <span><small>Regime</small><b>{fiscalContext?.regime_tributario||"LUCRO PRESUMIDO"}</b></span>
+                <span><small>PIS</small><b>{fiscalContext?String(fiscalContext.pis_aliquota)+"%":"Conforme configuração"}</b></span>
+                <span><small>COFINS</small><b>{fiscalContext?String(fiscalContext.cofins_aliquota)+"%":"Conforme configuração"}</b></span>
+                <span><small>Ambiente</small><b>Homologação</b></span>
+              </div>
+            </div>}
+          </section>}
+
           <div className="assistant-next-card">
             {effectiveCurrent===1&&<><ShieldCheck/><div><strong>Validação automática e segura</strong><span>Confira dados do tomador, competência, valor, configuração fiscal e certificado A1 antes de preparar a DPS.</span></div></>}
             {effectiveCurrent===2&&<><FileText/><div><strong>DPS em foco</strong><span>A próxima tela abrirá diretamente a nota selecionada para revisar os campos que podem ser editados.</span></div></>}
@@ -396,9 +442,10 @@ export function IssuanceAssistant({onNavigate}:{onNavigate:(page:AppPage)=>void}
             {effectiveCurrent>=7&&<><MailCheck/><div><strong>Enviar nota</strong><span>O assistente leva a mesma nota para os canais de entrega já existentes, preservando o histórico.</span></div></>}
           </div>
 
+          {!canPrepare&&effectiveCurrent>0&&effectiveCurrent<7&&<div className="notice compact"><ShieldCheck/><span>Seu perfil pode acompanhar o processo, mas não possui permissão para preparar a NFS-e.</span></div>}
           <div className="assistant-actions">
-            <button className="primary assistant-main-action" onClick={continueProcess}>
-              {effectiveCurrent===1&&missing.length?"Corrigir cadastro":effectiveCurrent>=7?"Ir para envio":"Continuar processo"} <ChevronRight size={18}/>
+            <button className="primary assistant-main-action" onClick={continueProcess} disabled={Boolean(busyAction)||(!canPrepare&&effectiveCurrent>0&&effectiveCurrent<7)}>
+              {busyAction==="validate"?"Validando…":busyAction==="save-dps"?"Salvando DPS…":busyAction==="approve"?"Aprovando…":effectiveCurrent===1&&missing.length?"Corrigir cadastro":effectiveCurrent===1?"Validar nota":effectiveCurrent===2?"Salvar DPS e ver prévia":effectiveCurrent===3?"Aprovar prévia":effectiveCurrent>=7?"Ir para envio":"Continuar processo"} <ChevronRight size={18}/>
             </button>
             {effectiveCurrent>1&&effectiveCurrent<7&&<button className="secondary" onClick={()=>focusAndNavigate("NFS-e")}>Abrir NFS-e atual</button>}
             {progress?.finished&&<button className="secondary" onClick={()=>focusAndNavigate("Enviar notas")}>Ir direto para envio</button>}
