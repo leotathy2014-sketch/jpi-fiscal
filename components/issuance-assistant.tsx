@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Check, ChevronRight, CircleAlert, FileCode2, FileText, GraduationCap, MailCheck, Plus, ReceiptText, RefreshCw, Search, Send, ShieldCheck, Sparkles, UsersRound, WalletCards } from "lucide-react";
+import { CalendarDays, Check, ChevronRight, CircleAlert, Eye, FileCode2, FileText, GraduationCap, Mail, MailCheck, MessageCircle, Plus, ReceiptText, RefreshCw, Search, Send, ShieldCheck, Sparkles, UsersRound, WalletCards } from "lucide-react";
 import { createSupabaseBrowserClient } from "@/lib/supabase";
 import { authenticatedFetch } from "@/lib/authenticated-fetch";
 import { buildDpsDraft, isValidCpfCnpj, NFSE_OWN_APP_SERIES } from "@/lib/nfse-dps";
@@ -28,6 +28,8 @@ type AssistantPayment={
     cpf_cnpj:string|null;
     email:string|null;
     whatsapp:string|null;
+    agenda_edu_student_id:string|null;
+    agenda_edu_use_external_id:boolean;
     cep:string|null;
     logradouro:string|null;
     numero:string|null;
@@ -44,6 +46,12 @@ type StepState="done"|"current"|"pending"|"warning";
 type AssistantStep={key:string;label:string;short:string;description:string;state:StepState};
 type FiscalContext={cnpj:string|null;razao_social:string|null;cidade:string|null;uf:string|null;regime_tributario:string;pis_aliquota:number;cofins_aliquota:number;pis_cofins_cst:string;pis_cofins_retencao:number};
 type HomologationResult={ok?:boolean;alreadyIssued?:boolean;error?:string;key?:string};
+type DeliveryDocument={id:number;mensalidade_id:number;versao:number;chave_acesso:string;estado:string;emitida_em:string|null};
+type DeliveryChannel="email"|"whatsapp-manual"|"agenda-edu";
+type ManualSender={id:number;nome:string;numero:string};
+type ManualWhatsappInfo={ready:boolean;testRecipient:string|null;senders:ManualSender[];mode:"manual";cost:"gratuito"};
+type AgendaEduInfo={ready:boolean;environment:string;channelConfigured:boolean;message:string};
+type ManualPending={deliveryId:number;whatsappUrl:string|null;actualRecipient:string;sender?:ManualSender|null};
 
 const money=(value:number)=>Number(value).toLocaleString("pt-BR",{style:"currency",currency:"BRL"});
 const normalize=(value:string)=>value.normalize("NFD").replace(/[\u0300-\u036f]/g,"").toLocaleLowerCase("pt-BR");
@@ -101,6 +109,9 @@ export function IssuanceAssistant({onNavigate}:{onNavigate:(page:AppPage)=>void}
   const {can}=useAccess();
   const canPrepare=can("nfse.prepare");
   const canCreatePayment=can("payments.create");
+  const canSendEmail=can("deliveries.send_email");
+  const canSendWhatsapp=can("deliveries.send_whatsapp");
+  const canSendAgenda=can("deliveries.send_agenda");
   const [students,setStudents]=useState<AssistantStudent[]>([]);
   const [newEmissionOpen,setNewEmissionOpen]=useState(true);
   const [newStudentId,setNewStudentId]=useState<number|null>(null);
@@ -124,13 +135,21 @@ export function IssuanceAssistant({onNavigate}:{onNavigate:(page:AppPage)=>void}
   const [draftDescription,setDraftDescription]=useState("");
   const [fiscalContext,setFiscalContext]=useState<FiscalContext|null>(null);
   const [homologationConfirmed,setHomologationConfirmed]=useState(false);
+  const [deliveryChannel,setDeliveryChannel]=useState<DeliveryChannel>("email");
+  const [activeDocument,setActiveDocument]=useState<DeliveryDocument|null>(null);
+  const [deliveryBusy,setDeliveryBusy]=useState(false);
+  const [documentBusy,setDocumentBusy]=useState("");
+  const [whatsappInfo,setWhatsappInfo]=useState<ManualWhatsappInfo|null>(null);
+  const [manualSenderId,setManualSenderId]=useState<number|null>(null);
+  const [manualPending,setManualPending]=useState<ManualPending|null>(null);
+  const [agendaEduInfo,setAgendaEduInfo]=useState<AgendaEduInfo|null>(null);
 
   const load=useCallback(async(silent=false)=>{
     if(!supabase)return;
     if(!silent)setLoading(true);else setRefreshing(true);
     setError("");
     const [paymentsResult,studentsResult,deliveriesResult]=await Promise.all([
-      supabase.from("mensalidades").select("id,aluno_id,competencia,valor_nfse,descricao_servico,status_pagamento,status_nfse,dps_xml_path,dps_xml_id,nfse_homologacao_xml_path,chave_nfse_homologacao,homologacao_emitida_em,alunos(nome,responsavel,segmento,cpf_cnpj,email,whatsapp,cep,logradouro,numero,cidade,uf)").order("created_at",{ascending:false}),
+      supabase.from("mensalidades").select("id,aluno_id,competencia,valor_nfse,descricao_servico,status_pagamento,status_nfse,dps_xml_path,dps_xml_id,nfse_homologacao_xml_path,chave_nfse_homologacao,homologacao_emitida_em,alunos(nome,responsavel,segmento,cpf_cnpj,email,whatsapp,agenda_edu_student_id,agenda_edu_use_external_id,cep,logradouro,numero,cidade,uf)").order("created_at",{ascending:false}),
       supabase.from("alunos").select("id,nome,turma,segmento,responsavel,cpf_cnpj,email,whatsapp,cep,logradouro,numero,cidade,uf").order("nome"),
       supabase.from("nfse_entregas").select("mensalidade_id,status,canal,created_at").order("created_at",{ascending:false}),
     ]);
@@ -172,7 +191,7 @@ export function IssuanceAssistant({onNavigate}:{onNavigate:(page:AppPage)=>void}
     setDraftCompetence(competence);
     setDraftValue(String(selected.valor_nfse));
     setDraftDescription(selected.descricao_servico||defaultServiceDescription(competence,selected.alunos?.segmento));
-    setMessage("");setError("");setHomologationConfirmed(false);
+    setMessage("");setError("");setHomologationConfirmed(false);setActiveDocument(null);setManualPending(null);
   },[selected?.id]);
   useEffect(()=>{
     if(!selectedStudent){setNewDescription("");setNewDescriptionEdited(false);return}
@@ -245,6 +264,11 @@ export function IssuanceAssistant({onNavigate}:{onNavigate:(page:AppPage)=>void}
     if(newEmissionOpen||effectiveCurrent!==4||fiscalContext||!canPrepare)return;
     void loadFiscalContext().catch(cause=>setError(cause instanceof Error?cause.message:"Não foi possível carregar a configuração fiscal."));
   },[newEmissionOpen,effectiveCurrent,fiscalContext,canPrepare]);
+
+  useEffect(()=>{
+    if(newEmissionOpen||effectiveCurrent<7||!selected?.chave_nfse_homologacao)return;
+    void loadDeliveryContext().catch(cause=>setError(cause instanceof Error?cause.message:"Não foi possível preparar a conclusão da nota."));
+  },[newEmissionOpen,effectiveCurrent,selected?.id,selected?.chave_nfse_homologacao,canSendWhatsapp,canSendAgenda]);
 
 
   async function createPaymentFromStudent(){
@@ -400,6 +424,118 @@ export function IssuanceAssistant({onNavigate}:{onNavigate:(page:AppPage)=>void}
       await load(true);
     }catch(cause){setError(cause instanceof Error?cause.message:"Não foi possível aprovar a prévia.");}
     finally{setBusyAction("")}
+  }
+
+  async function loadDeliveryContext(){
+    if(!supabase||!selected||!selected.chave_nfse_homologacao)return;
+    const documentResult=await supabase.from("nfse_documentos_homologacao")
+      .select("id,mensalidade_id,versao,chave_acesso,estado,emitida_em")
+      .eq("mensalidade_id",selected.id).eq("estado","ativa").order("versao",{ascending:false}).limit(1).maybeSingle();
+    if(documentResult.error)throw new Error(documentResult.error.message);
+    setActiveDocument((documentResult.data||null) as DeliveryDocument|null);
+    const {data:{session}}=await supabase.auth.getSession();
+    const token=session?.access_token||null;
+    if(!token)return;
+    if(canSendWhatsapp){
+      try{
+        const response=await authenticatedFetch("/api/deliveries/whatsapp-manual",{headers:{Authorization:"Bearer "+token},cache:"no-store"});
+        const data=await response.json().catch(()=>({})) as ManualWhatsappInfo&{error?:string};
+        if(response.ok){
+          setWhatsappInfo(data);
+          setManualSenderId(current=>current&&data.senders?.some(sender=>sender.id===current)?current:null);
+        }
+      }catch{}
+    }
+    if(canSendAgenda){
+      try{
+        const response=await authenticatedFetch("/api/deliveries/agenda-edu",{headers:{Authorization:"Bearer "+token},cache:"no-store"});
+        const data=await response.json().catch(()=>({})) as AgendaEduInfo&{error?:string};
+        if(response.ok)setAgendaEduInfo(data);
+      }catch{}
+    }
+  }
+
+  async function sendCurrentDocument(){
+    if(!supabase||!selected||!activeDocument||deliveryBusy)return;
+    const allowed=deliveryChannel==="email"?canSendEmail:deliveryChannel==="whatsapp-manual"?canSendWhatsapp:canSendAgenda;
+    if(!allowed){setError("Seu perfil não possui permissão para este canal.");return}
+    const {data:{session}}=await supabase.auth.getSession();
+    if(!session){setError("Sua sessão expirou. Entre novamente.");return}
+    setDeliveryBusy(true);setError("");setMessage("");
+    try{
+      if(deliveryChannel==="whatsapp-manual"){
+        if(!whatsappInfo?.ready)throw new Error("O WhatsApp manual ainda não está configurado.");
+        if(!manualSenderId)throw new Error("Escolha qual WhatsApp da escola será usado.");
+        const popup=window.open("about:blank","_blank");if(popup)popup.opener=null;
+        try{
+          const response=await authenticatedFetch("/api/deliveries/whatsapp-manual",{
+            method:"POST",
+            headers:{Authorization:"Bearer "+session.access_token,"Content-Type":"application/json"},
+            body:JSON.stringify({action:"prepare",monthlyId:selected.id,documentId:activeDocument.id,senderId:manualSenderId,requestId:crypto.randomUUID()}),
+            cache:"no-store"
+          });
+          const data=await response.json().catch(()=>({})) as {ok?:boolean;error?:string;deliveryId?:number;whatsappUrl?:string;actualRecipient?:string;sender?:ManualSender};
+          if(!response.ok||!data.ok||!data.deliveryId||!data.whatsappUrl)throw new Error(data.error||"Não foi possível preparar o WhatsApp.");
+          const whatsappUrl=new URL(data.whatsappUrl);
+          if(whatsappUrl.protocol!=="https:"||whatsappUrl.hostname!=="wa.me")throw new Error("O endereço seguro do WhatsApp não pôde ser validado.");
+          if(popup)popup.location.href=whatsappUrl.toString();else window.open(whatsappUrl.toString(),"_blank","noopener,noreferrer");
+          setManualPending({deliveryId:data.deliveryId,whatsappUrl:whatsappUrl.toString(),actualRecipient:data.actualRecipient||"número interno",sender:data.sender||whatsappInfo.senders.find(sender=>sender.id===manualSenderId)||null});
+          setMessage("WhatsApp aberto. Depois de enviar a mensagem, confirme o envio no Assistente.");
+        }catch(cause){popup?.close();throw cause}
+      }else{
+        if(deliveryChannel==="agenda-edu"&&!agendaEduInfo?.ready)throw new Error(agendaEduInfo?.message||"A Agenda Edu ainda está aguardando configuração.");
+        const endpoint=deliveryChannel==="agenda-edu"?"/api/deliveries/agenda-edu":"/api/deliveries/email";
+        const response=await authenticatedFetch(endpoint,{
+          method:"POST",
+          headers:{Authorization:"Bearer "+session.access_token,"Content-Type":"application/json"},
+          body:JSON.stringify({monthlyId:selected.id,documentId:activeDocument.id,requestId:crypto.randomUUID()}),
+          cache:"no-store"
+        });
+        const data=await response.json().catch(()=>({})) as {ok?:boolean;error?:string};
+        if(!response.ok||!data.ok)throw new Error(data.error||"O provedor não confirmou esta entrega.");
+        setMessage(deliveryChannel==="agenda-edu"?"NFS-e enviada pela Agenda Edu e registrada no histórico.":"NFS-e enviada por e-mail e registrada no histórico.");
+        await load(true);
+      }
+    }catch(cause){setError(cause instanceof Error?cause.message:"Não foi possível enviar a nota.");}
+    finally{setDeliveryBusy(false)}
+  }
+
+  async function finishManualDelivery(action:"confirm"|"cancel"){
+    if(!supabase||!manualPending||deliveryBusy)return;
+    const {data:{session}}=await supabase.auth.getSession();
+    if(!session){setError("Sua sessão expirou. Entre novamente.");return}
+    setDeliveryBusy(true);setError("");
+    try{
+      const response=await authenticatedFetch("/api/deliveries/whatsapp-manual",{
+        method:"POST",
+        headers:{Authorization:"Bearer "+session.access_token,"Content-Type":"application/json"},
+        body:JSON.stringify({action,deliveryId:manualPending.deliveryId}),
+        cache:"no-store"
+      });
+      const data=await response.json().catch(()=>({})) as {ok?:boolean;error?:string};
+      if(!response.ok||!data.ok)throw new Error(data.error||"Não foi possível concluir esta tentativa.");
+      setMessage(action==="confirm"?"Envio por WhatsApp confirmado e registrado no histórico.":"Tentativa de WhatsApp cancelada.");
+      setManualPending(null);
+      await load(true);
+    }catch(cause){setError(cause instanceof Error?cause.message:"Não foi possível concluir o envio.");}
+    finally{setDeliveryBusy(false)}
+  }
+
+  async function openCurrentDocument(format:"pdf"|"xml"){
+    if(!supabase||!activeDocument||documentBusy)return;
+    const {data:{session}}=await supabase.auth.getSession();
+    if(!session){setError("Sua sessão expirou. Entre novamente.");return}
+    const popup=window.open("","_blank");if(popup)popup.opener=null;
+    setDocumentBusy(format);setError("");
+    try{
+      const params=new URLSearchParams({documentId:String(activeDocument.id),format,disposition:"inline"});
+      const response=await authenticatedFetch("/api/deliveries/documents?"+params.toString(),{headers:{Authorization:"Bearer "+session.access_token},cache:"no-store"});
+      if(!response.ok){const data=await response.json().catch(()=>({})) as {error?:string};throw new Error(data.error||"O documento não pôde ser aberto.");}
+      const blob=await response.blob();const url=URL.createObjectURL(blob);
+      if(popup)popup.location.href=url;else window.open(url,"_blank","noopener,noreferrer");
+      window.setTimeout(()=>URL.revokeObjectURL(url),60000);
+    }catch(cause){popup?.close();setError(cause instanceof Error?cause.message:"Não foi possível abrir o documento.");}
+    finally{setDocumentBusy("")}
   }
 
   async function generateXmlInAssistant(){
