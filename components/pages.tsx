@@ -1471,6 +1471,8 @@ function Permissions() {
   const canViewUsers=can("settings.users.view")||can("settings.users.manage");
   const canManageUsers=can("settings.users.manage");
   const [section,setSection]=useState<"users"|"profiles">("users");
+  const [selectedProfile,setSelectedProfile]=useState<RolePermissionRow["role"]>("admin");
+  const [permissionNotice,setPermissionNotice]=useState("");
   const [rows,setRows]=useState<ManagedUser[]>([]);
   const [definitions,setDefinitions]=useState<PermissionDefinition[]>([]);
   const [rolePermissions,setRolePermissions]=useState<RolePermissionRow[]>([]);
@@ -1521,7 +1523,8 @@ function Permissions() {
   async function togglePermission(role:RolePermissionRow["role"],permissionKey:string){
     if(!supabase||!isMaster)return;
     const next=!permissionEnabled(role,permissionKey);
-    const busyKey=`${role}:${permissionKey}`;setPermissionBusy(busyKey);setError("");setMessage("");
+    const definition=definitions.find(item=>item.permission_key===permissionKey);
+    const busyKey=`${role}:${permissionKey}`;setPermissionBusy(busyKey);setError("");setPermissionNotice("");
     const {error}=await supabase.rpc("set_role_permission",{p_role:role,p_permission_key:permissionKey,p_allowed:next});
     setPermissionBusy("");
     if(error){setError(error.message);return}
@@ -1530,7 +1533,7 @@ function Permissions() {
       if(exists)return current.map(item=>item.role===role&&item.permission_key===permissionKey?{...item,allowed:next}:item);
       return [...current,{role,permission_key:permissionKey,allowed:next}];
     });
-    setMessage(`Permissão ${next?"liberada":"bloqueada"} para ${roleLabels[role]}.`);
+    setPermissionNotice(`${definition?.module_label||"Permissão"} · ${definition?.action_label||permissionKey}: ${next?"ATIVA":"BLOQUEADA"} para ${roleLabels[role]}. Alteração salva com sucesso.`);
     window.dispatchEvent(new Event("jpi-permissions-updated"));
   }
 
@@ -1557,7 +1560,7 @@ function Permissions() {
     const {data,error}=await supabase.functions.invoke("manage-users",{body:{action:"update",id:user.id,...next}});
     setBusy(false);
     if(error||data?.error){setError(data?.error||error?.message||"Não foi possível atualizar o usuário.");return}
-    setMessage("Usuário atualizado com sucesso.");await loadUsers();
+    setMessage(`Usuário ${next.active?"ativado":"bloqueado"} e perfil atualizado com sucesso.`);await loadUsers();
   }
 
   if(!canViewUsers)return <div className="notice warning"><ShieldCheck/><span>Seu perfil não possui permissão para visualizar usuários.</span></div>;
@@ -1594,15 +1597,34 @@ function Permissions() {
     </>}
 
     {section==="profiles"&&isMaster&&<>
-      <div className="permission-master-note"><KeyRound/><div><strong>Master possui acesso total permanente</strong><span>As opções abaixo alteram apenas Administrador, Financeiro, Secretaria e Consulta. As mudanças são aplicadas aos usuários desses perfis automaticamente.</span></div></div>
-      <div className="permission-matrix">
-        <div className="permission-matrix-head"><div><strong>Módulo / função</strong><small>Controle individual</small></div>{editablePermissionRoles.map(role=><div key={role}><strong>{roleLabels[role]}</strong><small>{role==="admin"?"Operacional":role==="financeiro"?"Fiscal/financeiro":role==="secretaria"?"Secretaria":"Somente o liberado"}</small></div>)}</div>
-        {modules.map(module=><section className="permission-module" key={module.key}>
-          <div className="permission-module-title"><strong>{module.label}</strong><span>{module.items.length} {module.items.length===1?"permissão":"permissões"}</span></div>
-          {module.items.map(permission=><div className="permission-matrix-row" key={permission.permission_key}>
-            <div><strong>{permission.action_label}</strong><small>{permission.description}</small></div>
-            {editablePermissionRoles.map(role=>{const enabled=permissionEnabled(role,permission.permission_key);const busyKey=`${role}:${permission.permission_key}`;return <button type="button" key={role} className={`permission-toggle ${enabled?"enabled":"disabled"}`} disabled={permissionBusy===busyKey} onClick={()=>void togglePermission(role,permission.permission_key)} aria-pressed={enabled}><span className="permission-toggle-track"><i/></span><b>{permissionBusy===busyKey?"Salvando…":enabled?"Permitido":"Bloqueado"}</b></button>})}
-          </div>)}
+      <div className="permission-master-note"><KeyRound/><div><strong>Master possui acesso total permanente</strong><span>Selecione um perfil abaixo. A tela carregará somente os módulos e funções desse perfil, mostrando claramente o que está ativo ou bloqueado.</span></div></div>
+      <div className="profile-permission-selector">
+        <label>
+          Perfil para configurar
+          <select value={selectedProfile} onChange={event=>{setSelectedProfile(event.target.value as RolePermissionRow["role"]);setPermissionNotice("");setError("");}}>
+            <option value="admin">Administrador</option>
+            <option value="financeiro">Financeiro</option>
+            <option value="secretaria">Secretaria</option>
+            <option value="consulta">Consulta</option>
+          </select>
+        </label>
+        <div className="profile-permission-summary">
+          <span>Perfil selecionado</span>
+          <strong>{roleLabels[selectedProfile]}</strong>
+          <small>{rolePermissions.filter(item=>item.role===selectedProfile&&item.allowed).length} de {definitions.length} permissões ativas</small>
+        </div>
+      </div>
+      {permissionNotice&&<div className="permission-save-feedback" role="status" aria-live="polite"><Check/><span>{permissionNotice}</span></div>}
+      <div className="permission-profile-list">
+        {modules.map(module=><section className="permission-module single-profile" key={module.key}>
+          <div className="permission-module-title"><strong>{module.label}</strong><span>{module.items.filter(item=>permissionEnabled(selectedProfile,item.permission_key)).length}/{module.items.length} ativas</span></div>
+          {module.items.map(permission=>{const enabled=permissionEnabled(selectedProfile,permission.permission_key);const busyKey=`${selectedProfile}:${permission.permission_key}`;return <div className="permission-profile-row" key={permission.permission_key}>
+            <div className="permission-function-copy"><strong>{permission.action_label}</strong><small>{permission.description}</small></div>
+            <button type="button" className={`permission-toggle profile-only ${enabled?"enabled":"disabled"}`} disabled={permissionBusy===busyKey} onClick={()=>void togglePermission(selectedProfile,permission.permission_key)} aria-pressed={enabled}>
+              <span className="permission-toggle-track"><i/></span>
+              <b>{permissionBusy===busyKey?"SALVANDO…":enabled?"ATIVA":"BLOQUEADA"}</b>
+            </button>
+          </div>})}
         </section>)}
       </div>
     </>}
