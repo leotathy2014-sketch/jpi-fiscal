@@ -3,11 +3,10 @@
 import { useEffect, useMemo, useState } from "react";
 import { createSupabaseBrowserClient, hasSupabaseConfig } from "@/lib/supabase";
 import { AppShell, type AppPage, type Role } from "@/components/app-shell";
-import { Login, SetPassword } from "@/components/login";
+import { Login, RecoveryConfirm, SetPassword } from "@/components/login";
 import { BrandLogo } from "@/components/branding";
 import { AccessProvider } from "@/components/access";
 
-const APP_URL="https://jpi-fiscal.vercel.app";
 
 export default function Home() {
   const supabase = useMemo(() => createSupabaseBrowserClient(), []);
@@ -20,6 +19,7 @@ export default function Home() {
   const [permissions,setPermissions]=useState<string[]>([]);
   const [needsPassword, setNeedsPassword] = useState(false);
   const [passwordRecovery, setPasswordRecovery] = useState(false);
+  const [recoveryTokenHash,setRecoveryTokenHash]=useState("");
   const [authError, setAuthError] = useState("");
 
   useEffect(() => {
@@ -28,6 +28,12 @@ export default function Home() {
     const initialize=async()=>{
       try{
         const url=new URL(window.location.href);
+        const tokenHash=String(url.searchParams.get("token_hash")||"").trim();
+        if(url.searchParams.get("recovery_confirm")==="1"&&tokenHash.length>=20&&tokenHash.length<=512){
+          setRecoveryTokenHash(tokenHash);
+          setLoading(false);
+          return;
+        }
         const code=url.searchParams.get("code");
         if(code){
           const {data,error}=await supabase.auth.exchangeCodeForSession(code);
@@ -148,6 +154,26 @@ export default function Home() {
     if(error)throw new Error("Não foi possível enviar o e-mail de recuperação agora. Tente novamente.");
     if(data?.error)throw new Error(String(data.error));
   }
+  async function confirmPasswordRecovery(){
+    if(!supabase||!recoveryTokenHash)throw new Error("Este link de recuperação é inválido.");
+    const result=await supabase.auth.verifyOtp({token_hash:recoveryTokenHash,type:"recovery"} as never);
+    if(result.error)throw new Error("Este link expirou ou já foi utilizado. Solicite um novo link em “Esqueci minha senha”.");
+    const {data}=await supabase.auth.getSession();
+    if(!data.session)throw new Error("Não foi possível iniciar a recuperação. Solicite um novo link.");
+    setEmail(data.session.user.email??null);
+    setAccessToken(data.session.access_token);
+    setNeedsPassword(false);
+    setPasswordRecovery(true);
+    setRecoveryTokenHash("");
+    setAuthError("");
+    window.history.replaceState({},document.title,window.location.pathname);
+  }
+  function cancelPasswordRecovery(){
+    setRecoveryTokenHash("");
+    setAuthError("");
+    window.history.replaceState({},document.title,window.location.pathname);
+  }
+
   async function definePassword(password:string){
     if(!supabase)return;
     const {error}=await supabase.auth.updateUser({password,data:{needs_password:false}});
@@ -158,6 +184,7 @@ export default function Home() {
   }
 
   if (loading) return <div className="splash"><BrandLogo/><p>Carregando sistema…</p></div>;
+  if(recoveryTokenHash)return <RecoveryConfirm onContinue={confirmPasswordRecovery} onCancel={cancelPasswordRecovery}/>;
   const demoSession = typeof window !== "undefined" && localStorage.getItem("jpi-demo-session") === "1";
   if (!email && !demoSession) return <Login onSignIn={signIn} onResetPassword={requestPasswordReset} configured={hasSupabaseConfig()} externalError={authError} />;
   if (email&&(needsPassword||passwordRecovery)) return <SetPassword onSave={definePassword} recovery={passwordRecovery}/>;
