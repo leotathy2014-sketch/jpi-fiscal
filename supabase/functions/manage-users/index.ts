@@ -41,21 +41,25 @@ Deno.serve(async (req: Request) => {
       return reply({ error: "Seu usuário não possui acesso ao sistema." }, 403);
     }
     let canManageUsers = permission.role === "master";
-    if (!canManageUsers) {
-      const { data: rolePermission } = await admin
+    let canViewUsers = permission.role === "master";
+    if (permission.role !== "master") {
+      const { data: rolePermissions } = await admin
         .from("jpi_role_permissions")
-        .select("allowed")
+        .select("permission_key,allowed")
         .eq("role", permission.role)
-        .eq("permission_key", "settings.users.manage")
-        .maybeSingle();
-      canManageUsers = rolePermission?.allowed === true;
-    }
-    if (!canManageUsers) {
-      return reply({ error: "Seu perfil não possui permissão para gerenciar usuários." }, 403);
+        .in("permission_key", ["settings.users.view", "settings.users.manage"]);
+      canManageUsers = (rolePermissions ?? []).some((item) => item.permission_key === "settings.users.manage" && item.allowed === true);
+      canViewUsers = canManageUsers || (rolePermissions ?? []).some((item) => item.permission_key === "settings.users.view" && item.allowed === true);
     }
 
     const body = await req.json();
     const action = String(body.action ?? "");
+    if (action === "list" && !canViewUsers) {
+      return reply({ error: "Seu perfil não possui permissão para visualizar usuários." }, 403);
+    }
+    if ((action === "invite" || action === "update") && !canManageUsers) {
+      return reply({ error: "Seu perfil não possui permissão para gerenciar usuários." }, 403);
+    }
 
     if (action === "list") {
       const [{ data: authData, error: authError }, { data: appUsers, error: appError }] =
