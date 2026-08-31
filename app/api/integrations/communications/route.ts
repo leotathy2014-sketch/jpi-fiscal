@@ -29,7 +29,7 @@ async function authorizedClient(request:NextRequest){
 }
 
 async function readConfig(supabase:SupabaseClient){
-  return supabase.from("integracoes_comunicacao").select("email_provider,email_from_name,email_from_address,email_reply_to,email_smtp_host,email_smtp_port,email_smtp_username,email_credencial_configurada,email_testada_em,email_ultimo_status,whatsapp_provider,whatsapp_phone_number_id,whatsapp_business_account_id,whatsapp_sender_number,whatsapp_template_name,whatsapp_test_recipient,whatsapp_token_configurado,whatsapp_testada_em,whatsapp_ultimo_status,agenda_edu_provider,agenda_edu_school_identifier,agenda_edu_channel_id,agenda_edu_environment,agenda_edu_documentacao_confirmada,agenda_edu_credencial_configurada,agenda_edu_testada_em,agenda_edu_ultimo_status").eq("id",true).single();
+  return supabase.from("integracoes_comunicacao").select("email_provider,email_from_name,email_from_address,email_reply_to,email_smtp_host,email_smtp_port,email_smtp_username,email_credencial_configurada,email_testada_em,email_ultimo_status,whatsapp_provider,whatsapp_phone_number_id,whatsapp_business_account_id,whatsapp_sender_number,whatsapp_template_name,whatsapp_test_recipient,whatsapp_token_configurado,whatsapp_testada_em,whatsapp_ultimo_status,whatsapp_manual_message_template,agenda_edu_provider,agenda_edu_school_identifier,agenda_edu_channel_id,agenda_edu_environment,agenda_edu_documentacao_confirmada,agenda_edu_credencial_configurada,agenda_edu_testada_em,agenda_edu_ultimo_status").eq("id",true).single();
 }
 
 export async function GET(request:NextRequest){
@@ -89,6 +89,15 @@ export async function POST(request:NextRequest){
       await auth.supabase.from("integracoes_comunicacao").update({email_ultimo_status:"erro",updated_at:new Date().toISOString(),updated_by:auth.user.id}).eq("id",true);
       return json({error:sendError instanceof Error?sendError.message:"O provedor não concluiu o envio de teste."},400);
     }
+  }
+
+  if(action==="save-whatsapp-manual-message"){
+    const template=String(body.template||"").replace(/\r\n/g,"\n").trim();
+    if(template.length<20||template.length>2000)return json({error:"A mensagem do WhatsApp deve ter entre 20 e 2.000 caracteres."},400);
+    if(!template.includes("{link}"))return json({error:"A mensagem precisa conter a variável {link} para incluir o acesso à nota."},400);
+    const {error:updateError}=await auth.supabase.from("integracoes_comunicacao").update({whatsapp_manual_message_template:template,updated_at:new Date().toISOString(),updated_by:auth.user.id}).eq("id",true);
+    if(updateError)return json({error:"Não foi possível salvar a mensagem padrão do WhatsApp."},400);
+    return json({ok:true,message:"Mensagem padrão do WhatsApp salva. Ela será usada nos próximos envios manuais."});
   }
 
   if(action==="save-whatsapp-manual"){
