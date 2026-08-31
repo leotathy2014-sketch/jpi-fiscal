@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { request as httpsRequest, type RequestOptions } from "node:https";
 import type { ConnectionOptions } from "node:tls";
+import { hasServerPermission } from "@/lib/server-permissions";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -86,10 +87,8 @@ export async function POST(request: NextRequest) {
   const { data: { user }, error: userError } = await supabase.auth.getUser(token);
   if (userError || !user?.email) return json({ error: "Sessão expirada. Entre novamente." }, 401);
 
-  const { data: access } = await supabase.from("app_users").select("role,active").eq("email", user.email).maybeSingle();
-  if (!access?.active) return json({ error: "Seu usuário não possui acesso ao sistema." }, 403);
-  if (action === "test-connection" && !["admin", "financeiro"].includes(access.role)) {
-    return json({ error: "Seu usuário não possui permissão para testar a integração fiscal." }, 403);
+  if (!await hasServerPermission(supabase,"nfse.test_connection")) {
+    return json({ error: "Seu usuário não possui permissão para testar ou consultar a integração fiscal." }, 403);
   }
   if (action === "server-status" && cachedServerStatus && cachedServerStatus.expiresAt > Date.now()) {
     return json({ ...cachedServerStatus.body, action, cached: true }, cachedServerStatus.status);
