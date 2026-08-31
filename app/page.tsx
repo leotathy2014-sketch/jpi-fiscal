@@ -51,6 +51,13 @@ export default function Home() {
     const validateSession = async () => {
       const { data, error } = await supabase.auth.getUser();
       if (!active) return;
+      if (error) {
+        const status = (error as { status?: number }).status;
+        const code = String((error as { code?: string }).code || "").toLowerCase();
+        const message = String(error.message || "").toLowerCase();
+        const invalid = status === 401 || status === 403 || code.includes("session_not_found") || code.includes("refresh_token_not_found") || message.includes("session not found") || message.includes("refresh token not found") || message.includes("invalid refresh token");
+        if (!invalid) return;
+      }
       if (error || !data.user) {
         await supabase.auth.signOut({ scope: "local" });
         if (!active) return;
