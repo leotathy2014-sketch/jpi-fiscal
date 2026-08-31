@@ -340,7 +340,7 @@ export function IssuanceAssistant({onNavigate}:{onNavigate:(page:AppPage)=>void}
     if(!supabase||!selected||!canPrepare||selected.chave_nfse_homologacao)return;
     setBusyAction("save-dps");setError("");setMessage("");
     try{
-      const amount=Number(draftValue.replace(",","."));
+      const amount=parseMoneyInput(draftValue);
       if(!draftCompetence||draftCompetence>currentCompetenceInput())throw new Error("A competência não pode ser posterior ao mês atual.");
       if(!Number.isFinite(amount)||amount<=0)throw new Error("Informe um valor válido para a NFS-e.");
       const description=upper(draftDescription).trim();
