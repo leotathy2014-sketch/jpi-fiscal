@@ -1113,6 +1113,7 @@ function CertificateSettings() {
     </div>
   );
 }
+type WhatsappManualSenderSetting = {id?:number;nome:string;numero:string;ativo:boolean;ordem:number};
 type CommunicationConfig = {
   email_provider: string;
   email_from_name: string;
@@ -1144,6 +1145,7 @@ type CommunicationConfig = {
 };
 
 function CommunicationsSettings({accessToken,onClose,onChanged}:{accessToken:string|null;onClose:()=>void;onChanged:(config:CommunicationConfig)=>void}) {
+  const supabase=useMemo(()=>createSupabaseBrowserClient(),[]);
   const [config,setConfig]=useState<CommunicationConfig|null>(null);
   const [loading,setLoading]=useState(true);
   const [busy,setBusy]=useState("");
@@ -1161,6 +1163,7 @@ function CommunicationsSettings({accessToken,onClose,onChanged}:{accessToken:str
   const [senderNumber,setSenderNumber]=useState("");
   const [templateName,setTemplateName]=useState("envio_nfse");
   const [whatsappTestRecipient,setWhatsappTestRecipient]=useState("");
+  const [manualSenders,setManualSenders]=useState<WhatsappManualSenderSetting[]>([]);
   const [accessTokenMeta,setAccessTokenMeta]=useState("");
   const [agendaEduSchoolIdentifier,setAgendaEduSchoolIdentifier]=useState("");
   const [agendaEduChannelId,setAgendaEduChannelId]=useState("");
@@ -1177,11 +1180,12 @@ function CommunicationsSettings({accessToken,onClose,onChanged}:{accessToken:str
       const current=data.config;setConfig(current);onChanged(current);
       setFromName(current.email_from_name||"JPI Fiscal");setFromAddress(current.email_from_address||"nfse@jejoaopaulo.com.br");setReplyTo(current.email_reply_to||"");setEmailProvider(current.email_provider||"locaweb_email");setSmtpUsername(current.email_smtp_username||current.email_from_address||"nfse@jejoaopaulo.com.br");
       setPhoneNumberId(current.whatsapp_phone_number_id||"");setBusinessAccountId(current.whatsapp_business_account_id||"");setSenderNumber(current.whatsapp_sender_number||"");setTemplateName(current.whatsapp_template_name||"envio_nfse");setWhatsappTestRecipient(current.whatsapp_test_recipient||"");
+      if(supabase){const senderResult=await supabase.from("whatsapp_manual_senders").select("id,nome,numero,ativo,ordem").order("ordem",{ascending:true}).order("id",{ascending:true});if(!senderResult.error)setManualSenders((senderResult.data||[]) as WhatsappManualSenderSetting[]);}
       setAgendaEduSchoolIdentifier(current.agenda_edu_school_identifier||"");
       setAgendaEduChannelId(current.agenda_edu_channel_id||"");
     }catch(requestError){setError(requestError instanceof Error?requestError.message:"Não foi possível carregar as integrações.");}
     finally{setLoading(false);}
-  },[accessToken,onChanged]);
+  },[accessToken,onChanged,supabase]);
   useEffect(()=>{load();},[load]);
 
   async function run(action:string,payload:Record<string,string>){
@@ -1194,6 +1198,10 @@ function CommunicationsSettings({accessToken,onClose,onChanged}:{accessToken:str
   async function saveEmail(event:FormEvent<HTMLFormElement>){event.preventDefault();setBusy("save-email");setError("");setMessage("");try{setMessage(await run("save-email",{provider:emailProvider,fromName,fromAddress,replyTo,smtpUsername,credential:emailCredential}));setEmailCredential("");await load();}catch(requestError){setError(requestError instanceof Error?requestError.message:"Não foi possível salvar o e-mail.");}finally{setBusy("");}}
   async function testEmail(){setBusy("test-email");setError("");setMessage("");try{setMessage(await run("test-email",{recipient:testRecipient}));await load();}catch(requestError){setError(requestError instanceof Error?requestError.message:"Não foi possível testar o e-mail.");}finally{setBusy("");}}
   async function saveWhatsapp(event:FormEvent<HTMLFormElement>){event.preventDefault();setBusy("save-whatsapp");setError("");setMessage("");try{setMessage(await run("save-whatsapp",{phoneNumberId,businessAccountId,senderNumber,testRecipient:whatsappTestRecipient,templateName,accessToken:accessTokenMeta}));setAccessTokenMeta("");await load();}catch(requestError){setError(requestError instanceof Error?requestError.message:"Não foi possível salvar o WhatsApp.");}finally{setBusy("");}}
+  async function saveManualSenders(){if(!supabase)return;setBusy("save-manual-senders");setError("");setMessage("");try{const normalized=manualSenders.filter(sender=>sender.nome.trim()||sender.numero.trim()).slice(0,4).map((sender,index)=>({nome:sender.nome.trim(),numero:sender.numero.trim(),ativo:sender.ativo,ordem:index+1}));if(!normalized.length)throw new Error("Cadastre pelo menos uma conta de WhatsApp da escola.");const {data,error}=await supabase.rpc("replace_whatsapp_manual_senders",{p_senders:normalized});if(error)throw error;setMessage(String(data||normalized.length)+" conta(s) de WhatsApp salva(s). Elas já podem ser escolhidas antes do envio manual.");await load();}catch(requestError){setError(requestError instanceof Error?requestError.message:"Não foi possível salvar os números do WhatsApp.");}finally{setBusy("");}}
+  function updateManualSender(index:number,field:"nome"|"numero"|"ativo",value:string|boolean){setManualSenders(current=>current.map((sender,i)=>i===index?{...sender,[field]:value}:sender));}
+  function addManualSender(){setManualSenders(current=>current.length>=4?current:[...current,{nome:"",numero:"",ativo:true,ordem:current.length+1}]);}
+  function removeManualSender(index:number){setManualSenders(current=>current.filter((_,i)=>i!==index).map((sender,i)=>({...sender,ordem:i+1})));}
   async function testWhatsapp(){setBusy("test-whatsapp");setError("");setMessage("");try{setMessage(await run("test-whatsapp",{}));await load();}catch(requestError){setError(requestError instanceof Error?requestError.message:"Não foi possível testar o WhatsApp.");}finally{setBusy("");}}
   async function saveAgenda(event:FormEvent<HTMLFormElement>){event.preventDefault();setBusy("save-agenda");setError("");setMessage("");try{setMessage(await run("save-agenda",{schoolIdentifier:agendaEduSchoolIdentifier,channelId:agendaEduChannelId,clientId:agendaEduClientId,clientSecret:agendaEduClientSecret,schoolToken:agendaEduSchoolToken}));setAgendaEduClientId("");setAgendaEduClientSecret("");setAgendaEduSchoolToken("");await load();}catch(requestError){setError(requestError instanceof Error?requestError.message:"Não foi possível salvar a Agenda Edu.");}finally{setBusy("");}}
   async function testAgenda(){setBusy("test-agenda");setError("");setMessage("");try{setMessage(await run("test-agenda",{}));await load();}catch(requestError){setError(requestError instanceof Error?requestError.message:"Não foi possível testar a Agenda Edu.");}finally{setBusy("");}}
@@ -1228,7 +1236,7 @@ function CommunicationsSettings({accessToken,onClose,onChanged}:{accessToken:str
           <button className="primary full" disabled={disabled}>{busy==="save-whatsapp"?"Salvando…":"Salvar configuração do WhatsApp"}</button>
           <button type="button" className="secondary full" onClick={testWhatsapp} disabled={disabled||!config?.whatsapp_token_configurado}>{busy==="test-whatsapp"?"Testando conexão…":"Testar conexão sem enviar mensagem"}</button>
           {config?.whatsapp_testada_em&&<small className="last-test">Último teste: {new Date(config.whatsapp_testada_em).toLocaleString("pt-BR")}</small>}
-        </form>
+        </form><div className="communication-channel-card data-form"><div className="communication-channel-head"><span className="integration-icon green"><MessageCircle/></span><div><h3>WhatsApps da escola</h3><small>Envio manual pelo Web ou app</small></div><Status>{manualSenders.length?String(manualSenders.length)+"/4":"Pendente"}</Status></div><div className="notice compact"><ShieldCheck/><span>Cadastre até 4 contas da escola, por exemplo Secretaria e Central de Matrícula. Antes de cada envio, o usuário escolherá qual conta utilizar.</span></div>{manualSenders.map((sender,index)=><div className="panel compact-panel" key={sender.id||index}><div className="form-row"><label>Identificação<input value={sender.nome} onChange={event=>updateManualSender(index,"nome",event.target.value)} maxLength={60} placeholder={index===0?"Secretaria":"Central de Matrícula"}/></label><label>Número com WhatsApp<input inputMode="tel" value={sender.numero} onChange={event=>updateManualSender(index,"numero",event.target.value)} placeholder="(21) 99999-9999"/></label></div><div className="form-actions"><label className="checkbox-line"><input type="checkbox" checked={sender.ativo} onChange={event=>updateManualSender(index,"ativo",event.target.checked)}/>Ativo para escolha</label><button type="button" className="secondary" onClick={()=>removeManualSender(index)} disabled={disabled}>Remover</button></div></div>)}<div className="form-actions"><button type="button" className="secondary" onClick={addManualSender} disabled={disabled||manualSenders.length>=4}><Plus size={17}/>Adicionar número</button><button type="button" className="primary" onClick={saveManualSenders} disabled={disabled||!manualSenders.length}>{busy==="save-manual-senders"?"Salvando…":"Salvar WhatsApps da escola"}</button></div><small>O WhatsApp Web/app precisa estar conectado na mesma conta escolhida no JPI Fiscal.</small></div>
         <form className="communication-channel-card data-form" onSubmit={saveAgenda}>
           <div className="communication-channel-head"><span className="integration-icon purple"><CalendarDays/></span><div><h3>Agenda Edu</h3><small>Mensagens com os responsáveis</small></div><Status>{config?.agenda_edu_ultimo_status==="conectado"?"Conectado":config?.agenda_edu_credencial_configurada?"Testar":"Configurar"}</Status></div>
           <div className="notice compact"><ShieldCheck/><span>Documentação oficial v2 confirmada. A conexão usará somente o Sandbox até concluirmos os testes dos responsáveis e anexos.</span></div>
