@@ -200,6 +200,10 @@ export function IssuanceAssistant({onNavigate}:{onNavigate:(page:AppPage)=>void}
     "Conferir nota concluída",
     delivery?"Envio concluído":"Enviar nota ao responsável",
   ][effectiveCurrent]:"Selecione uma nota";
+  useEffect(()=>{
+    if(effectiveCurrent!==3||fiscalContext||!canPrepare)return;
+    void loadFiscalContext().catch(cause=>setError(cause instanceof Error?cause.message:"Não foi possível carregar a configuração fiscal."));
+  },[effectiveCurrent,fiscalContext,canPrepare]);
 
 
   async function loadFiscalContext(){
@@ -237,8 +241,8 @@ export function IssuanceAssistant({onNavigate}:{onNavigate:(page:AppPage)=>void}
       if(!/^20\d{2}-(0[1-9]|1[0-2])$/.test(comp)||comp>currentCompetenceInput())pending.push("competência válida");
       if(Number(selected.valor_nfse)<=0)pending.push("valor da NFS-e");
       if(pending.length)throw new Error("Antes de validar, complete: "+Array.from(new Set(pending)).join(", ")+".");
-      const update=await supabase.from("mensalidades").update({status_nfse:"Homologação validada"}).eq("id",selected.id).is("chave_nfse_homologacao",null);
-      if(update.error)throw new Error(update.error.message);
+      const update=await supabase.from("mensalidades").update({status_nfse:"Homologação validada"}).eq("id",selected.id).is("chave_nfse_homologacao",null).select("id").maybeSingle();
+      if(update.error||!update.data)throw new Error(update.error?.message||"Esta nota já foi emitida ou alterada por outro usuário.");
       const service=fiscalServiceForSegment(selected.alunos?.segmento);
       const history=await supabase.from("historico_nfse").insert({
         mensalidade_id:selected.id,
@@ -269,8 +273,8 @@ export function IssuanceAssistant({onNavigate}:{onNavigate:(page:AppPage)=>void}
         valor_nfse:amount,
         descricao_servico:description,
         status_nfse:"DPS revisada"
-      }).eq("id",selected.id).is("chave_nfse_homologacao",null);
-      if(update.error)throw new Error(update.error.message);
+      }).eq("id",selected.id).is("chave_nfse_homologacao",null).select("id").maybeSingle();
+      if(update.error||!update.data)throw new Error(update.error?.message||"Esta nota já foi emitida ou alterada por outro usuário.");
       const history=await supabase.from("historico_nfse").insert({
         mensalidade_id:selected.id,
         evento:"dps_revisada_no_assistente",
@@ -302,8 +306,8 @@ export function IssuanceAssistant({onNavigate}:{onNavigate:(page:AppPage)=>void}
         valor_nfse:amount,
         descricao_servico:description,
         status_nfse:"Prévia DPS aprovada"
-      }).eq("id",selected.id).is("chave_nfse_homologacao",null);
-      if(update.error)throw new Error(update.error.message);
+      }).eq("id",selected.id).is("chave_nfse_homologacao",null).select("id").maybeSingle();
+      if(update.error||!update.data)throw new Error(update.error?.message||"Esta nota já foi emitida ou alterada por outro usuário.");
       const service=fiscalServiceForSegment(selected.alunos?.segmento);
       const history=await supabase.from("historico_nfse").insert({
         mensalidade_id:selected.id,
@@ -434,8 +438,8 @@ export function IssuanceAssistant({onNavigate}:{onNavigate:(page:AppPage)=>void}
 
           <div className="assistant-next-card">
             {effectiveCurrent===1&&<><ShieldCheck/><div><strong>Validação automática e segura</strong><span>Confira dados do tomador, competência, valor, configuração fiscal e certificado A1 antes de preparar a DPS.</span></div></>}
-            {effectiveCurrent===2&&<><FileText/><div><strong>DPS em foco</strong><span>A próxima tela abrirá diretamente a nota selecionada para revisar os campos que podem ser editados.</span></div></>}
-            {effectiveCurrent===3&&<><FileText/><div><strong>Aprovação da prévia</strong><span>A emissão só continua depois da confirmação da prévia pelo usuário.</span></div></>}
+            {effectiveCurrent===2&&<><FileText/><div><strong>DPS em foco</strong><span>Os campos editáveis estão logo acima. Salve a revisão para avançar automaticamente para a prévia.</span></div></>}
+            {effectiveCurrent===3&&<><FileText/><div><strong>Aprovação da prévia</strong><span>Confira o documento ampliado acima. A emissão só continua depois da sua aprovação.</span></div></>}
             {effectiveCurrent===4&&<><FileCode2/><div><strong>Gerar XML</strong><span>O XML será guardado no repositório privado e precisa estar válido antes da transmissão.</span></div></>}
             {effectiveCurrent===5&&<><Send/><div><strong>SEFIN / homologação</strong><span>Enquanto produção não estiver liberada, esta etapa continua protegida como homologação.</span></div></>}
             {effectiveCurrent===6&&<><Check/><div><strong>Conferência final</strong><span>Confira a chave e o documento retornado antes de iniciar a entrega ao responsável.</span></div></>}
