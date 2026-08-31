@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Check, ChevronRight, CircleAlert, FileCode2, FileText, GraduationCap, MailCheck, ReceiptText, RefreshCw, Search, Send, ShieldCheck, Sparkles, WalletCards } from "lucide-react";
+import { Check, ChevronRight, CircleAlert, FileCode2, FileText, GraduationCap, MailCheck, Plus, ReceiptText, RefreshCw, Search, Send, ShieldCheck, Sparkles, UsersRound, WalletCards } from "lucide-react";
 import { createSupabaseBrowserClient } from "@/lib/supabase";
 import { isValidCpfCnpj } from "@/lib/nfse-dps";
 import type { AppPage } from "./app-shell";
@@ -33,6 +33,10 @@ type AssistantPayment={
     cidade:string|null;
     uf:string|null;
   }|null;
+};
+type AssistantStudent={
+  id:number;nome:string;turma:string|null;segmento:string;responsavel:string;cpf_cnpj:string|null;email:string|null;whatsapp:string|null;
+  cep:string|null;logradouro:string|null;numero:string|null;cidade:string|null;uf:string|null
 };
 type DeliveryState={mensalidade_id:number;status:string;canal:string;created_at:string};
 type StepState="done"|"current"|"pending"|"warning";
@@ -92,15 +96,25 @@ export function IssuanceAssistant({onNavigate}:{onNavigate:(page:AppPage)=>void}
   const supabase=useMemo(()=>createSupabaseBrowserClient(),[]);
   const {can}=useAccess();
   const canPrepare=can("nfse.prepare");
+  const canCreatePayment=can("payments.create");
+  const [mode,setMode]=useState<"new"|"continue">("new");
+  const [students,setStudents]=useState<AssistantStudent[]>([]);
   const [payments,setPayments]=useState<AssistantPayment[]>([]);
   const [deliveries,setDeliveries]=useState<DeliveryState[]>([]);
   const [selectedId,setSelectedId]=useState<number|null>(null);
   const [query,setQuery]=useState("");
+  const [studentQuery,setStudentQuery]=useState("");
+  const [newStudentId,setNewStudentId]=useState<number|null>(null);
+  const [newCompetence,setNewCompetence]=useState(()=>currentCompetenceInput());
+  const [newValue,setNewValue]=useState("");
+  const [newPaymentStatus,setNewPaymentStatus]=useState("Aberto");
+  const [newDescription,setNewDescription]=useState("");
+  const [newDescriptionEdited,setNewDescriptionEdited]=useState(false);
   const [loading,setLoading]=useState(true);
   const [refreshing,setRefreshing]=useState(false);
   const [error,setError]=useState("");
   const [message,setMessage]=useState("");
-  const [busyAction,setBusyAction]=useState<""|"validate"|"save-dps"|"approve">("");
+  const [busyAction,setBusyAction]=useState<""|"create-payment"|"validate"|"save-dps"|"approve">("");
   const [draftCompetence,setDraftCompetence]=useState("");
   const [draftValue,setDraftValue]=useState("");
   const [draftDescription,setDraftDescription]=useState("");
@@ -110,8 +124,9 @@ export function IssuanceAssistant({onNavigate}:{onNavigate:(page:AppPage)=>void}
     if(!supabase)return;
     if(!silent)setLoading(true);else setRefreshing(true);
     setError("");
-    const [paymentsResult,deliveriesResult]=await Promise.all([
+    const [paymentsResult,studentsResult,deliveriesResult]=await Promise.all([
       supabase.from("mensalidades").select("id,aluno_id,competencia,valor_nfse,descricao_servico,status_pagamento,status_nfse,dps_xml_path,dps_xml_id,nfse_homologacao_xml_path,chave_nfse_homologacao,homologacao_emitida_em,alunos(nome,responsavel,segmento,cpf_cnpj,email,whatsapp,cep,logradouro,numero,cidade,uf)").order("created_at",{ascending:false}),
+      supabase.from("alunos").select("id,nome,turma,segmento,responsavel,cpf_cnpj,email,whatsapp,cep,logradouro,numero,cidade,uf").order("nome"),
       supabase.from("nfse_entregas").select("mensalidade_id,status,canal,created_at").order("created_at",{ascending:false}),
     ]);
     if(paymentsResult.error){
@@ -119,6 +134,7 @@ export function IssuanceAssistant({onNavigate}:{onNavigate:(page:AppPage)=>void}
     }else{
       const nextPayments=(paymentsResult.data||[]) as unknown as AssistantPayment[];
       setPayments(nextPayments);
+      setStudents(studentsResult.error?[]:(studentsResult.data||[]) as AssistantStudent[]);
       setDeliveries(deliveriesResult.error?[]:(deliveriesResult.data||[]) as DeliveryState[]);
       const remembered=Number(localStorage.getItem("jpi-issuance-assistant-payment")||"0");
       setSelectedId(current=>{
