@@ -231,6 +231,47 @@ export function IssuanceAssistant({onNavigate}:{onNavigate:(page:AppPage)=>void}
   },[newEmissionOpen,effectiveCurrent,fiscalContext,canPrepare]);
 
 
+  async function createPaymentFromStudent(){
+    if(!supabase||!selectedStudent||!canCreatePayment)return;
+    setBusyAction("create-payment");setError("");setMessage("");
+    try{
+      if(!newCompetence||newCompetence>currentCompetenceInput())throw new Error("A competência não pode ser posterior ao mês atual.");
+      const amount=parseMoneyInput(newValue);
+      if(!Number.isFinite(amount)||amount<=0)throw new Error("Informe um valor válido para a mensalidade.");
+      const description=upper(newDescription||defaultServiceDescription(newCompetence,selectedStudent.segmento)).trim();
+      if(!description||description.length>1000)throw new Error("A descrição do serviço deve ter entre 1 e 1000 caracteres.");
+      const competence=formatCompetence(newCompetence);
+      const existing=await supabase.from("mensalidades").select("id").eq("aluno_id",selectedStudent.id).eq("competencia",competence).order("id",{ascending:false}).limit(1).maybeSingle();
+      if(existing.error)throw new Error(existing.error.message);
+      if(existing.data?.id){
+        const existingId=Number(existing.data.id);
+        setSelectedId(existingId);
+        localStorage.setItem("jpi-issuance-assistant-payment",String(existingId));
+        setNewEmissionOpen(false);
+        setMessage("Já existe uma mensalidade para este aluno nesta competência. O Assistente abriu o processo existente para evitar duplicidade.");
+        await load(true);
+        return;
+      }
+      const insert=await supabase.from("mensalidades").insert({
+        aluno_id:selectedStudent.id,
+        competencia,
+        valor_mensalidade:amount,
+        valor_nfse:amount,
+        descricao_servico:description,
+        status_pagamento:newPaymentStatus
+      }).select("id").single();
+      if(insert.error||!insert.data)throw new Error(insert.error?.message||"Não foi possível criar a mensalidade.");
+      const id=Number(insert.data.id);
+      setSelectedId(id);
+      localStorage.setItem("jpi-issuance-assistant-payment",String(id));
+      setNewEmissionOpen(false);
+      setMessage("Mensalidade criada e nota iniciada. O próximo passo é validar os dados fiscais.");
+      setNewValue("");setNewPaymentStatus("Aberto");setNewDescriptionEdited(false);
+      await load(true);
+    }catch(cause){setError(cause instanceof Error?cause.message:"Não foi possível iniciar a emissão.");}
+    finally{setBusyAction("")}
+  }
+
   async function loadFiscalContext(){
     if(!supabase)return null;
     const result=await supabase.from("configuracoes_empresa").select("cnpj,razao_social,cidade,uf,regime_tributario,pis_aliquota,cofins_aliquota,pis_cofins_cst,pis_cofins_retencao").eq("id",true).maybeSingle();
