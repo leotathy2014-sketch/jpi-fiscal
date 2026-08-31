@@ -190,7 +190,7 @@ Deno.serve(async(req)=>{
   const primary=color(config.primary_color,"#1466DF");
   const sidebar=color(config.sidebar_color,"#14263D");
   const success=color(config.success_color,"#16875F");
-  const recoveryUrl=`${APP_URL}/recuperar-senha?token_hash=${encodeURIComponent(tokenHash)}`;
+  const recoveryUrl=`${APP_URL}/?recovery_confirm=1&token_hash=${encodeURIComponent(tokenHash)}`;
   const name=escapeHtml(String(appUser.nome||"Usuário"));
   const subject="JPI Fiscal — Redefinição de senha";
   const html=`<!doctype html><html><body style="margin:0;background:#f3f6fa;font-family:Arial,Helvetica,sans-serif;color:#243247">
