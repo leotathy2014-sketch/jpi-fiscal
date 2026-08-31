@@ -1268,7 +1268,7 @@ function CommunicationsSettings({accessToken,onChanged,canEdit,section}:{accessT
   async function saveEmail(event:FormEvent<HTMLFormElement>){event.preventDefault();setBusy("save-email");setError("");setMessage("");try{setMessage(await run("save-email",{provider:emailProvider,fromName,fromAddress,replyTo,smtpUsername,credential:emailCredential}));setEmailCredential("");await load();}catch(requestError){setError(requestError instanceof Error?requestError.message:"Não foi possível salvar o e-mail.");}finally{setBusy("");}}
   async function testEmail(){setBusy("test-email");setError("");setMessage("");try{setMessage(await run("test-email",{recipient:testRecipient}));await load();}catch(requestError){setError(requestError instanceof Error?requestError.message:"Não foi possível testar o e-mail.");}finally{setBusy("");}}
   async function saveWhatsapp(event:FormEvent<HTMLFormElement>){event.preventDefault();setBusy("save-whatsapp");setError("");setMessage("");try{setMessage(await run("save-whatsapp",{phoneNumberId,businessAccountId,senderNumber,testRecipient:whatsappTestRecipient,templateName,accessToken:accessTokenMeta}));setAccessTokenMeta("");await load();}catch(requestError){setError(requestError instanceof Error?requestError.message:"Não foi possível salvar o WhatsApp.");}finally{setBusy("");}}
-  async function saveManualSenders(){if(!supabase)return;setBusy("save-manual-senders");setError("");setMessage("");try{const normalized=manualSenders.filter(sender=>sender.nome.trim()||sender.numero.trim()).slice(0,4).map((sender,index)=>({nome:sender.nome.trim(),numero:sender.numero.trim(),ativo:sender.ativo,ordem:index+1}));if(!normalized.length)throw new Error("Cadastre pelo menos uma conta de WhatsApp da escola.");const {data,error}=await supabase.rpc("replace_whatsapp_manual_senders",{p_senders:normalized});if(error)throw new Error(error.message);setMessage(String(data||normalized.length)+" conta(s) de WhatsApp salva(s). Elas já podem ser escolhidas antes do envio manual.");await load();}catch(requestError){setError(requestError instanceof Error?requestError.message:"Não foi possível salvar os números do WhatsApp.");}finally{setBusy("");}}
+  async function saveManualSenders(){if(!supabase)return;setBusy("save-manual-senders");setError("");setMessage("");try{const normalized=manualSenders.filter(sender=>sender.nome.trim()||sender.numero.trim()).slice(0,4).map((sender,index)=>({nome:sender.nome.trim(),numero:sender.numero.trim(),ativo:sender.ativo,ordem:index+1}));if(!normalized.length)throw new Error("Cadastre pelo menos uma conta de WhatsApp da escola.");const {data,error}=await supabase.rpc("replace_whatsapp_manual_senders",{p_senders:normalized});if(error)throw new Error(error.message);setMessage(String(data||normalized.length)+" conta(s) de WhatsApp salva(s). Elas já podem ser escolhidas antes do envio manual.");window.dispatchEvent(new Event("jpi-whatsapp-manual-updated"));await load();}catch(requestError){setError(requestError instanceof Error?requestError.message:"Não foi possível salvar os números do WhatsApp.");}finally{setBusy("");}}
   async function saveManualWhatsappMessage(){setBusy("save-manual-message");setError("");setMessage("");try{const template=manualWhatsappMessage.replace(/\r\n/g,"\n").trim();if(template.length<20)throw new Error("A mensagem está muito curta.");if(!template.includes("{link}"))throw new Error("Inclua {link} na mensagem para que a nota seja enviada com o acesso seguro.");setMessage(await run("save-whatsapp-manual-message",{template}));await load();}catch(requestError){setError(requestError instanceof Error?requestError.message:"Não foi possível salvar a mensagem do WhatsApp.");}finally{setBusy("");}}
   function updateManualSender(index:number,field:"nome"|"numero"|"ativo",value:string|boolean){setManualSenders(current=>current.map((sender,i)=>i===index?{...sender,[field]:value}:sender));}
   function addManualSender(){setManualSenders(current=>current.length>=4?current:[...current,{nome:"",numero:"",ativo:true,ordem:current.length+1}]);}
@@ -1363,15 +1363,22 @@ function Integrations({accessToken}:{accessToken:string|null}) {
   useEffect(()=>{
     if(!accessToken)return;
     let active=true;
-    authenticatedFetch("/api/integrations/communications",{headers:{Authorization:`Bearer ${accessToken}`},cache:"no-store"})
-      .then(async response=>{if(response.status===401)window.dispatchEvent(new Event("jpi-session-invalid"));return {response,data:await response.json().catch(()=>({})) as {config?:CommunicationConfig}}})
-      .then(({response,data})=>{if(active&&response.ok&&data.config)setCommunicationConfig(data.config);})
-      .catch(()=>undefined);
-    if(supabase){
+    const loadCommunicationSummary=()=>{
+      authenticatedFetch("/api/integrations/communications",{headers:{Authorization:`Bearer ${accessToken}`},cache:"no-store"})
+        .then(async response=>{if(response.status===401)window.dispatchEvent(new Event("jpi-session-invalid"));return {response,data:await response.json().catch(()=>({})) as {config?:CommunicationConfig}}})
+        .then(({response,data})=>{if(active&&response.ok&&data.config)setCommunicationConfig(data.config);})
+        .catch(()=>undefined);
+    };
+    const loadManualReady=()=>{
+      if(!supabase)return;
       supabase.from("whatsapp_manual_senders").select("id,ativo").eq("ativo",true).limit(1)
         .then(({data,error})=>{if(active&&!error)setManualWhatsappReady(Boolean(data?.length));});
-    }
-    return()=>{active=false;};
+    };
+    const refresh=()=>{loadCommunicationSummary();loadManualReady();};
+    refresh();
+    window.addEventListener("jpi-whatsapp-manual-updated",refresh);
+    window.addEventListener("focus",refresh);
+    return()=>{active=false;window.removeEventListener("jpi-whatsapp-manual-updated",refresh);window.removeEventListener("focus",refresh);};
   },[accessToken,supabase]);
 
   useEffect(()=>{
