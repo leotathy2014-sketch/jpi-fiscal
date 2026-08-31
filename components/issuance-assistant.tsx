@@ -422,7 +422,7 @@ export function IssuanceAssistant({onNavigate}:{onNavigate:(page:AppPage)=>void}
 
   return <div className="issuance-assistant-page">
     <div className="page-heading assistant-heading">
-      <div><span className="eyebrow">FLUXO GUIADO</span><h1>Assistente de Emissão</h1><p>Inicie pelo aluno cadastrado ou retome uma emissão existente; o sistema conduz cada etapa até o envio.</p></div>
+      <div><span className="eyebrow">FLUXO GUIADO</span><h1>Assistente de Emissão</h1><p>Comece pelo aluno cadastrado ou retome uma emissão existente; o sistema conduz cada etapa até o envio.</p></div>
       <button className="secondary" onClick={()=>void load(true)} disabled={refreshing}><RefreshCw size={17}/>{refreshing?"Atualizando…":"Atualizar"}</button>
     </div>
 
