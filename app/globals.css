@@ -426,3 +426,26 @@
  .assistant-new-start-grid{grid-template-columns:1fr}
  .assistant-new-students .assistant-payment-list{max-height:300px}
 }
+
+
+/* Confirmação e retorno SEFIN dentro do Assistente */
+.assistant-sefin-confirm{margin-top:14px;border:1px solid #dbe4ee;border-radius:16px;background:#fff;overflow:hidden}
+.assistant-sefin-body{display:grid;gap:14px;padding:16px 18px}
+.assistant-sefin-summary{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:9px}
+.assistant-sefin-summary span{display:grid;gap:4px;padding:11px;border:1px solid #e3e9f0;border-radius:11px;background:#fbfcfe}
+.assistant-sefin-summary small{font-size:7px;text-transform:uppercase;color:var(--muted)}
+.assistant-sefin-summary b{font-size:9px;color:#34485e;overflow-wrap:anywhere}
+.assistant-confirm-check{display:flex;align-items:flex-start;gap:10px;padding:12px;border:1px solid #d6e0eb;border-radius:12px;background:#f8fbff;cursor:pointer}
+.assistant-confirm-check input{margin-top:2px;accent-color:var(--blue)}
+.assistant-confirm-check>span{display:grid;gap:3px}
+.assistant-confirm-check strong{font-size:10px;color:#31475e}
+.assistant-confirm-check small{font-size:8px;line-height:1.45;color:var(--muted)}
+.assistant-sefin-result{display:flex;align-items:flex-start;gap:12px;margin-top:14px;padding:16px;border:1px solid #bfe0d2;border-radius:15px;background:#edf9f4;color:#157653}
+.assistant-sefin-result>div{display:grid;gap:4px;min-width:0}
+.assistant-sefin-result span{font-size:7px;font-weight:900;letter-spacing:.07em}
+.assistant-sefin-result h3{margin:0;font-size:13px}
+.assistant-sefin-result p{margin:0;font-size:9px;overflow-wrap:anywhere}
+.assistant-sefin-result small{font-size:8px}
+@media(max-width:760px){
+ .assistant-sefin-summary{grid-template-columns:1fr 1fr}
+}
