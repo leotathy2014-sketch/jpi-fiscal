@@ -7,6 +7,7 @@ import { authenticatedFetch } from "@/lib/authenticated-fetch";
 import { TransmissionProgress } from "./transmission-progress";
 import { AgendaEduStudentLinks } from "./agenda-edu-student-links";
 import { BrandLogo } from "./branding";
+import { useAccess } from "./access";
 
 const money = (n: number) => n.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 const onlyDigits = (value: string, limit: number) => value.replace(/\D/g, "").slice(0, limit);
@@ -440,38 +441,29 @@ type CompanyConfig = {
 };
 type Tab = "Empresa" | "Identidade Visual" | "Certificado A1" | "Integrações" | "Usuários e Permissões";
 export function SettingsPage({accessToken}:{accessToken:string|null}) {
-  const [tab, setTab] = useState<Tab>("Empresa");
+  const {canAny}=useAccess();
+  const availableTabs=useMemo(()=>[
+    {name:"Empresa" as Tab,label:"Empresa",Icon:Building2,permissions:["settings.company.view","settings.company.edit"]},
+    {name:"Identidade Visual" as Tab,label:"Identidade Visual",Icon:Palette,permissions:["settings.branding.view","settings.branding.edit"]},
+    {name:"Certificado A1" as Tab,label:"Certificado A1",Icon:KeyRound,permissions:["settings.certificate.view","settings.certificate.manage"]},
+    {name:"Integrações" as Tab,label:"Integrações",Icon:Link2,permissions:["settings.integrations.view","settings.integrations.edit"]},
+    {name:"Usuários e Permissões" as Tab,label:"Usuários e Permissões",Icon:UserCog,permissions:["settings.users.view","settings.users.manage"]},
+  ].filter(item=>canAny(item.permissions)),[canAny]);
+  const [tab,setTab]=useState<Tab>("Empresa");
+  useEffect(()=>{if(availableTabs.length&&!availableTabs.some(item=>item.name===tab))setTab(availableTabs[0].name)},[availableTabs,tab]);
+  if(!availableTabs.length)return <><Heading title="Configurações" desc="Seu perfil não possui módulos de configuração liberados."/><div className="notice warning"><ShieldCheck/><span>Solicite ao Master a liberação das permissões necessárias.</span></div></>;
   return (
     <>
-      <Heading title="Configurações" desc="Gerencie os dados da empresa, certificado, conexões, acessos e regras do sistema." />
+      <Heading title="Configurações" desc="Acesse somente as áreas liberadas para o seu perfil." />
       <div className="tabs">
-        <button className={tab === "Empresa" ? "active" : ""} onClick={() => setTab("Empresa")}>
-          <Building2 />
-          Empresa
-        </button>
-        <button className={tab === "Identidade Visual" ? "active" : ""} onClick={() => setTab("Identidade Visual")}>
-          <Palette />
-          Identidade Visual
-        </button>
-        <button className={tab === "Certificado A1" ? "active" : ""} onClick={() => setTab("Certificado A1")}>
-          <KeyRound />
-          Certificado A1
-        </button>
-        <button className={tab === "Integrações" ? "active" : ""} onClick={() => setTab("Integrações")}>
-          <Link2 />
-          Integrações
-        </button>
-        <button className={tab === "Usuários e Permissões" ? "active" : ""} onClick={() => setTab("Usuários e Permissões")}>
-          <UserCog />
-          Usuários e Permissões
-        </button>
+        {availableTabs.map(({name,label,Icon})=><button key={name} className={tab===name?"active":""} onClick={()=>setTab(name)}><Icon/>{label}</button>)}
       </div>
-      {tab === "Empresa" ? <CompanySettings /> : tab === "Identidade Visual" ? <BrandingSettings /> : tab === "Certificado A1" ? <CertificateSettings /> : tab === "Integrações" ? <Integrations accessToken={accessToken} /> : <Permissions />}
+      {tab==="Empresa"?<CompanySettings/>:tab==="Identidade Visual"?<BrandingSettings/>:tab==="Certificado A1"?<CertificateSettings/>:tab==="Integrações"?<Integrations accessToken={accessToken}/>:<Permissions/>}
     </>
   );
 }
 function BrandingSettings() {
-  const supabase=useMemo(()=>createSupabaseBrowserClient(),[]);
+  const supabase=useMemo(()=>createSupabaseBrowserClient(),[]);const {can}=useAccess();const canEdit=can("settings.branding.edit");
   const [loading,setLoading]=useState(true);
   const [busy,setBusy]=useState(false);
   const [error,setError]=useState("");
@@ -484,13 +476,13 @@ function BrandingSettings() {
   const load=useCallback(async()=>{
     if(!supabase)return;
     setLoading(true);
-    const {data,error}=await supabase.from("configuracoes_empresa").select("tema_cor_primaria,tema_cor_lateral,tema_cor_sucesso,branding_updated_at").eq("id",true).single();
+    const {data,error}=await supabase.rpc("get_public_branding");
     if(error){setError(error.message);setLoading(false);return;}
-    const current=data as Pick<CompanyConfig,"tema_cor_primaria"|"tema_cor_lateral"|"tema_cor_sucesso"|"branding_updated_at">;
-    setThemePrimary(current.tema_cor_primaria||"#1466DF");
-    setThemeSidebar(current.tema_cor_lateral||"#14263D");
-    setThemeSuccess(current.tema_cor_sucesso||"#16875F");
-    setBrandingUpdatedAt(current.branding_updated_at||"");
+    const current=(Array.isArray(data)?data[0]:data) as {primary_color?:string;sidebar_color?:string;success_color?:string;updated_at?:string}|null;
+    setThemePrimary(current?.primary_color||"#1466DF");
+    setThemeSidebar(current?.sidebar_color||"#14263D");
+    setThemeSuccess(current?.success_color||"#16875F");
+    setBrandingUpdatedAt(current?.updated_at||"");
     setError("");
     setLoading(false);
   },[supabase]);
@@ -499,7 +491,7 @@ function BrandingSettings() {
 
   async function save(event:FormEvent<HTMLFormElement>){
     event.preventDefault();
-    if(!supabase||busy)return;
+    if(!supabase||busy||!canEdit)return;
     setBusy(true);setError("");setMessage("");
     const form=new FormData(event.currentTarget);
     const logo=form.get("logo") as File;
@@ -516,12 +508,7 @@ function BrandingSettings() {
       if(logoError){setError(logoError.message);setBusy(false);return;}
     }
     const changedAt=new Date().toISOString();
-    const {error:updateError}=await supabase.from("configuracoes_empresa").update({
-      tema_cor_primaria:primaryColor,
-      tema_cor_lateral:sidebarColor,
-      tema_cor_sucesso:successColor,
-      branding_updated_at:changedAt,
-    }).eq("id",true);
+    const {error:updateError}=await supabase.rpc("update_branding_settings",{p_primary:primaryColor,p_sidebar:sidebarColor,p_success:successColor});
     if(updateError){setError(updateError.message);setBusy(false);return;}
     setThemePrimary(primaryColor);setThemeSidebar(sidebarColor);setThemeSuccess(successColor);setBrandingUpdatedAt(changedAt);
     window.dispatchEvent(new Event("jpi-branding-updated"));
@@ -534,15 +521,15 @@ function BrandingSettings() {
   return <form className="panel data-form branding-settings-page" onSubmit={save}>
     <div className="panel-title"><div><h2>Identidade Visual</h2><p>Personalize a marca do JPI Fiscal sem alterar os dados cadastrais da empresa.</p></div></div>
     {error&&<div className="error-box">{error}</div>}{message&&<div className="success-box">{message}</div>}
-    <div className="notice compact"><ShieldCheck/><span>As alterações desta tela são globais: login, menu lateral, telas de carregamento e demais áreas do sistema usarão a mesma identidade.</span></div>
+    <div className="notice compact"><ShieldCheck/><span>{canEdit?"As alterações desta tela são globais: login, menu lateral, telas de carregamento e demais áreas do sistema usarão a mesma identidade.":"Seu perfil possui acesso somente para visualizar a identidade visual."}</span></div>
     <section className="branding-control-panel">
       <div className="branding-control-title"><span className="integration-icon blue"><Palette/></span><div><h3>Cores do sistema</h3><p>Escolha as cores principais e confira a pré-visualização antes de salvar.</p></div></div>
       <div className="branding-control-grid">
         <div className="branding-color-fields">
-          <label>Cor principal<div className="branding-color-input"><input type="color" value={themePrimary} onChange={event=>setThemePrimary(event.target.value.toUpperCase())}/><strong>{themePrimary}</strong></div><small>Botões, abas e destaques principais.</small></label>
-          <label>Cor do menu e login<div className="branding-color-input"><input type="color" value={themeSidebar} onChange={event=>setThemeSidebar(event.target.value.toUpperCase())}/><strong>{themeSidebar}</strong></div><small>Menu lateral e fundo institucional da tela de acesso.</small></label>
-          <label>Cor de sucesso e WhatsApp<div className="branding-color-input"><input type="color" value={themeSuccess} onChange={event=>setThemeSuccess(event.target.value.toUpperCase())}/><strong>{themeSuccess}</strong></div><small>Status positivos e elementos ligados ao WhatsApp.</small></label>
-          <button type="button" className="secondary" onClick={()=>{setThemePrimary("#1466DF");setThemeSidebar("#14263D");setThemeSuccess("#16875F")}} disabled={busy}>Restaurar cores padrão</button>
+          <label>Cor principal<div className="branding-color-input"><input type="color" value={themePrimary} disabled={!canEdit} onChange={event=>setThemePrimary(event.target.value.toUpperCase())}/><strong>{themePrimary}</strong></div><small>Botões, abas e destaques principais.</small></label>
+          <label>Cor do menu e login<div className="branding-color-input"><input type="color" value={themeSidebar} disabled={!canEdit} onChange={event=>setThemeSidebar(event.target.value.toUpperCase())}/><strong>{themeSidebar}</strong></div><small>Menu lateral e fundo institucional da tela de acesso.</small></label>
+          <label>Cor de sucesso e WhatsApp<div className="branding-color-input"><input type="color" value={themeSuccess} disabled={!canEdit} onChange={event=>setThemeSuccess(event.target.value.toUpperCase())}/><strong>{themeSuccess}</strong></div><small>Status positivos e elementos ligados ao WhatsApp.</small></label>
+          <button type="button" className="secondary" onClick={()=>{setThemePrimary("#1466DF");setThemeSidebar("#14263D");setThemeSuccess("#16875F")}} disabled={busy||!canEdit}>Restaurar cores padrão</button>
         </div>
         <div className="branding-live-preview" style={{backgroundColor:"#fff","--preview-primary":themePrimary,"--preview-sidebar":themeSidebar,"--preview-success":themeSuccess} as React.CSSProperties}>
           <div className="branding-preview-sidebar"><BrandLogo preview/><strong>JPI Fiscal</strong><span>Pré-visualização</span></div>
@@ -553,15 +540,15 @@ function BrandingSettings() {
     <label className="file-field branding-logo-field">
       <span>Logomarca global</span>
       <div className="company-logo-preview loaded"><BrandLogo preview/><section><strong>Logo atual do sistema</strong><small>Usada no login, menu e demais locais com identidade da empresa.</small></section></div>
-      <div><UploadCloud/><input name="logo" type="file" accept="image/png,image/jpeg,image/webp"/><small>PNG, JPG ou WEBP — máximo 2 MB</small></div>
+      <div><UploadCloud/><input name="logo" type="file" accept="image/png,image/jpeg,image/webp" disabled={!canEdit}/><small>PNG, JPG ou WEBP — máximo 2 MB</small></div>
     </label>
     {brandingUpdatedAt&&<small className="last-test">Última atualização visual: {new Date(brandingUpdatedAt).toLocaleString("pt-BR")}</small>}
-    <div className="form-actions"><button className="primary" disabled={busy}>{busy?"Salvando identidade…":"Salvar identidade visual"}</button></div>
+    {canEdit&&<div className="form-actions"><button className="primary" disabled={busy}>{busy?"Salvando identidade…":"Salvar identidade visual"}</button></div>}
   </form>;
 }
 
 function CompanySettings() {
-  const supabase = useMemo(() => createSupabaseBrowserClient(), []);
+  const supabase = useMemo(() => createSupabaseBrowserClient(), []);const {can}=useAccess();const canEdit=can("settings.company.edit");
   const [config, setConfig] = useState<CompanyConfig | null>(null);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
@@ -580,7 +567,7 @@ function CompanySettings() {
   }, [supabase]);
   async function save(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    if (!supabase) return;
+    if (!supabase||!canEdit) return;
     setBusy(true);
     setError("");
     setMessage("");
@@ -635,7 +622,7 @@ function CompanySettings() {
           </div>
         </div>
         {error && <div className="error-box">{error}</div>}
-        {message && <div className="success-box">{message}</div>}
+        {message && <div className="success-box">{message}</div>}{!canEdit&&<div className="notice compact"><ShieldCheck/><span>Seu perfil pode consultar estes dados, mas não pode alterá-los.</span></div>}
         <div className="form-row">
           <label>
             CNPJ
@@ -742,11 +729,11 @@ function CompanySettings() {
           UF
           <input name="uf" maxLength={2} placeholder="RJ" defaultValue={config.uf || ""} onInput={upperCompanyInput} />
         </label>
-        <div className="form-actions">
+        {canEdit&&<div className="form-actions">
           <button className="primary" disabled={busy}>
             {busy ? "Salvando…" : "Salvar configurações"}
           </button>
-        </div>
+        </div>}
       </form>
       <div className="company-side">
         <article className="panel">
