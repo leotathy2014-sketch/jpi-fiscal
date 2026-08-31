@@ -880,6 +880,20 @@ export function IssuanceAssistant({onNavigate}:{onNavigate:(page:AppPage)=>void}
             </div>
           </section>}
 
+          {effectiveCurrent>=8&&delivery&&selected&&<section className="assistant-complete-card">
+            <Check size={28}/>
+            <div>
+              <span>PROCESSO CONCLUÍDO</span>
+              <h3>Nota emitida e envio registrado</h3>
+              <p>{selected.alunos?.nome} · {selected.competencia} · {money(selected.valor_nfse)}</p>
+              <small>Último canal registrado: {delivery.canal.replace("_"," ")} · {new Date(delivery.created_at).toLocaleString("pt-BR")}</small>
+            </div>
+            <div className="assistant-complete-actions">
+              <button className="primary" type="button" onClick={()=>{setNewEmissionOpen(true);setNewStudentId(null);setNewCompetence(currentCompetenceInput());setNewValue("");setNewPaymentStatus("Aberto");setNewDescription("");setNewDescriptionEdited(false);setMessage("");setError("")}}><Plus size={16}/>Nova emissão</button>
+              <button className="secondary" type="button" onClick={()=>focusAndNavigate("Enviar notas")}>Ver histórico de envios</button>
+            </div>
+          </section>}
+
           {effectiveCurrent>=8&&selected&&<section className="assistant-delivery-panel">
             <div className="assistant-workspace-head">
               <div><span>ETAPA 9 · ENVIAR</span><h3>Escolha como entregar a nota</h3><p>Os canais usam as mesmas integrações e o mesmo histórico da tela Enviar notas.</p></div>
