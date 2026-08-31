@@ -116,8 +116,8 @@ async function sendSmtp(config:RecoveryEmailConfig,to:string,subject:string,html
     await smtp.expect(220);
     await smtp.command("EHLO jpi-fiscal.vercel.app",250);
     await smtp.command("AUTH LOGIN",334);
-    await smtp.command(btoa(username),334);
-    await smtp.command(btoa(password),235);
+    await smtp.command(utf8Base64(username),334);
+    await smtp.command(utf8Base64(password),235);
     await smtp.command(`MAIL FROM:<${fromAddress}>`,250);
     await smtp.command(`RCPT TO:<${to}>`,[250,251]);
     await smtp.command("DATA",354);
