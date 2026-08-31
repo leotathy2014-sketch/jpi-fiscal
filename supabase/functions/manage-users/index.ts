@@ -37,8 +37,21 @@ Deno.serve(async (req: Request) => {
       .eq("email", caller.email.toLowerCase())
       .maybeSingle();
 
-    if (!permission?.active || permission.role !== "admin") {
-      return reply({ error: "Apenas Administradores podem gerenciar usuários." }, 403);
+    if (!permission?.active) {
+      return reply({ error: "Seu usuário não possui acesso ao sistema." }, 403);
+    }
+    let canManageUsers = permission.role === "master";
+    if (!canManageUsers) {
+      const { data: rolePermission } = await admin
+        .from("jpi_role_permissions")
+        .select("allowed")
+        .eq("role", permission.role)
+        .eq("permission_key", "settings.users.manage")
+        .maybeSingle();
+      canManageUsers = rolePermission?.allowed === true;
+    }
+    if (!canManageUsers) {
+      return reply({ error: "Seu perfil não possui permissão para gerenciar usuários." }, 403);
     }
 
     const body = await req.json();
@@ -96,12 +109,15 @@ Deno.serve(async (req: Request) => {
       }
       const { data: target, error: targetError } = await admin
         .from("app_users")
-        .select("id,user_id,email")
+        .select("id,user_id,email,role,active")
         .eq("id", id)
         .single();
       if (targetError) throw targetError;
-      if (target.email.toLowerCase() === caller.email.toLowerCase() && (!active || role !== "admin")) {
-        return reply({ error: "Você não pode bloquear ou remover seu próprio acesso de Administrador." }, 400);
+      if (target.role === "master") {
+        return reply({ error: "O perfil Master é protegido e não pode ser bloqueado ou rebaixado por esta tela." }, 400);
+      }
+      if (target.email.toLowerCase() === caller.email.toLowerCase() && !active) {
+        return reply({ error: "Você não pode bloquear seu próprio acesso." }, 400);
       }
       const { error: updateError } = await admin.from("app_users").update({
         role,
