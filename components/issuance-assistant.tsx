@@ -3,13 +3,16 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Check, ChevronRight, CircleAlert, FileCode2, FileText, GraduationCap, MailCheck, ReceiptText, RefreshCw, Search, Send, ShieldCheck, Sparkles, WalletCards } from "lucide-react";
 import { createSupabaseBrowserClient } from "@/lib/supabase";
+import { isValidCpfCnpj } from "@/lib/nfse-dps";
 import type { AppPage } from "./app-shell";
+import { useAccess } from "./access";
 
 type AssistantPayment={
   id:number;
   aluno_id:number;
   competencia:string;
   valor_nfse:number;
+  descricao_servico:string|null;
   status_pagamento:string;
   status_nfse:string;
   dps_xml_path:string|null;
@@ -20,6 +23,7 @@ type AssistantPayment={
   alunos:{
     nome:string;
     responsavel:string;
+    segmento:string;
     cpf_cnpj:string|null;
     email:string|null;
     whatsapp:string|null;
@@ -33,9 +37,16 @@ type AssistantPayment={
 type DeliveryState={mensalidade_id:number;status:string;canal:string;created_at:string};
 type StepState="done"|"current"|"pending"|"warning";
 type AssistantStep={key:string;label:string;short:string;description:string;state:StepState};
+type FiscalContext={cnpj:string|null;razao_social:string|null;cidade:string|null;uf:string|null;regime_tributario:string;pis_aliquota:number;cofins_aliquota:number;pis_cofins_cst:string;pis_cofins_retencao:number};
 
 const money=(value:number)=>Number(value).toLocaleString("pt-BR",{style:"currency",currency:"BRL"});
 const normalize=(value:string)=>value.normalize("NFD").replace(/[\u0300-\u036f]/g,"").toLocaleLowerCase("pt-BR");
+const competenceInput=(value:string)=>{const match=value.trim().match(/^(0[1-9]|1[0-2])\/(20\d{2})$/);return match?match[2]+"-"+match[1]:value};
+const formatCompetence=(value:string)=>{const parts=value.split("-");return parts[0]&&parts[1]?parts[1]+"/"+parts[0]:value};
+const currentCompetenceInput=()=>{const parts=new Intl.DateTimeFormat("pt-BR",{timeZone:"America/Sao_Paulo",year:"numeric",month:"2-digit"}).formatToParts(new Date());const part=(type:"year"|"month")=>parts.find(item=>item.type===type)?.value||"";return part("year")+"-"+part("month")};
+const upper=(value:string)=>value.toLocaleUpperCase("pt-BR");
+const fiscalServiceForSegment=(segment?:string|null)=>{const normalized=normalize(segment||"");if(normalized.includes("medio"))return {code:"08.01.01",description:"Ensino regular médio",nbs:"122013000"};if(normalized.includes("1º")||normalized.includes("6º")||normalized.includes("fundamental"))return {code:"08.01.01",description:"Ensino regular fundamental",nbs:"122012000"};return {code:"08.01.01",description:"Ensino regular pré-escolar",nbs:"122011200"}};
+const defaultServiceDescription=(competence:string,segment?:string|null)=>"MENSALIDADE ESCOLAR - COMPETÊNCIA "+formatCompetence(competence)+" - "+fiscalServiceForSegment(segment).description.toLocaleUpperCase("pt-BR");
 
 function statusOrder(payment:AssistantPayment){
   const status=normalize(payment.status_nfse||"");
@@ -43,12 +54,14 @@ function statusOrder(payment:AssistantPayment){
     payment.dps_xml_path||
     payment.chave_nfse_homologacao||
     status.includes("homologacao validada")||
+    status.includes("dps revisada")||
     status.includes("previa dps aprovada")||
     status.includes("xml dps")
   );
   const dpsDone=Boolean(
     payment.dps_xml_path||
     payment.chave_nfse_homologacao||
+    status.includes("dps revisada")||
     status.includes("previa dps aprovada")||
     status.includes("xml dps")
   );
@@ -77,6 +90,8 @@ function missingStudentFields(payment:AssistantPayment){
 
 export function IssuanceAssistant({onNavigate}:{onNavigate:(page:AppPage)=>void}){
   const supabase=useMemo(()=>createSupabaseBrowserClient(),[]);
+  const {can}=useAccess();
+  const canPrepare=can("nfse.prepare");
   const [payments,setPayments]=useState<AssistantPayment[]>([]);
   const [deliveries,setDeliveries]=useState<DeliveryState[]>([]);
   const [selectedId,setSelectedId]=useState<number|null>(null);
@@ -84,13 +99,19 @@ export function IssuanceAssistant({onNavigate}:{onNavigate:(page:AppPage)=>void}
   const [loading,setLoading]=useState(true);
   const [refreshing,setRefreshing]=useState(false);
   const [error,setError]=useState("");
+  const [message,setMessage]=useState("");
+  const [busyAction,setBusyAction]=useState<""|"validate"|"save-dps"|"approve">("");
+  const [draftCompetence,setDraftCompetence]=useState("");
+  const [draftValue,setDraftValue]=useState("");
+  const [draftDescription,setDraftDescription]=useState("");
+  const [fiscalContext,setFiscalContext]=useState<FiscalContext|null>(null);
 
   const load=useCallback(async(silent=false)=>{
     if(!supabase)return;
     if(!silent)setLoading(true);else setRefreshing(true);
     setError("");
     const [paymentsResult,deliveriesResult]=await Promise.all([
-      supabase.from("mensalidades").select("id,aluno_id,competencia,valor_nfse,status_pagamento,status_nfse,dps_xml_path,dps_xml_id,nfse_homologacao_xml_path,chave_nfse_homologacao,homologacao_emitida_em,alunos(nome,responsavel,cpf_cnpj,email,whatsapp,cep,logradouro,numero,cidade,uf)").order("created_at",{ascending:false}),
+      supabase.from("mensalidades").select("id,aluno_id,competencia,valor_nfse,descricao_servico,status_pagamento,status_nfse,dps_xml_path,dps_xml_id,nfse_homologacao_xml_path,chave_nfse_homologacao,homologacao_emitida_em,alunos(nome,responsavel,segmento,cpf_cnpj,email,whatsapp,cep,logradouro,numero,cidade,uf)").order("created_at",{ascending:false}),
       supabase.from("nfse_entregas").select("mensalidade_id,status,canal,created_at").order("created_at",{ascending:false}),
     ]);
     if(paymentsResult.error){
@@ -118,6 +139,14 @@ export function IssuanceAssistant({onNavigate}:{onNavigate:(page:AppPage)=>void}
     return payments.filter(payment=>normalize([payment.alunos?.nome,payment.alunos?.responsavel,payment.competencia,payment.status_nfse,String(payment.id)].filter(Boolean).join(" ")).includes(q));
   },[payments,query]);
   const selected=useMemo(()=>payments.find(item=>item.id===selectedId)||null,[payments,selectedId]);
+  useEffect(()=>{
+    if(!selected){setDraftCompetence("");setDraftValue("");setDraftDescription("");return}
+    const competence=competenceInput(selected.competencia);
+    setDraftCompetence(competence);
+    setDraftValue(String(selected.valor_nfse));
+    setDraftDescription(selected.descricao_servico||defaultServiceDescription(competence,selected.alunos?.segmento));
+    setMessage("");setError("");
+  },[selected?.id]);
   const delivery=useMemo(()=>selected?deliveries.find(item=>item.mensalidade_id===selected.id&&item.status==="enviado")||null:null,[deliveries,selected]);
   const missing=selected?missingStudentFields(selected):[];
   const progress=selected?statusOrder(selected):null;
