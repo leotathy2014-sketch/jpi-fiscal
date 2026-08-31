@@ -46,6 +46,16 @@ function Heading({ title, desc, action }: { title: string; desc: string; action?
 function Status({ children }: { children: string }) {
   return <span className={`status ${children.toLowerCase()}`}>{children}</span>;
 }
+type IntegrationStateTone="connected"|"pending"|"disconnected"|"neutral";
+function integrationState(rawStatus:string|null|undefined,configured=false){
+  const status=String(rawStatus||"").toLowerCase();
+  if(status==="conectado"||status==="connected"||status==="pronto")return {label:"Conectado",tone:"connected" as IntegrationStateTone};
+  if(status==="erro"||status==="error"||status==="desconectado"||status==="disconnected"||status==="falha"||status==="failed")return {label:"Desconectado",tone:"disconnected" as IntegrationStateTone};
+  return {label:configured?"Pendente":"Pendente",tone:"pending" as IntegrationStateTone};
+}
+function IntegrationStateBadge({label,tone}:{label:string;tone:IntegrationStateTone}){
+  return <span className={`integration-state-badge ${tone}`}><i/>{label}</span>;
+}
 export function Dashboard() {
   return (
     <>
@@ -1274,13 +1284,22 @@ function CommunicationsSettings({accessToken,onChanged,canEdit,section}:{accessT
     agenda:{title:"Agenda Edu",description:"Credenciais do Sandbox e integração de mensagens com responsáveis.",Icon:CalendarDays},
   }[section];
   const SectionIcon=sectionCopy.Icon;
+  const sectionState=section==="email"
+    ? integrationState(config?.email_ultimo_status,Boolean(config?.email_credencial_configurada))
+    : section==="whatsapp"
+      ? integrationState(config?.whatsapp_ultimo_status,Boolean(config?.whatsapp_token_configurado))
+      : section==="agenda"
+        ? integrationState(config?.agenda_edu_ultimo_status,Boolean(config?.agenda_edu_credencial_configurada))
+        : manualSenders.some(sender=>sender.ativo)
+          ? {label:"Configurado",tone:"connected" as IntegrationStateTone}
+          : {label:"Pendente",tone:"pending" as IntegrationStateTone};
   return <div className="integration-detail-panel">
-    <div className="integration-detail-heading"><span className={`integration-icon ${section==="agenda"?"purple":section==="email"?"blue":"green"}`}><SectionIcon/></span><div><h2>{sectionCopy.title}</h2><p>{sectionCopy.description}</p></div></div>
+    <div className="integration-detail-heading"><span className={`integration-icon ${section==="agenda"?"purple":section==="email"?"blue":"green"}`}><SectionIcon/></span><div><h2>{sectionCopy.title}</h2><p>{sectionCopy.description}</p></div><IntegrationStateBadge label={sectionState.label} tone={sectionState.tone}/></div>
     {error&&<div className="error-box">{error}</div>}{message&&<div className="success-box">{message}</div>}
     <div className="notice compact"><KeyRound/><span>{canEdit?"Chaves e tokens ficam protegidos no cofre do servidor. Depois de salvos, não voltam a ser exibidos no navegador.":"Modo somente leitura: seu perfil pode consultar esta integração, mas não pode alterar credenciais ou configurações."}</span></div>
     {loading?<div className="communications-loading">Carregando configuração…</div>:<div className="integration-single-content">
       {section==="email"&&<><form className="communication-channel-card data-form" onSubmit={saveEmail}>
-          <div className="communication-channel-head"><span className="integration-icon blue"><Mail/></span><div><h3>E-mail</h3><small>{emailProvider==="resend"?"Resend":emailProvider==="locaweb_smtp"?"SMTP Locaweb":"E-mail Locaweb"}</small></div><Status>{config?.email_ultimo_status==="conectado"?"Conectado":config?.email_credencial_configurada?"Configurar":"Pendente"}</Status></div>
+          <div className="communication-channel-head"><span className="integration-icon blue"><Mail/></span><div><h3>E-mail</h3><small>{emailProvider==="resend"?"Resend":emailProvider==="locaweb_smtp"?"SMTP Locaweb":"E-mail Locaweb"}</small></div><IntegrationStateBadge label={sectionState.label} tone={sectionState.tone}/></div>
           <label>Provedor de envio<select value={emailProvider} onChange={event=>{const provider=event.target.value;setEmailProvider(provider);if(provider==="locaweb_email")setSmtpUsername(fromAddress);}}><option value="locaweb_email">E-mail Locaweb</option><option value="locaweb_smtp">SMTP Locaweb contratado</option><option value="resend">Resend</option></select><small>Para a caixa atual, selecione E-mail Locaweb.</small></label>
           <label>Nome do remetente<input value={fromName} onChange={event=>setFromName(event.target.value)} required maxLength={100}/></label>
           <label>E-mail do remetente<input type="email" value={fromAddress} onChange={event=>{setFromAddress(event.target.value);if(emailProvider==="locaweb_email")setSmtpUsername(event.target.value);}} required/><small>{emailProvider==="resend"?"O domínio precisa estar verificado no Resend.":"A conta deve estar ativa no painel da Locaweb."}</small></label>
@@ -1293,7 +1312,7 @@ function CommunicationsSettings({accessToken,onChanged,canEdit,section}:{accessT
           {config?.email_testada_em&&<small className="last-test">Último teste: {new Date(config.email_testada_em).toLocaleString("pt-BR")}</small>}
         </form></>}
       {section==="whatsapp"&&<><form className="communication-channel-card data-form" onSubmit={saveWhatsapp}>
-          <div className="communication-channel-head"><span className="integration-icon green"><MessageCircle/></span><div><h3>WhatsApp</h3><small>Meta Cloud API</small></div><Status>{config?.whatsapp_ultimo_status==="conectado"?"Conectado":config?.whatsapp_token_configurado?"Configurar":"Pendente"}</Status></div>
+          <div className="communication-channel-head"><span className="integration-icon green"><MessageCircle/></span><div><h3>WhatsApp</h3><small>Meta Cloud API</small></div><IntegrationStateBadge label={sectionState.label} tone={sectionState.tone}/></div>
           <label>ID do número do WhatsApp<input inputMode="numeric" value={phoneNumberId} onChange={event=>setPhoneNumberId(event.target.value)} required placeholder="Phone Number ID"/></label>
           <label>ID da conta comercial<input inputMode="numeric" value={businessAccountId} onChange={event=>setBusinessAccountId(event.target.value)} required placeholder="WhatsApp Business Account ID"/></label>
           <label>Número remetente<input inputMode="tel" value={senderNumber} onChange={event=>setSenderNumber(maskWhatsappPhone(event.target.value))} required maxLength={15} placeholder="(21) 99999-9999"/><small>Digite DDD + número. O sistema adiciona o DDI 55 automaticamente.</small></label>
@@ -1304,9 +1323,9 @@ function CommunicationsSettings({accessToken,onChanged,canEdit,section}:{accessT
           <button type="button" className="secondary full" onClick={testWhatsapp} disabled={disabled||!config?.whatsapp_token_configurado}>{busy==="test-whatsapp"?"Testando conexão…":"Testar conexão sem enviar mensagem"}</button>
           {config?.whatsapp_testada_em&&<small className="last-test">Último teste: {new Date(config.whatsapp_testada_em).toLocaleString("pt-BR")}</small>}
         </form></>}
-      {section==="manual-whatsapp"&&<><div className="communication-channel-card data-form"><div className="communication-channel-head"><span className="integration-icon green"><MessageCircle/></span><div><h3>WhatsApps da escola</h3><small>Envio manual pelo Web ou app</small></div><Status>{manualSenders.length?String(manualSenders.length)+"/4":"Pendente"}</Status></div><div className="notice compact"><ShieldCheck/><span>Cadastre até 4 contas da escola, por exemplo Secretaria e Central de Matrícula. Antes de cada envio, o usuário escolherá qual conta utilizar.</span></div><div className="whatsapp-message-editor"><label>Mensagem padrão para os responsáveis<textarea value={manualWhatsappMessage} onChange={event=>setManualWhatsappMessage(event.target.value)} maxLength={2000} rows={9} placeholder={DEFAULT_WHATSAPP_MANUAL_MESSAGE}/><small>Você pode usar: <b>{"{responsavel}"}</b>, <b>{"{aluno}"}</b>, <b>{"{competencia}"}</b>, <b>{"{valor}"}</b> e <b>{"{link}"}</b>. A variável <b>{"{link}"}</b> é obrigatória.</small></label><div className="form-actions"><button type="button" className="secondary" onClick={()=>setManualWhatsappMessage(DEFAULT_WHATSAPP_MANUAL_MESSAGE)} disabled={disabled}>Restaurar mensagem padrão</button><button type="button" className="primary" onClick={saveManualWhatsappMessage} disabled={disabled||manualWhatsappMessage.trim().length<20}>{busy==="save-manual-message"?"Salvando…":"Salvar mensagem do WhatsApp"}</button></div></div>{manualSenders.map((sender,index)=><div className="panel compact-panel" key={sender.id||index}><div className="form-row"><label>Identificação<input value={sender.nome} onChange={event=>updateManualSender(index,"nome",event.target.value)} maxLength={60} placeholder={index===0?"Secretaria":"Central de Matrícula"}/></label><label>Número com WhatsApp<input inputMode="tel" value={sender.numero} onChange={event=>updateManualSender(index,"numero",maskWhatsappPhone(event.target.value))} maxLength={15} placeholder="(21) 99999-9999"/></label></div><div className="form-actions"><label className="checkbox-line"><input type="checkbox" checked={sender.ativo} onChange={event=>updateManualSender(index,"ativo",event.target.checked)}/>Ativo para escolha</label><button type="button" className="secondary" onClick={()=>removeManualSender(index)} disabled={disabled}>Remover</button></div></div>)}<div className="form-actions"><button type="button" className="secondary" onClick={addManualSender} disabled={disabled||manualSenders.length>=4}><Plus size={17}/>Adicionar número</button><button type="button" className="primary" onClick={saveManualSenders} disabled={disabled||!manualSenders.length}>{busy==="save-manual-senders"?"Salvando…":"Salvar WhatsApps da escola"}</button></div><small>O WhatsApp Web/app precisa estar conectado na mesma conta escolhida no JPI Fiscal.</small></div></>}
+      {section==="manual-whatsapp"&&<><div className="communication-channel-card data-form"><div className="communication-channel-head"><span className="integration-icon green"><MessageCircle/></span><div><h3>WhatsApps da escola</h3><small>Envio manual pelo Web ou app</small></div><IntegrationStateBadge label={sectionState.label} tone={sectionState.tone}/></div><div className="notice compact"><ShieldCheck/><span>Cadastre até 4 contas da escola, por exemplo Secretaria e Central de Matrícula. Antes de cada envio, o usuário escolherá qual conta utilizar.</span></div><div className="whatsapp-message-editor"><label>Mensagem padrão para os responsáveis<textarea value={manualWhatsappMessage} onChange={event=>setManualWhatsappMessage(event.target.value)} maxLength={2000} rows={9} placeholder={DEFAULT_WHATSAPP_MANUAL_MESSAGE}/><small>Você pode usar: <b>{"{responsavel}"}</b>, <b>{"{aluno}"}</b>, <b>{"{competencia}"}</b>, <b>{"{valor}"}</b> e <b>{"{link}"}</b>. A variável <b>{"{link}"}</b> é obrigatória.</small></label><div className="form-actions"><button type="button" className="secondary" onClick={()=>setManualWhatsappMessage(DEFAULT_WHATSAPP_MANUAL_MESSAGE)} disabled={disabled}>Restaurar mensagem padrão</button><button type="button" className="primary" onClick={saveManualWhatsappMessage} disabled={disabled||manualWhatsappMessage.trim().length<20}>{busy==="save-manual-message"?"Salvando…":"Salvar mensagem do WhatsApp"}</button></div></div>{manualSenders.map((sender,index)=><div className="panel compact-panel" key={sender.id||index}><div className="form-row"><label>Identificação<input value={sender.nome} onChange={event=>updateManualSender(index,"nome",event.target.value)} maxLength={60} placeholder={index===0?"Secretaria":"Central de Matrícula"}/></label><label>Número com WhatsApp<input inputMode="tel" value={sender.numero} onChange={event=>updateManualSender(index,"numero",maskWhatsappPhone(event.target.value))} maxLength={15} placeholder="(21) 99999-9999"/></label></div><div className="form-actions"><label className="checkbox-line"><input type="checkbox" checked={sender.ativo} onChange={event=>updateManualSender(index,"ativo",event.target.checked)}/>Ativo para escolha</label><button type="button" className="secondary" onClick={()=>removeManualSender(index)} disabled={disabled}>Remover</button></div></div>)}<div className="form-actions"><button type="button" className="secondary" onClick={addManualSender} disabled={disabled||manualSenders.length>=4}><Plus size={17}/>Adicionar número</button><button type="button" className="primary" onClick={saveManualSenders} disabled={disabled||!manualSenders.length}>{busy==="save-manual-senders"?"Salvando…":"Salvar WhatsApps da escola"}</button></div><small>O WhatsApp Web/app precisa estar conectado na mesma conta escolhida no JPI Fiscal.</small></div></>}
       {section==="agenda"&&<><div className="integration-agenda-stack"><form className="communication-channel-card data-form" onSubmit={saveAgenda}>
-          <div className="communication-channel-head"><span className="integration-icon purple"><CalendarDays/></span><div><h3>Agenda Edu</h3><small>Mensagens com os responsáveis</small></div><Status>{config?.agenda_edu_ultimo_status==="conectado"?"Conectado":config?.agenda_edu_credencial_configurada?"Testar":"Configurar"}</Status></div>
+          <div className="communication-channel-head"><span className="integration-icon purple"><CalendarDays/></span><div><h3>Agenda Edu</h3><small>Mensagens com os responsáveis</small></div><IntegrationStateBadge label={sectionState.label} tone={sectionState.tone}/></div>
           <div className="notice compact"><ShieldCheck/><span>Documentação oficial v2 confirmada. A conexão usará somente o Sandbox até concluirmos os testes dos responsáveis e anexos.</span></div>
           <label>Identificação da escola (opcional)<input value={agendaEduSchoolIdentifier} onChange={event=>setAgendaEduSchoolIdentifier(event.target.value)} maxLength={100} placeholder="Jardim Escola João Paulo I"/><small>É apenas um nome interno para facilitar a conferência.</small></label>
           <label>ID do canal de família (opcional)<input value={agendaEduChannelId} onChange={event=>setAgendaEduChannelId(event.target.value)} maxLength={100} placeholder="Informado ou localizado após o teste"/><small>O canal precisa incluir as turmas dos alunos que receberão as NFS-e.</small></label>
@@ -1333,6 +1352,7 @@ function Integrations({accessToken}:{accessToken:string|null}) {
   const [sefinCheckedAt,setSefinCheckedAt]=useState<Date|null>(null);
   const [productionEnabled,setProductionEnabled]=useState(false);
   const [communicationConfig,setCommunicationConfig]=useState<CommunicationConfig|null>(null);
+  const [manualWhatsappReady,setManualWhatsappReady]=useState(false);
   const [busy,setBusy]=useState(false);
   const [tested,setTested]=useState(false);
   const [error,setError]=useState("");
@@ -1347,8 +1367,12 @@ function Integrations({accessToken}:{accessToken:string|null}) {
       .then(async response=>{if(response.status===401)window.dispatchEvent(new Event("jpi-session-invalid"));return {response,data:await response.json().catch(()=>({})) as {config?:CommunicationConfig}}})
       .then(({response,data})=>{if(active&&response.ok&&data.config)setCommunicationConfig(data.config);})
       .catch(()=>undefined);
+    if(supabase){
+      supabase.from("whatsapp_manual_senders").select("id,ativo").eq("ativo",true).limit(1)
+        .then(({data,error})=>{if(active&&!error)setManualWhatsappReady(Boolean(data?.length));});
+    }
     return()=>{active=false;};
-  },[accessToken]);
+  },[accessToken,supabase]);
 
   useEffect(()=>{
     if(!supabase)return;
@@ -1446,20 +1470,30 @@ function Integrations({accessToken}:{accessToken:string|null}) {
     }finally{if(timeout)window.clearTimeout(timeout);setBusy(false);setConnectionStage("")}
   }
 
+  const emailState=integrationState(communicationConfig?.email_ultimo_status,Boolean(communicationConfig?.email_credencial_configurada));
+  const whatsappState=integrationState(communicationConfig?.whatsapp_ultimo_status,Boolean(communicationConfig?.whatsapp_token_configurado));
+  const agendaState=integrationState(communicationConfig?.agenda_edu_ultimo_status,Boolean(communicationConfig?.agenda_edu_credencial_configurada));
+  const manualWhatsappState=manualWhatsappReady?{label:"Configurado",tone:"connected" as IntegrationStateTone}:{label:"Pendente",tone:"pending" as IntegrationStateTone};
+  const nfseOverallState=productionEnabled&&sefinAvailability==="available"
+    ? {label:"Pronto e enviando",tone:"connected" as IntegrationStateTone}
+    : sefinAvailability==="unstable"||sefinAvailability==="session"
+      ? {label:"Desconectado",tone:"disconnected" as IntegrationStateTone}
+      : {label:"Homologação",tone:"pending" as IntegrationStateTone};
+
   const integrationItems=[
-    {key:"overview" as const,label:"Visão geral",Icon:SlidersHorizontal,status:""},
-    {key:"nfse" as const,label:"NFS-e",Icon:FileCheck2,status:productionEnabled?"Pronto e enviando":sefinAvailability==="available"?"SEFIN OK · Homologação":"Homologação"},
-    {key:"email" as const,label:"E-mail",Icon:Mail,status:communicationConfig?.email_ultimo_status==="conectado"?"Conectado":communicationConfig?.email_credencial_configurada?"Configurar":"Pendente"},
-    {key:"whatsapp" as const,label:"WhatsApp API",Icon:MessageCircle,status:communicationConfig?.whatsapp_ultimo_status==="conectado"?"Conectado":communicationConfig?.whatsapp_token_configurado?"Configurar":"Pendente"},
-    {key:"manual-whatsapp" as const,label:"WhatsApps da escola",Icon:MessageCircle,status:"Manual"},
-    {key:"agenda" as const,label:"Agenda Edu",Icon:CalendarDays,status:communicationConfig?.agenda_edu_ultimo_status==="conectado"?"Conectado":communicationConfig?.agenda_edu_credencial_configurada?"Testar":"Configurar"},
+    {key:"overview" as const,label:"Visão geral",Icon:SlidersHorizontal,status:"",tone:"neutral" as IntegrationStateTone},
+    {key:"nfse" as const,label:"NFS-e",Icon:FileCheck2,status:nfseOverallState.label,tone:nfseOverallState.tone},
+    {key:"email" as const,label:"E-mail",Icon:Mail,status:emailState.label,tone:emailState.tone},
+    {key:"whatsapp" as const,label:"WhatsApp API",Icon:MessageCircle,status:whatsappState.label,tone:whatsappState.tone},
+    {key:"manual-whatsapp" as const,label:"WhatsApps da escola",Icon:MessageCircle,status:manualWhatsappState.label,tone:manualWhatsappState.tone},
+    {key:"agenda" as const,label:"Agenda Edu",Icon:CalendarDays,status:agendaState.label,tone:agendaState.tone},
   ];
 
   return <>
     <div className="integration-navigation" aria-label="Menu de integrações">
       {integrationItems.map(item=><button type="button" key={item.key} className={section===item.key?"active":""} onClick={()=>setSection(item.key)}>
         <span className="integration-nav-icon"><item.Icon/></span>
-        <span><strong>{item.label}</strong>{item.status&&<small>{item.status}</small>}</span>
+        <span><strong>{item.label}</strong>{item.status&&<small className={`integration-nav-status ${item.tone}`}><i/>{item.status}</small>}</span>
       </button>)}
     </div>
 
@@ -1467,11 +1501,11 @@ function Integrations({accessToken}:{accessToken:string|null}) {
       <div className="integration-overview-heading"><div><h2>Integrações do sistema</h2><p>Escolha uma integração no menu acima para abrir somente as configurações daquele canal.</p></div><Status>{canEdit?"Gerenciável":"Somente leitura"}</Status></div>
       <div className="integration-overview-grid">
         <button type="button" className="integration-overview-card nfse-overview-card" onClick={()=>setSection("nfse")}><span className="integration-icon blue"><FileCheck2/></span><div><strong>NFS-e / SEFIN</strong><small>Servidor fiscal e situação da liberação de emissão.</small></div><div className="nfse-status-pair"><span className={`nfse-state-badge ${sefinTone}`}><i/>{sefinLabel}</span><span className={`nfse-state-badge ${productionEnabled?"available":"homologation"}`}><i/>{operationalLabel}</span></div></button>
-        <button type="button" className="integration-overview-card" onClick={()=>setSection("email")}><span className="integration-icon blue"><Mail/></span><div><strong>E-mail</strong><small>Locaweb, remetente, senha e teste de entrega.</small></div><Status>{communicationConfig?.email_ultimo_status==="conectado"?"Conectado":"Pendente"}</Status></button>
-        <button type="button" className="integration-overview-card" onClick={()=>setSection("whatsapp")}><span className="integration-icon green"><MessageCircle/></span><div><strong>WhatsApp API</strong><small>Meta Cloud API e dados de homologação.</small></div><Status>{communicationConfig?.whatsapp_ultimo_status==="conectado"?"Conectado":"Pendente"}</Status></button>
-        <button type="button" className="integration-overview-card" onClick={()=>setSection("manual-whatsapp")}><span className="integration-icon green"><MessageCircle/></span><div><strong>WhatsApps da escola</strong><small>Números manuais e mensagem padrão para responsáveis.</small></div><Status>Manual</Status></button>
-        <button type="button" className="integration-overview-card" onClick={()=>setSection("agenda")}><span className="integration-icon purple"><CalendarDays/></span><div><strong>Agenda Edu</strong><small>Sandbox, credenciais e canal escolar.</small></div><Status>{communicationConfig?.agenda_edu_ultimo_status==="conectado"?"Conectado":"Configurar"}</Status></button>
-        <div className="integration-overview-card static"><span className="integration-icon green"><Building2/></span><div><strong>Supabase</strong><small>Banco de dados, autenticação e sessões.</small></div><Status>Conectado</Status></div>
+        <button type="button" className="integration-overview-card" onClick={()=>setSection("email")}><span className="integration-icon blue"><Mail/></span><div><strong>E-mail</strong><small>Locaweb, remetente, senha e teste de entrega.</small></div><IntegrationStateBadge label={emailState.label} tone={emailState.tone}/></button>
+        <button type="button" className="integration-overview-card" onClick={()=>setSection("whatsapp")}><span className="integration-icon green"><MessageCircle/></span><div><strong>WhatsApp API</strong><small>Meta Cloud API e dados de homologação.</small></div><IntegrationStateBadge label={whatsappState.label} tone={whatsappState.tone}/></button>
+        <button type="button" className="integration-overview-card" onClick={()=>setSection("manual-whatsapp")}><span className="integration-icon green"><MessageCircle/></span><div><strong>WhatsApps da escola</strong><small>Números manuais e mensagem padrão para responsáveis.</small></div><IntegrationStateBadge label={manualWhatsappState.label} tone={manualWhatsappState.tone}/></button>
+        <button type="button" className="integration-overview-card" onClick={()=>setSection("agenda")}><span className="integration-icon purple"><CalendarDays/></span><div><strong>Agenda Edu</strong><small>Sandbox, credenciais e canal escolar.</small></div><IntegrationStateBadge label={agendaState.label} tone={agendaState.tone}/></button>
+        <div className="integration-overview-card static"><span className="integration-icon green"><Building2/></span><div><strong>Supabase</strong><small>Banco de dados, autenticação e sessões.</small></div><IntegrationStateBadge label="Conectado" tone="connected"/></div>
       </div>
     </div>}
 
