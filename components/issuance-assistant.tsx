@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Check, ChevronRight, CircleAlert, FileCode2, FileText, GraduationCap, MailCheck, Plus, ReceiptText, RefreshCw, Search, Send, ShieldCheck, Sparkles, UsersRound, WalletCards } from "lucide-react";
 import { createSupabaseBrowserClient } from "@/lib/supabase";
+import { authenticatedFetch } from "@/lib/authenticated-fetch";
 import { buildDpsDraft, isValidCpfCnpj, NFSE_OWN_APP_SERIES } from "@/lib/nfse-dps";
 import type { AppPage } from "./app-shell";
 import { useAccess } from "./access";
@@ -42,6 +43,7 @@ type DeliveryState={mensalidade_id:number;status:string;canal:string;created_at:
 type StepState="done"|"current"|"pending"|"warning";
 type AssistantStep={key:string;label:string;short:string;description:string;state:StepState};
 type FiscalContext={cnpj:string|null;razao_social:string|null;cidade:string|null;uf:string|null;regime_tributario:string;pis_aliquota:number;cofins_aliquota:number;pis_cofins_cst:string;pis_cofins_retencao:number};
+type HomologationResult={ok?:boolean;alreadyIssued?:boolean;error?:string;key?:string};
 
 const money=(value:number)=>Number(value).toLocaleString("pt-BR",{style:"currency",currency:"BRL"});
 const normalize=(value:string)=>value.normalize("NFD").replace(/[\u0300-\u036f]/g,"").toLocaleLowerCase("pt-BR");
@@ -116,11 +118,12 @@ export function IssuanceAssistant({onNavigate}:{onNavigate:(page:AppPage)=>void}
   const [refreshing,setRefreshing]=useState(false);
   const [error,setError]=useState("");
   const [message,setMessage]=useState("");
-  const [busyAction,setBusyAction]=useState<""|"create-payment"|"validate"|"save-dps"|"approve"|"xml">("");
+  const [busyAction,setBusyAction]=useState<""|"create-payment"|"validate"|"save-dps"|"approve"|"xml"|"sefin">("");
   const [draftCompetence,setDraftCompetence]=useState("");
   const [draftValue,setDraftValue]=useState("");
   const [draftDescription,setDraftDescription]=useState("");
   const [fiscalContext,setFiscalContext]=useState<FiscalContext|null>(null);
+  const [homologationConfirmed,setHomologationConfirmed]=useState(false);
 
   const load=useCallback(async(silent=false)=>{
     if(!supabase)return;
@@ -169,7 +172,7 @@ export function IssuanceAssistant({onNavigate}:{onNavigate:(page:AppPage)=>void}
     setDraftCompetence(competence);
     setDraftValue(String(selected.valor_nfse));
     setDraftDescription(selected.descricao_servico||defaultServiceDescription(competence,selected.alunos?.segmento));
-    setMessage("");setError("");
+    setMessage("");setError("");setHomologationConfirmed(false);
   },[selected?.id]);
   useEffect(()=>{
     if(!selectedStudent){setNewDescription("");setNewDescriptionEdited(false);return}
@@ -479,6 +482,44 @@ export function IssuanceAssistant({onNavigate}:{onNavigate:(page:AppPage)=>void}
     }finally{setBusyAction("")}
   }
 
+  async function sendHomologationFromAssistant(){
+    if(!supabase||!selected||!canPrepare)return;
+    if(!homologationConfirmed){setError("Confirme o envio para homologação antes de continuar.");return}
+    if(!selected.dps_xml_path||!selected.dps_xml_id){setError("O XML da DPS precisa estar gerado antes da homologação.");return}
+    setBusyAction("sefin");setError("");setMessage("");
+    const controller=new AbortController();
+    const timeout=window.setTimeout(()=>controller.abort(),55000);
+    try{
+      const {data:{session}}=await supabase.auth.getSession();
+      if(!session)throw new Error("Sua sessão expirou. Entre novamente.");
+      const response=await authenticatedFetch("/api/nfse/homologation/issue",{
+        method:"POST",
+        headers:{Authorization:"Bearer "+session.access_token,"Content-Type":"application/json"},
+        body:JSON.stringify({monthlyId:selected.id}),
+        signal:controller.signal,
+        cache:"no-store"
+      });
+      const data=await response.json().catch(()=>({})) as HomologationResult;
+      if(!response.ok)throw new Error(data.error||"A produção restrita não concluiu a homologação.");
+      if(!data.ok)throw new Error(data.error||"A produção restrita não confirmou a emissão.");
+      setHomologationConfirmed(false);
+      setMessage(data.alreadyIssued
+        ?"A NFS-e de teste já estava emitida e guardada. O Assistente avançou para a conferência final."
+        :"NFS-e de teste emitida com sucesso na SEFIN. Chave: "+(data.key||"confirmada")+"."
+      );
+      await load(true);
+    }catch(cause){
+      const reason=cause instanceof Error&&cause.name==="AbortError"
+        ?"O envio ultrapassou o tempo de segurança e foi interrompido."
+        :cause instanceof Error?cause.message:"A homologação não foi concluída.";
+      setError(reason+" Nenhuma nova tentativa será feita automaticamente.");
+      await load(true);
+    }finally{
+      window.clearTimeout(timeout);
+      setBusyAction("");
+    }
+  }
+
   function focusAndNavigate(target:"NFS-e"|"Enviar notas"|"Alunos e Responsáveis"){
     if(!selected)return;
     const focus=String(selected.id);
@@ -495,6 +536,7 @@ export function IssuanceAssistant({onNavigate}:{onNavigate:(page:AppPage)=>void}
     if(effectiveCurrent===3){void saveDps();return}
     if(effectiveCurrent===4){void approvePreview();return}
     if(effectiveCurrent===5){void generateXmlInAssistant();return}
+    if(effectiveCurrent===6){void sendHomologationFromAssistant();return}
     if(effectiveCurrent>=8){focusAndNavigate("Enviar notas");return}
     focusAndNavigate("NFS-e");
   }
@@ -656,7 +698,7 @@ export function IssuanceAssistant({onNavigate}:{onNavigate:(page:AppPage)=>void}
           {!canPrepare&&effectiveCurrent>=2&&effectiveCurrent<8&&<div className="notice compact"><ShieldCheck/><span>Seu perfil pode acompanhar o processo, mas não possui permissão para preparar a NFS-e.</span></div>}
           <div className="assistant-actions">
             <button className="primary assistant-main-action" onClick={continueProcess} disabled={Boolean(busyAction)||(!canPrepare&&effectiveCurrent>=2&&effectiveCurrent<8)}>
-              {busyAction==="validate"?"Validando…":busyAction==="save-dps"?"Salvando DPS…":busyAction==="approve"?"Aprovando…":busyAction==="xml"?"Gerando XML…":effectiveCurrent===2&&missing.length?"Corrigir cadastro":effectiveCurrent===2?"Validar nota":effectiveCurrent===3?"Salvar DPS e ver prévia":effectiveCurrent===4?"Aprovar prévia":effectiveCurrent===5?"Gerar e validar XML":effectiveCurrent>=8?"Ir para envio":"Continuar processo"} <ChevronRight size={18}/>
+              {busyAction==="validate"?"Validando…":busyAction==="save-dps"?"Salvando DPS…":busyAction==="approve"?"Aprovando…":busyAction==="xml"?"Gerando XML…":busyAction==="sefin"?"Enviando para homologação…":effectiveCurrent===2&&missing.length?"Corrigir cadastro":effectiveCurrent===2?"Validar nota":effectiveCurrent===3?"Salvar DPS e ver prévia":effectiveCurrent===4?"Aprovar prévia":effectiveCurrent===5?"Gerar e validar XML":effectiveCurrent===6?"Enviar para homologação":effectiveCurrent>=8?"Ir para envio":"Continuar processo"} <ChevronRight size={18}/>
             </button>
             {effectiveCurrent>2&&effectiveCurrent<8&&<button className="secondary" onClick={()=>focusAndNavigate("NFS-e")}>Abrir NFS-e atual</button>}
             {progress?.finished&&<button className="secondary" onClick={()=>focusAndNavigate("Enviar notas")}>Ir direto para envio</button>}
