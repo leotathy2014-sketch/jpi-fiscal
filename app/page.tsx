@@ -20,7 +20,7 @@ export default function Home() {
   useEffect(() => {
     if (!supabase) { setLoading(false); return; }
     supabase.auth.getSession().then(({ data }) => { setEmail(data.session?.user.email ?? null);setAccessToken(data.session?.access_token ?? null);setNeedsPassword(data.session?.user.user_metadata?.needs_password===true); setLoading(false); });
-    const { data } = supabase.auth.onAuthStateChange((event, session) => {setEmail(session?.user.email ?? null);setAccessToken(session?.access_token ?? null);setNeedsPassword(session?.user.user_metadata?.needs_password===true);if(event==="PASSWORD_RECOVERY")setPasswordRecovery(true)});
+    const { data } = supabase.auth.onAuthStateChange((event, session) => {setEmail(session?.user.email ?? null);setAccessToken(session?.access_token ?? null);setNeedsPassword(session?.user.user_metadata?.needs_password===true);if(!session)setAccessReady(false);if(event==="PASSWORD_RECOVERY")setPasswordRecovery(true)});
     return () => data.subscription.unsubscribe();
   }, [supabase]);
 
@@ -28,10 +28,11 @@ export default function Home() {
     if (!supabase || !email) return;
     setAccessReady(false);
     supabase.from("app_users").select("role,active").eq("email", email).maybeSingle()
-      .then(({ data }) => {
+      .then(({ data, error }) => {
         const roles: Record<string, Role> = { admin: "Administrador", financeiro: "Financeiro", secretaria: "Secretaria", consulta: "Consulta" };
-        if (!data?.active || !data.role || !roles[data.role]) {supabase.auth.signOut();setEmail(null);setAuthError("Seu acesso está bloqueado ou ainda não foi autorizado.");return}
-        setRole(roles[data.role]);setAccessReady(true);
+        if (error) { setAuthError("Não foi possível validar suas permissões agora. Tente novamente."); return; }
+        if (!data?.active || !data.role || !roles[data.role]) {void supabase.auth.signOut({ scope: "local" });setEmail(null);setAccessToken(null);setAuthError("Seu acesso está bloqueado ou ainda não foi autorizado.");return}
+        setAuthError("");setRole(roles[data.role]);setAccessReady(true);
       });
   }, [supabase, email]);
 
@@ -43,7 +44,36 @@ export default function Home() {
     if (error) throw error;
   }
 
-  async function signOut() { if (supabase) await supabase.auth.signOut(); localStorage.removeItem("jpi-demo-session"); setAccessToken(null);setEmail(null); }
+  async function signOut() { if (supabase) await supabase.auth.signOut({ scope: "local" }); localStorage.removeItem("jpi-demo-session"); setAccessReady(false);setAccessToken(null);setEmail(null); }
+  useEffect(() => {
+    if (!supabase || !email) return;
+    let active = true;
+    const validateSession = async () => {
+      const { data, error } = await supabase.auth.getUser();
+      if (!active) return;
+      if (error || !data.user) {
+        await supabase.auth.signOut({ scope: "local" });
+        if (!active) return;
+        setAccessReady(false);
+        setAccessToken(null);
+        setEmail(null);
+        setAuthError("Sua sessão terminou. Entre novamente para continuar.");
+      }
+    };
+    const onFocus = () => { void validateSession(); };
+    const onInvalid = () => { void validateSession(); };
+    void validateSession();
+    const timer = window.setInterval(() => void validateSession(), 60000);
+    window.addEventListener("focus", onFocus);
+    window.addEventListener("jpi-session-invalid", onInvalid);
+    return () => {
+      active = false;
+      window.clearInterval(timer);
+      window.removeEventListener("focus", onFocus);
+      window.removeEventListener("jpi-session-invalid", onInvalid);
+    };
+  }, [supabase, email]);
+
   async function requestPasswordReset(inputEmail:string){if(!supabase)throw new Error("Recuperação indisponível no modo de apresentação.");const {error}=await supabase.auth.resetPasswordForEmail(inputEmail.trim().toLowerCase(),{redirectTo:window.location.origin});if(error)throw error}
   async function definePassword(password:string){if(!supabase)return;const {error}=await supabase.auth.updateUser({password,data:{needs_password:false}});if(error)throw error;setNeedsPassword(false);setPasswordRecovery(false)}
 
