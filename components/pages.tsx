@@ -581,7 +581,7 @@ function CompanySettings() {
               <label>Cor de sucesso e WhatsApp<div className="branding-color-input"><input type="color" name="tema_cor_sucesso" value={themeSuccess} onChange={event=>setThemeSuccess(event.target.value.toUpperCase())}/><strong>{themeSuccess}</strong></div><small>Confirmações, status positivos e elementos do WhatsApp.</small></label>
               <button type="button" className="secondary" onClick={()=>{setThemePrimary("#1466DF");setThemeSidebar("#14263D");setThemeSuccess("#16875F")}} disabled={busy}>Restaurar cores padrão</button>
             </div>
-            <div className="branding-live-preview" style={{"--preview-primary":themePrimary,"--preview-sidebar":themeSidebar,"--preview-success":themeSuccess} as React.CSSProperties}>
+            <div className="branding-live-preview" style={{backgroundColor:"#fff","--preview-primary":themePrimary,"--preview-sidebar":themeSidebar,"--preview-success":themeSuccess} as React.CSSProperties}>
               <div className="branding-preview-sidebar"><BrandLogo preview/><strong>JPI Fiscal</strong><span>Pré-visualização</span></div>
               <div className="branding-preview-content"><span className="branding-preview-pill">COR PRINCIPAL</span><strong>Identidade do sistema</strong><button type="button" tabIndex={-1}>Botão principal</button><small><i/> Status conectado</small></div>
             </div>
