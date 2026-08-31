@@ -14,6 +14,7 @@ const normalizeBrazilPhone=(value:string)=>{const phone=digits(value);return pho
 const maskPhone=(value:string)=>value.length>=12?`+${value.slice(0,2)} (${value.slice(2,4)}) •••••-${value.slice(-4)}`:"Número interno configurado";
 
 type ManualConfig={whatsapp_test_recipient:string|null};
+type ManualSender={id:number;nome:string;numero:string;ativo:boolean;ordem:number};
 type PaymentSource={id:number;competencia:string;valor_nfse:number;alunos:{nome:string;responsavel:string;whatsapp:string|null}|null};
 type DocumentSource={id:number;mensalidade_id:number;versao:number;chave_acesso:string;nfse_xml_path:string;estado:string};
 
@@ -54,8 +55,11 @@ export async function GET(request:NextRequest){
   const {config,error}=await readConfig(auth.supabase,backendSecret);
   if(error||!config)return json({error:"Não foi possível carregar a configuração segura do WhatsApp."},503);
   const testRecipient=normalizeBrazilPhone(config.whatsapp_test_recipient||"");
-  const ready=brazilPhonePattern.test(testRecipient);
-  return json({ok:true,ready,testRecipient:ready?maskPhone(testRecipient):null,mode:"manual",cost:"gratuito"});
+  const {data:senderRows,error:senderError}=await auth.supabase.from("whatsapp_manual_senders").select("id,nome,numero,ativo,ordem").eq("ativo",true).order("ordem",{ascending:true}).order("id",{ascending:true}).limit(4);
+  if(senderError)return json({error:"Não foi possível carregar os números remetentes do WhatsApp."},503);
+  const senders=((senderRows||[]) as ManualSender[]).map(sender=>({id:sender.id,nome:sender.nome,numero:maskPhone(sender.numero)}));
+  const recipientReady=brazilPhonePattern.test(testRecipient);
+  return json({ok:true,ready:recipientReady&&senders.length>0,testRecipient:recipientReady?maskPhone(testRecipient):null,senders,mode:"manual",cost:"gratuito"});
 }
 
 export async function POST(request:NextRequest){
@@ -81,27 +85,29 @@ export async function POST(request:NextRequest){
   }
 
   if(action!=="prepare")return json({error:"Ação de entrega inválida."},400);
-  const monthlyId=Number(body.monthlyId);const documentId=Number(body.documentId);const requestId=String(body.requestId||"");
-  if(!Number.isSafeInteger(monthlyId)||monthlyId<=0||!Number.isSafeInteger(documentId)||documentId<=0||!uuidPattern.test(requestId))return json({error:"Identificação da entrega inválida."},400);
+  const monthlyId=Number(body.monthlyId);const documentId=Number(body.documentId);const senderId=Number(body.senderId);const requestId=String(body.requestId||"");
+  if(!Number.isSafeInteger(monthlyId)||monthlyId<=0||!Number.isSafeInteger(documentId)||documentId<=0||!Number.isSafeInteger(senderId)||senderId<=0||!uuidPattern.test(requestId))return json({error:"Identificação da entrega inválida."},400);
 
   const {data:existing}=await auth.supabase.from("nfse_entregas").select("id,status").eq("request_id",requestId).maybeSingle();
   if(existing)return json({error:"Esta preparação já foi processada. Atualize a lista antes de tentar novamente.",alreadyProcessed:true,status:existing.status},409);
 
-  const [paymentResult,documentResult,configResult]=await Promise.all([
+  const [paymentResult,documentResult,configResult,senderResult]=await Promise.all([
     auth.supabase.from("mensalidades").select("id,competencia,valor_nfse,alunos(nome,responsavel,whatsapp)").eq("id",monthlyId).maybeSingle(),
     auth.supabase.from("nfse_documentos_homologacao").select("id,mensalidade_id,versao,chave_acesso,nfse_xml_path,estado").eq("id",documentId).eq("mensalidade_id",monthlyId).eq("estado","ativa").maybeSingle(),
     readConfig(auth.supabase,backendSecret),
+    auth.supabase.from("whatsapp_manual_senders").select("id,nome,numero,ativo,ordem").eq("id",senderId).eq("ativo",true).maybeSingle(),
   ]);
-  const payment=paymentResult.data as unknown as PaymentSource|null;const document=documentResult.data as DocumentSource|null;const config=configResult.config;
+  const payment=paymentResult.data as unknown as PaymentSource|null;const document=documentResult.data as DocumentSource|null;const config=configResult.config;const sender=senderResult.data as ManualSender|null;
   if(paymentResult.error||!payment)return json({error:"Mensalidade não encontrada."},404);
   if(documentResult.error||!document)return json({error:"A versão ativa da NFS-e de teste não foi encontrada."},404);
   if(configResult.error||!config)return json({error:"Não foi possível carregar a configuração segura do WhatsApp."},503);
+  if(senderResult.error||!sender)return json({error:"O número remetente escolhido não está disponível. Atualize a lista e escolha outro."},400);
   const intendedRecipient=normalizeBrazilPhone(payment.alunos?.whatsapp||"");const testRecipient=normalizeBrazilPhone(config.whatsapp_test_recipient||"");
   if(!brazilPhonePattern.test(intendedRecipient))return json({error:"O responsável não possui um WhatsApp brasileiro válido no cadastro."},400);
   if(!brazilPhonePattern.test(testRecipient))return json({error:"Cadastre o número interno de homologação em Configurações → Integrações."},400);
 
   const subject=`TESTE — NFS-e de homologação · ${payment.alunos?.nome||"Aluno"} · ${payment.competencia}`;
-  const insert=await auth.supabase.from("nfse_entregas").insert({mensalidade_id:monthlyId,documento_homologacao_id:documentId,request_id:requestId,canal:"whatsapp_manual",ambiente:"homologacao",destinatario_pretendido:intendedRecipient,destinatario_utilizado:testRecipient,assunto:subject,status:"enviando",created_by:auth.user.id,aberto_por:auth.user.id,aberto_por_nome:auth.auditName,updated_at:new Date().toISOString()}).select("id").single();
+  const insert=await auth.supabase.from("nfse_entregas").insert({mensalidade_id:monthlyId,documento_homologacao_id:documentId,request_id:requestId,canal:"whatsapp_manual",ambiente:"homologacao",destinatario_pretendido:intendedRecipient,destinatario_utilizado:testRecipient,assunto:subject,status:"enviando",created_by:auth.user.id,aberto_por:auth.user.id,aberto_por_nome:auth.auditName,whatsapp_sender_id:sender.id,whatsapp_sender_nome:sender.nome,whatsapp_sender_numero:sender.numero,updated_at:new Date().toISOString()}).select("id").single();
   if(insert.error){
     if(insert.error.code==="23505")return json({error:"Esta nota já está aberta para envio em outro computador. Conclua ou cancele a tentativa atual."},409);
     return json({error:"Não foi possível iniciar o histórico seguro do envio manual."},500);
@@ -121,7 +127,7 @@ export async function POST(request:NextRequest){
     const openedAt=new Date().toISOString();
     const update=await auth.supabase.from("nfse_entregas").update({status:"aguardando_confirmacao",aberto_em:openedAt,updated_at:openedAt}).eq("id",deliveryId).select("id").maybeSingle();
     if(update.error||!update.data)throw new Error("O histórico do envio manual não pôde ser atualizado.");
-    return json({ok:true,status:"aguardando_confirmacao",deliveryId,whatsappUrl:whatsappUrl.toString(),expiresAt:accessResult.data,actualRecipient:maskPhone(testRecipient),intendedRecipient,message:"WhatsApp preparado. Confirme no sistema depois de enviar a mensagem."});
+    return json({ok:true,status:"aguardando_confirmacao",deliveryId,whatsappUrl:whatsappUrl.toString(),expiresAt:accessResult.data,actualRecipient:maskPhone(testRecipient),intendedRecipient,sender:{id:sender.id,nome:sender.nome,numero:maskPhone(sender.numero)},message:"WhatsApp preparado. Confirme no sistema depois de enviar a mensagem."});
   }catch{
     await auth.supabase.from("nfse_entregas").update({status:"erro",erro_mensagem:"Não foi possível preparar o link privado para o WhatsApp.",updated_at:new Date().toISOString()}).eq("id",deliveryId);
     return json({error:"Não foi possível preparar o link privado para o WhatsApp. Nenhum documento foi exposto."},400);
