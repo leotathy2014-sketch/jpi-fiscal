@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import forge from "node-forge";
+import { hasServerPermission } from "@/lib/server-permissions";
 
 export const runtime = "nodejs";
 
@@ -23,8 +24,7 @@ export async function POST(request: NextRequest) {
   });
   const { data: { user }, error: userError } = await supabase.auth.getUser(token);
   if (userError || !user?.email) return json({ error: "Sessão expirada. Entre novamente." }, 401);
-  const { data: access } = await supabase.from("app_users").select("role,active").eq("email", user.email).maybeSingle();
-  if (!access?.active || access.role !== "admin") return json({ error: "Apenas o Administrador pode guardar a senha do certificado." }, 403);
+  if (!await hasServerPermission(supabase,"settings.certificate.manage")) return json({ error: "Seu usuário não possui permissão para gerenciar o certificado." }, 403);
 
   let certificateId = "";
   let password = "";
