@@ -3,6 +3,7 @@ import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { createHash, randomBytes } from "node:crypto";
 import { buildDanfsePdf } from "@/lib/danfse-pdf";
 import { createAgendaEduAccessToken, parseAgendaEduCredentials, resolveAgendaEduFamilyChat, sendAgendaEduAttachment } from "@/lib/agenda-edu";
+import { hasServerPermission } from "@/lib/server-permissions";
 
 export const runtime="nodejs";
 export const maxDuration=60;
@@ -26,8 +27,7 @@ async function authorizedClient(request:NextRequest){
   const supabase=createClient(supabaseUrl,supabaseKey,{global:{headers:{Authorization:authorization}},auth:{persistSession:false,autoRefreshToken:false}});
   const {data:{user},error}=await supabase.auth.getUser(token);
   if(error||!user?.email)return {ok:false as const,response:json({error:"Sessão expirada. Entre novamente."},401)};
-  const {data:access}=await supabase.from("app_users").select("role,active").eq("email",user.email).maybeSingle();
-  if(!access?.active||!["admin","financeiro"].includes(access.role))return {ok:false as const,response:json({error:"Seu usuário não possui permissão para enviar documentos."},403)};
+  if(!await hasServerPermission(supabase,"deliveries.send_agenda"))return {ok:false as const,response:json({error:"Seu usuário não possui permissão para enviar pela Agenda Edu."},403)};
   return {ok:true as const,supabase,user};
 }
 
