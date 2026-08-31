@@ -1,12 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { buildDanfsePdf } from "@/lib/danfse-pdf";
+import { hasServerPermission } from "@/lib/server-permissions";
 
 export const runtime="nodejs";
 export const maxDuration=30;
 
 const XML_BUCKET="documentos-nfse";
-const allowedRoles=["admin","financeiro","secretaria","consulta"];
+
 const json=(body:Record<string,unknown>,status=200)=>NextResponse.json(body,{status,headers:{"Cache-Control":"no-store"}});
 type DocumentSource={id:number;chave_acesso:string;nfse_xml_path:string;estado:string};
 
@@ -20,8 +21,7 @@ async function authorizedClient(request:NextRequest){
   const supabase=createClient(supabaseUrl,supabaseKey,{global:{headers:{Authorization:authorization}},auth:{persistSession:false,autoRefreshToken:false}});
   const {data:{user},error:userError}=await supabase.auth.getUser(token);
   if(userError||!user?.email)return {ok:false as const,response:json({error:"Sessão expirada. Entre novamente."},401)};
-  const {data:access}=await supabase.from("app_users").select("role,active").eq("email",user.email).maybeSingle();
-  if(!access?.active||!allowedRoles.includes(access.role))return {ok:false as const,response:json({error:"Seu usuário não possui permissão para consultar documentos."},403)};
+  if(!await hasServerPermission(supabase,"deliveries.view"))return {ok:false as const,response:json({error:"Seu usuário não possui permissão para consultar documentos."},403)};
   return {ok:true as const,supabase};
 }
 
