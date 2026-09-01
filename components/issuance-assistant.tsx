@@ -921,7 +921,7 @@ export function IssuanceAssistant({onNavigate}:{onNavigate:(page:AppPage)=>void}
                 <span><MessageCircle size={20}/></span><div><strong>WhatsApp</strong><small>{whatsappInfo?.ready?"Manual gratuito":"Configuração necessária"}</small></div>
               </button>
               <button type="button" className={deliveryChannel==="agenda-edu"?"active agenda":"agenda"} onClick={()=>{setDeliveryChannel("agenda-edu");setError("");setMessage("")}}>
-                <span><CalendarDays size={20}/></span><div><strong>Agenda Edu</strong><small>{agendaEduInfo?.ready?"Sandbox disponível":"Aguardando Agenda Edu"}</small></div>
+                <span><CalendarDays size={20}/></span><div><strong>Agenda Edu</strong><small>{agendaEduInfo?.ready?"Mensagem + PDF":"Aguardando Agenda Edu"}</small></div>
               </button>
             </div>
 
@@ -929,7 +929,7 @@ export function IssuanceAssistant({onNavigate}:{onNavigate:(page:AppPage)=>void}
               <div className="assistant-delivery-recipient">
                 <small>DESTINO DE HOMOLOGAÇÃO</small>
                 <strong>{deliveryRecipient}</strong>
-                <span>{deliveryChannel==="email"?selected.alunos?.email||"E-mail do responsável não informado":deliveryChannel==="whatsapp-manual"?selected.alunos?.whatsapp||"WhatsApp do responsável não informado":selected.alunos?.agenda_edu_student_id?"Aluno vinculado à Agenda Edu":"Aluno ainda sem vínculo da Agenda Edu"}</span>
+                <span>{deliveryChannel==="email"?selected.alunos?.email||"E-mail do responsável não informado":deliveryChannel==="whatsapp-manual"?selected.alunos?.whatsapp||"WhatsApp do responsável não informado":selected.alunos?.agenda_edu_student_id?"Aluno vinculado à Agenda Edu · envio de mensagem + PDF":"Aluno ainda sem vínculo da Agenda Edu"}</span>
               </div>
 
               {deliveryChannel==="whatsapp-manual"&&<>
