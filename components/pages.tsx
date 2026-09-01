@@ -8,6 +8,7 @@ import { TransmissionProgress } from "./transmission-progress";
 import { AgendaEduStudentLinks } from "./agenda-edu-student-links";
 import { BrandLogo } from "./branding";
 import { useAccess } from "./access";
+import { AGENDA_EDU_ENDPOINTS } from "@/lib/agenda-edu";
 
 const money = (n: number) => n.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 const onlyDigits = (value: string, limit: number) => value.replace(/\D/g, "").slice(0, limit);
@@ -1413,7 +1414,12 @@ function CommunicationsSettings({accessToken,onChanged,canEdit,section}:{accessT
                     <div><dt>Ambiente</dt><dd>{config?.agenda_edu_environment==="homologacao"?"Sandbox / Homologação":config?.agenda_edu_environment||"Não informado"}</dd></div>
                     <div><dt>Escola</dt><dd>{config?.agenda_edu_school_identifier||"Não informada"}</dd></div>
                     <div><dt>Channel ID</dt><dd className="mono">{config?.agenda_edu_channel_id||"Não salvo"}</dd></div>
-                    <div><dt>Endpoint da API</dt><dd className="mono">sandbox-api.agendaedu.dev/v2</dd></div>
+                    <div><dt>API base atual</dt><dd className="mono">{AGENDA_EDU_ENDPOINTS.sandboxBaseUrl}</dd></div>
+                    <div><dt>Autenticação / Token</dt><dd className="mono">{AGENDA_EDU_ENDPOINTS.sandboxTokenUrl}</dd></div>
+                    <div><dt>Consulta de canais</dt><dd className="mono">{AGENDA_EDU_ENDPOINTS.sandboxBaseUrl}/channels</dd></div>
+                    <div><dt>Envio de mensagens</dt><dd className="mono">{config?.agenda_edu_channel_id?`${AGENDA_EDU_ENDPOINTS.sandboxBaseUrl}/channels/${config.agenda_edu_channel_id}/messages/`:`${AGENDA_EDU_ENDPOINTS.sandboxBaseUrl}/channels/[CHANNEL_ID]/messages/`}</dd></div>
+                    <div><dt>Produção · API base</dt><dd className="mono future">{AGENDA_EDU_ENDPOINTS.productionBaseUrl}</dd></div>
+                    <div><dt>Produção · Token</dt><dd className="mono future">{AGENDA_EDU_ENDPOINTS.productionTokenUrl}</dd></div>
                     <div><dt>Documentação API</dt><dd>{config?.agenda_edu_documentacao_confirmada?"Confirmada":"Pendente"}</dd></div>
                     <div><dt>Último status</dt><dd>{config?.agenda_edu_ultimo_status||"Não testado"}</dd></div>
                     <div><dt>Último teste</dt><dd>{config?.agenda_edu_testada_em?new Date(config.agenda_edu_testada_em).toLocaleString("pt-BR"):"Ainda não realizado"}</dd></div>
