@@ -266,7 +266,7 @@ export function IssuanceAssistant({onNavigate}:{onNavigate:(page:AppPage)=>void}
       }
       const insert=await supabase.from("mensalidades").insert({
         aluno_id:selectedStudent.id,
-        competencia,
+        competencia:competence,
         valor_mensalidade:amount,
         valor_nfse:amount,
         descricao_servico:description,
