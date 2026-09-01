@@ -155,8 +155,11 @@ export async function POST(request:NextRequest){
     if(secretError||!storedSecret)return json({error:"Cadastre primeiro as credenciais da Agenda Edu."},400);
     try{
       const result=await testAgendaEduConnection(parseAgendaEduCredentials(String(storedSecret)));
-      await auth.supabase.from("integracoes_comunicacao").update({agenda_edu_documentacao_confirmada:true,agenda_edu_ultimo_status:"conectado",agenda_edu_testada_em:new Date().toISOString(),updated_at:new Date().toISOString(),updated_by:auth.user.id}).eq("id",true);
-      return json({ok:true,message:`Conexão com o Sandbox da Agenda Edu confirmada${result.channelName?` · canal encontrado: ${result.channelName}`:""}. Nenhuma mensagem foi enviada.`});
+      if(!result.channelId)throw new Error("A Agenda Edu confirmou a conexão, mas não retornou nenhum canal de Mensagens disponível para esta escola.");
+      const testedAt=new Date().toISOString();
+      const {error:updateError}=await auth.supabase.from("integracoes_comunicacao").update({agenda_edu_channel_id:String(result.channelId),agenda_edu_documentacao_confirmada:true,agenda_edu_ultimo_status:"conectado",agenda_edu_testada_em:testedAt,updated_at:testedAt,updated_by:auth.user.id}).eq("id",true);
+      if(updateError)return json({error:"A conexão foi confirmada, mas não foi possível salvar automaticamente o canal da Agenda Edu."},500);
+      return json({ok:true,ready:true,channelId:String(result.channelId),message:`Conexão com o Sandbox da Agenda Edu confirmada${result.channelName?` · canal encontrado: ${result.channelName}`:""}. Canal salvo automaticamente. Nenhuma mensagem foi enviada.`});
     }catch(testError){
       await auth.supabase.from("integracoes_comunicacao").update({agenda_edu_ultimo_status:"erro",updated_at:new Date().toISOString(),updated_by:auth.user.id}).eq("id",true);
       return json({error:testError instanceof Error?testError.message:"A Agenda Edu não confirmou a conexão com o Sandbox."},400);
