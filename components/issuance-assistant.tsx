@@ -647,6 +647,21 @@ export function IssuanceAssistant({onNavigate}:{onNavigate:(page:AppPage)=>void}
     if(target==="Alunos e Responsáveis")sessionStorage.setItem("jpi-student-focus",selected.alunos?.nome||String(selected.aluno_id));
     onNavigate(target);
   }
+  function openOfficialHomologation(){
+    if(!selected)return;
+    const focus=String(selected.id);
+    const officialOrigin="https://jpi-fiscal.vercel.app";
+    if(window.location.origin===officialOrigin){
+      sessionStorage.setItem("jpi-nfse-focus",focus);
+      sessionStorage.setItem("jpi-nfse-open-homologation",focus);
+      onNavigate("NFS-e");
+      return;
+    }
+    const url=new URL(officialOrigin);
+    url.searchParams.set("nfse_hml",focus);
+    window.open(url.toString(),"_blank","noopener,noreferrer");
+    setMessage("Homologação aberta no JPI Fiscal oficial. Depois de concluir, volte a esta aba e clique em Atualizar.");
+  }
   function startNewEmission(){
     setNewEmissionOpen(true);
     setNewStudentId(null);
@@ -675,7 +690,7 @@ export function IssuanceAssistant({onNavigate}:{onNavigate:(page:AppPage)=>void}
     if(effectiveCurrent===3){void saveDps();return}
     if(effectiveCurrent===4){void approvePreview();return}
     if(effectiveCurrent===5){void generateXmlInAssistant();return}
-    if(effectiveCurrent===6){focusAndNavigate("NFS-e");return}
+    if(effectiveCurrent===6){openOfficialHomologation();return}
     if(effectiveCurrent>=8){void sendCurrentDocument();return}
     focusAndNavigate("NFS-e");
   }
@@ -845,7 +860,7 @@ export function IssuanceAssistant({onNavigate}:{onNavigate:(page:AppPage)=>void}
                 <ShieldCheck/>
                 <div>
                   <strong>Usar homologação que já funciona</strong>
-                  <span>Ao continuar, o sistema abrirá a mesma nota diretamente na tela NFS-e, com certificado A1, assinatura e transmissão já existentes.</span>
+                  <span>Ao continuar, o sistema abrirá a mesma nota no JPI Fiscal oficial, usando o certificado A1 e a senha protegida já configurados no servidor.</span>
                 </div>
               </div>
             </div>
@@ -957,7 +972,7 @@ export function IssuanceAssistant({onNavigate}:{onNavigate:(page:AppPage)=>void}
             <button className="primary assistant-main-action" onClick={continueProcess} disabled={Boolean(busyAction)||(!canPrepare&&effectiveCurrent>=2&&effectiveCurrent<8)}>
               {busyAction==="validate"?"Validando…":busyAction==="save-dps"?"Salvando DPS…":busyAction==="approve"?"Aprovando…":busyAction==="xml"?"Gerando XML…":effectiveCurrent===2&&missing.length?"Corrigir cadastro":effectiveCurrent===2?"Validar nota":effectiveCurrent===3?"Salvar DPS e ver prévia":effectiveCurrent===4?"Aprovar prévia":effectiveCurrent===5?"Gerar e validar XML":effectiveCurrent===6?"Abrir homologação NFS-e":effectiveCurrent>=8?"Ir para envio":"Continuar processo"} <ChevronRight size={18}/>
             </button>
-            {effectiveCurrent>2&&effectiveCurrent<8&&<button className="secondary" onClick={()=>focusAndNavigate("NFS-e")}>Abrir NFS-e atual</button>}
+            {effectiveCurrent>2&&effectiveCurrent<8&&<button className="secondary" onClick={()=>effectiveCurrent===6?openOfficialHomologation():focusAndNavigate("NFS-e")}>{effectiveCurrent===6?"Abrir homologação oficial":"Abrir NFS-e atual"}</button>}
             {progress?.finished&&<button className="secondary" onClick={()=>focusAndNavigate("Enviar notas")}>Abrir central de envios</button>}
           </div>}
         </>}
