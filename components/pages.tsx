@@ -1410,10 +1410,10 @@ function Integrations({accessToken}:{accessToken:string|null}) {
         const data=await response.json().catch(()=>({})) as {ready?:boolean;diagnosticCode?:string};
         if(!active)return;
         if(response.status===401){setSefinAvailability("session");window.dispatchEvent(new Event("jpi-session-invalid"));return}
-        if(!response.ok)setSefinAvailability(data.diagnosticCode==="NFSE_HML_SERVIDOR_INSTAVEL"?"unstable":"unavailable");
+        if(!response.ok)setSefinAvailability(data.diagnosticCode==="NFSE_HML_SERVIDOR_INSTAVEL"?"unstable":"unknown");
         else setSefinAvailability(data.ready?"available":"unstable");
       }catch{
-        if(active)setSefinAvailability("unavailable");
+        if(active)setSefinAvailability("unknown");
       }finally{
         lastCheck=Date.now();inFlight=false;
         if(active)setSefinCheckedAt(new Date());
@@ -1473,7 +1473,7 @@ function Integrations({accessToken}:{accessToken:string|null}) {
       setTested(true);setSefinAvailability("available");setSefinCheckedAt(new Date());setMessage(`Certificado confirmado e servidor da SEFIN respondendo no ambiente de ${data.environment}. Nenhuma nota foi emitida neste teste.`);
     }catch(requestError){
       const timedOut=requestError instanceof Error&&(requestError.message==="JPI_CONNECTION_TIMEOUT"||requestError.name==="AbortError");
-      setSefinAvailability("unavailable");setError(timedOut?"A API de emissão não respondeu dentro do prazo. Tente novamente em alguns instantes.":"Não foi possível comunicar com a API de emissão. Confira a internet e teste novamente.");
+      setSefinAvailability("unknown");setError(timedOut?"A verificação não respondeu dentro do prazo. O status da SEFIN ficou não confirmado; tente novamente em alguns instantes.":"A verificação foi interrompida. O status da SEFIN ficou não confirmado; teste novamente.");
     }finally{if(timeout)window.clearTimeout(timeout);setBusy(false);setConnectionStage("")}
   }
 
@@ -1487,7 +1487,9 @@ function Integrations({accessToken}:{accessToken:string|null}) {
       ? {label:"Oscilação",tone:"pending" as IntegrationStateTone}
       : sefinAvailability==="unavailable"||sefinAvailability==="session"
         ? {label:"Indisponível",tone:"disconnected" as IntegrationStateTone}
-        : {label:"Homologação",tone:"pending" as IntegrationStateTone};
+        : sefinAvailability==="unknown"
+          ? {label:"Não confirmado",tone:"pending" as IntegrationStateTone}
+          : {label:"Homologação",tone:"pending" as IntegrationStateTone};
 
   const integrationItems=[
     {key:"overview" as const,label:"Visão geral",Icon:SlidersHorizontal,status:"",tone:"neutral" as IntegrationStateTone},
