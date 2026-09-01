@@ -45,7 +45,6 @@ type DeliveryState={mensalidade_id:number;status:string;canal:string;created_at:
 type StepState="done"|"current"|"pending"|"warning";
 type AssistantStep={key:string;label:string;short:string;description:string;state:StepState};
 type FiscalContext={cnpj:string|null;razao_social:string|null;cidade:string|null;uf:string|null;regime_tributario:string;pis_aliquota:number;cofins_aliquota:number;pis_cofins_cst:string;pis_cofins_retencao:number};
-type HomologationResult={ok?:boolean;alreadyIssued?:boolean;error?:string;key?:string};
 type DeliveryDocument={id:number;mensalidade_id:number;versao:number;chave_acesso:string;estado:string;emitida_em:string|null};
 type DeliveryChannel="email"|"whatsapp-manual"|"agenda-edu";
 type ManualSender={id:number;nome:string;numero:string};
@@ -135,8 +134,6 @@ export function IssuanceAssistant({onNavigate}:{onNavigate:(page:AppPage)=>void}
   const [draftValue,setDraftValue]=useState("");
   const [draftDescription,setDraftDescription]=useState("");
   const [fiscalContext,setFiscalContext]=useState<FiscalContext|null>(null);
-  const [homologationConfirmed,setHomologationConfirmed]=useState(false);
-  const [sefinError,setSefinError]=useState("");
   const [deliveryChannel,setDeliveryChannel]=useState<DeliveryChannel>("email");
   const [activeDocument,setActiveDocument]=useState<DeliveryDocument|null>(null);
   const [deliveryBusy,setDeliveryBusy]=useState(false);
@@ -198,7 +195,7 @@ export function IssuanceAssistant({onNavigate}:{onNavigate:(page:AppPage)=>void}
     setDraftCompetence(competence);
     setDraftValue(String(selected.valor_nfse));
     setDraftDescription(selected.descricao_servico||defaultServiceDescription(competence,selected.alunos?.segmento));
-    setMessage("");setError("");setSefinError("");setHomologationConfirmed(false);setActiveDocument(null);setManualPending(null);
+    setMessage("");setError("");setActiveDocument(null);setManualPending(null);
   },[selected?.id]);
   useEffect(()=>{
     if(!selectedStudent){setNewDescription("");setNewDescriptionEdited(false);return}
