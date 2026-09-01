@@ -1469,11 +1469,11 @@ function Integrations({accessToken}:{accessToken:string|null}) {
       const data=await response.json().catch(()=>({})) as {ok?:boolean;environment?:string;error?:string;ready?:boolean;issuanceStatus?:number};
       window.dispatchEvent(new Event("jpi-sefin-status-updated"));
       if(!response.ok||!data?.ok){setError(data?.error||"Não foi possível testar a integração.");return}
-      if(!data.ready){setError("O servidor de emissão está instável. Não tente enviar a nota agora.");return}
+      if(!data.ready){setSefinAvailability("unstable");setError("A API de emissão apresentou oscilação. Aguarde alguns instantes e teste novamente antes de enviar.");return}
       setTested(true);setSefinAvailability("available");setSefinCheckedAt(new Date());setMessage(`Certificado confirmado e servidor da SEFIN respondendo no ambiente de ${data.environment}. Nenhuma nota foi emitida neste teste.`);
     }catch(requestError){
       const timedOut=requestError instanceof Error&&(requestError.message==="JPI_CONNECTION_TIMEOUT"||requestError.name==="AbortError");
-      setError(timedOut?"A conexão foi encerrada após 25 segundos sem resposta.":"A conexão foi interrompida. Confira sua internet e tente novamente.");
+      setSefinAvailability("unavailable");setError(timedOut?"A API de emissão não respondeu dentro do prazo. Tente novamente em alguns instantes.":"Não foi possível comunicar com a API de emissão. Confira a internet e teste novamente.");
     }finally{if(timeout)window.clearTimeout(timeout);setBusy(false);setConnectionStage("")}
   }
 
