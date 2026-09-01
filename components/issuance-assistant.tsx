@@ -554,7 +554,7 @@ export function IssuanceAssistant({onNavigate}:{onNavigate:(page:AppPage)=>void}
       const context=fiscalContext||await loadFiscalContext();
       if(!context)throw new Error("Configuração fiscal indisponível.");
       const service=fiscalServiceForSegment(selected.alunos?.segmento);
-      const description=upper(selected.descricao_servico||draftDescription||defaultServiceDescription(competenceInput(selected.competencia),selected.alunos?.segmento)).trim();
+      const description=upper(selected.descricao_servico||draftDescription||defaultServiceDescription(competenceInput(selected.competencia),selected.alunos)).trim();
       const draft=buildDpsDraft({
         municipalityCode:"3304557",
         series:NFSE_OWN_APP_SERIES,
@@ -740,7 +740,7 @@ export function IssuanceAssistant({onNavigate}:{onNavigate:(page:AppPage)=>void}
             </div>
             <div className="assistant-dps-editor">
               <div className="assistant-edit-grid">
-                <label><span>Competência</span><input type="month" max={currentCompetenceInput()} value={newCompetence} onChange={e=>{const value=e.target.value;setNewCompetence(value);if(!newDescriptionEdited)setNewDescription(defaultServiceDescription(value,selectedStudent.segmento))}}/></label>
+                <label><span>Competência</span><input type="month" max={currentCompetenceInput()} value={newCompetence} onChange={e=>{const value=e.target.value;setNewCompetence(value);if(!newDescriptionEdited)setNewDescription(defaultServiceDescription(value,selectedStudent))}}/></label>
                 <label><span>Valor da mensalidade / NFS-e</span><input type="text" inputMode="decimal" placeholder="Ex.: 1.250,00" value={newValue} onChange={e=>setNewValue(e.target.value.replace(/[^0-9.,]/g,""))}/></label>
               </div>
               <label><span>Status do pagamento</span><select value={newPaymentStatus} onChange={e=>setNewPaymentStatus(e.target.value)}><option value="Aberto">Pendente</option><option value="Pago">Pago</option></select></label>
