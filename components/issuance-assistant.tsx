@@ -23,6 +23,7 @@ type AssistantPayment={
   homologacao_emitida_em:string|null;
   alunos:{
     nome:string;
+    turma:string|null;
     responsavel:string;
     segmento:string;
     cpf_cnpj:string|null;
@@ -59,7 +60,7 @@ const formatCompetence=(value:string)=>{const parts=value.split("-");return part
 const currentCompetenceInput=()=>{const parts=new Intl.DateTimeFormat("pt-BR",{timeZone:"America/Sao_Paulo",year:"numeric",month:"2-digit"}).formatToParts(new Date());const part=(type:"year"|"month")=>parts.find(item=>item.type===type)?.value||"";return part("year")+"-"+part("month")};
 const upper=(value:string)=>value.toLocaleUpperCase("pt-BR");
 const fiscalServiceForSegment=(segment?:string|null)=>{const normalized=normalize(segment||"");if(normalized.includes("medio"))return {code:"08.01.01",description:"Ensino regular médio",nbs:"122013000"};if(normalized.includes("1º")||normalized.includes("6º")||normalized.includes("fundamental"))return {code:"08.01.01",description:"Ensino regular fundamental",nbs:"122012000"};return {code:"08.01.01",description:"Ensino regular pré-escolar",nbs:"122011200"}};
-const defaultServiceDescription=(competence:string,segment?:string|null)=>"MENSALIDADE ESCOLAR - COMPETÊNCIA "+formatCompetence(competence)+" - "+fiscalServiceForSegment(segment).description.toLocaleUpperCase("pt-BR");
+const defaultServiceDescription=(competence:string,student?:{nome?:string|null;turma?:string|null;segmento?:string|null}|null)=>["MENSALIDADE ESCOLAR",student?.nome?"ALUNO: "+upper(student.nome):null,student?.turma?"TURMA: "+upper(student.turma):null,student?.segmento?"SEGMENTO: "+upper(student.segmento):null,"COMPETÊNCIA "+formatCompetence(competence)].filter(Boolean).join(" - ");
 const parseMoneyInput=(value:string)=>{const clean=value.replace(/R\$/g,"").replace(/\s/g,"");if(clean.includes(","))return Number(clean.replace(/\./g,"").replace(",","."));return Number(clean)};
 const dpsDraftVersionPath=(paymentId:number,draftId:string)=>{const timestamp=new Date().toISOString().replace(/\D/g,"").slice(0,17);const revision=timestamp+"-"+crypto.randomUUID().slice(0,8);return "dps/"+paymentId+"/rascunhos/"+revision+"/"+draftId+".xml"};
 
@@ -148,7 +149,7 @@ export function IssuanceAssistant({onNavigate}:{onNavigate:(page:AppPage)=>void}
     if(!silent)setLoading(true);else setRefreshing(true);
     setError("");
     const [paymentsResult,studentsResult,deliveriesResult]=await Promise.all([
-      supabase.from("mensalidades").select("id,aluno_id,competencia,valor_nfse,descricao_servico,status_pagamento,status_nfse,dps_xml_path,dps_xml_id,nfse_homologacao_xml_path,chave_nfse_homologacao,homologacao_emitida_em,alunos(nome,responsavel,segmento,cpf_cnpj,email,whatsapp,agenda_edu_student_id,agenda_edu_use_external_id,cep,logradouro,numero,cidade,uf)").order("created_at",{ascending:false}),
+      supabase.from("mensalidades").select("id,aluno_id,competencia,valor_nfse,descricao_servico,status_pagamento,status_nfse,dps_xml_path,dps_xml_id,nfse_homologacao_xml_path,chave_nfse_homologacao,homologacao_emitida_em,alunos(nome,turma,responsavel,segmento,cpf_cnpj,email,whatsapp,agenda_edu_student_id,agenda_edu_use_external_id,cep,logradouro,numero,cidade,uf)").order("created_at",{ascending:false}),
       supabase.from("alunos").select("id,nome,turma,segmento,responsavel,cpf_cnpj,email,whatsapp,cep,logradouro,numero,cidade,uf").order("nome"),
       supabase.from("nfse_entregas").select("mensalidade_id,status,canal,created_at").order("created_at",{ascending:false}),
     ]);
@@ -194,12 +195,12 @@ export function IssuanceAssistant({onNavigate}:{onNavigate:(page:AppPage)=>void}
     const competence=competenceInput(selected.competencia);
     setDraftCompetence(competence);
     setDraftValue(String(selected.valor_nfse));
-    setDraftDescription(selected.descricao_servico||defaultServiceDescription(competence,selected.alunos?.segmento));
+    setDraftDescription(selected.descricao_servico||defaultServiceDescription(competence,selected.alunos));
     setMessage("");setError("");setActiveDocument(null);setManualPending(null);
   },[selected?.id]);
   useEffect(()=>{
     if(!selectedStudent){setNewDescription("");setNewDescriptionEdited(false);return}
-    if(!newDescriptionEdited)setNewDescription(defaultServiceDescription(newCompetence,selectedStudent.segmento));
+    if(!newDescriptionEdited)setNewDescription(defaultServiceDescription(newCompetence,selectedStudent));
   },[selectedStudent,newCompetence,newDescriptionEdited]);
   const delivery=useMemo(()=>selected?deliveries.find(item=>item.mensalidade_id===selected.id&&item.status==="enviado")||null:null,[deliveries,selected]);
   const missing=selected?missingStudentFields(selected):[];
@@ -282,7 +283,7 @@ export function IssuanceAssistant({onNavigate}:{onNavigate:(page:AppPage)=>void}
       if(!newCompetence||newCompetence>currentCompetenceInput())throw new Error("A competência não pode ser posterior ao mês atual.");
       const amount=parseMoneyInput(newValue);
       if(!Number.isFinite(amount)||amount<=0)throw new Error("Informe um valor válido para a mensalidade.");
-      const description=upper(newDescription||defaultServiceDescription(newCompetence,selectedStudent.segmento)).trim();
+      const description=upper(newDescription||defaultServiceDescription(newCompetence,selectedStudent)).trim();
       if(!description||description.length>1000)throw new Error("A descrição do serviço deve ter entre 1 e 1000 caracteres.");
       const competence=formatCompetence(newCompetence);
       const existing=await supabase.from("mensalidades").select("id").eq("aluno_id",selectedStudent.id).eq("competencia",competence).order("id",{ascending:false}).limit(1).maybeSingle();
@@ -724,7 +725,7 @@ export function IssuanceAssistant({onNavigate}:{onNavigate:(page:AppPage)=>void}
         <div className="assistant-new-students">
           <div className="search-input"><Search/><input value={studentQuery} onChange={e=>setStudentQuery(e.target.value)} placeholder="Buscar aluno, responsável, turma ou CPF"/></div>
           {loading?<div className="assistant-loading">Carregando alunos…</div>:filteredStudents.length===0?<div className="assistant-empty">Nenhum aluno cadastrado encontrado.</div>:<div className="assistant-payment-list">
-            {filteredStudents.slice(0,50).map(student=><button key={student.id} className={newStudentId===student.id?"assistant-payment selected":"assistant-payment"} onClick={()=>{setNewStudentId(student.id);setNewDescriptionEdited(false);setNewDescription(defaultServiceDescription(newCompetence,student.segmento));setError("");setMessage("")}}>
+            {filteredStudents.slice(0,50).map(student=><button key={student.id} className={newStudentId===student.id?"assistant-payment selected":"assistant-payment"} onClick={()=>{setNewStudentId(student.id);setNewDescriptionEdited(false);setNewDescription(defaultServiceDescription(newCompetence,student));setError("");setMessage("")}}>
               <span className="assistant-payment-icon"><GraduationCap size={17}/></span>
               <span><strong>{student.nome}</strong><small>{student.turma||"Sem turma"} · {student.segmento}</small></span>
               <em className="pending">{newStudentId===student.id?"Selecionado":"Selecionar"}</em>
