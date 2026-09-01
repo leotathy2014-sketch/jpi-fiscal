@@ -483,51 +483,6 @@ function BrandingSettings() {
   const [themeSuccess,setThemeSuccess]=useState("#16875F");
   const [brandingUpdatedAt,setBrandingUpdatedAt]=useState("");
 
-  useEffect(()=>{
-    if(!agendaMasterSecrets)return;
-    const timer=window.setTimeout(()=>{
-      setAgendaMasterSecrets(null);
-      setAgendaMasterSecretsVisible(false);
-      setAgendaMasterCopied("");
-    },60000);
-    return()=>window.clearTimeout(timer);
-  },[agendaMasterSecrets]);
-
-  async function revealAgendaMasterSecrets(){
-    if(!isMaster||!accessToken)return;
-    setAgendaMasterSecretsBusy(true);setAgendaMasterSecretsError("");setAgendaMasterCopied("");
-    try{
-      const response=await authenticatedFetch("/api/integrations/agenda-edu/master-secrets",{
-        method:"POST",
-        headers:{Authorization:`Bearer ${accessToken}`,"Content-Type":"application/json"},
-        body:JSON.stringify({confirm:true}),
-        cache:"no-store",
-      });
-      const data=await response.json().catch(()=>({})) as {secrets?:{clientId:string;clientSecret:string;schoolToken:string};error?:string};
-      if(response.status===401)window.dispatchEvent(new Event("jpi-session-invalid"));
-      if(!response.ok||!data.secrets)throw new Error(data.error||"Não foi possível revelar as credenciais protegidas.");
-      setAgendaMasterSecrets(data.secrets);setAgendaMasterSecretsVisible(true);
-    }catch(requestError){
-      setAgendaMasterSecretsError(requestError instanceof Error?requestError.message:"Não foi possível revelar as credenciais protegidas.");
-    }finally{setAgendaMasterSecretsBusy(false);}
-  }
-
-  function hideAgendaMasterSecrets(){
-    setAgendaMasterSecretsVisible(false);
-    setAgendaMasterSecrets(null);
-    setAgendaMasterCopied("");
-    setAgendaMasterSecretsError("");
-  }
-
-  async function copyAgendaMasterSecret(field:"clientId"|"clientSecret"|"schoolToken"){
-    const value=agendaMasterSecrets?.[field];if(!value)return;
-    try{
-      await navigator.clipboard.writeText(value);
-      setAgendaMasterCopied(field);
-      window.setTimeout(()=>setAgendaMasterCopied(current=>current===field?"":current),1800);
-    }catch{setAgendaMasterSecretsError("Não foi possível copiar. Verifique a permissão da área de transferência do navegador.");}
-  }
-
   const load=useCallback(async()=>{
     if(!supabase)return;
     setLoading(true);
@@ -1288,6 +1243,51 @@ function CommunicationsSettings({accessToken,onChanged,canEdit,section}:{accessT
   const [agendaMasterSecretsBusy,setAgendaMasterSecretsBusy]=useState(false);
   const [agendaMasterSecretsError,setAgendaMasterSecretsError]=useState("");
   const [agendaMasterCopied,setAgendaMasterCopied]=useState("");
+
+  useEffect(()=>{
+    if(!agendaMasterSecrets)return;
+    const timer=window.setTimeout(()=>{
+      setAgendaMasterSecrets(null);
+      setAgendaMasterSecretsVisible(false);
+      setAgendaMasterCopied("");
+    },60000);
+    return()=>window.clearTimeout(timer);
+  },[agendaMasterSecrets]);
+
+  async function revealAgendaMasterSecrets(){
+    if(!isMaster||!accessToken)return;
+    setAgendaMasterSecretsBusy(true);setAgendaMasterSecretsError("");setAgendaMasterCopied("");
+    try{
+      const response=await authenticatedFetch("/api/integrations/agenda-edu/master-secrets",{
+        method:"POST",
+        headers:{Authorization:`Bearer ${accessToken}`,"Content-Type":"application/json"},
+        body:JSON.stringify({confirm:true}),
+        cache:"no-store",
+      });
+      const data=await response.json().catch(()=>({})) as {secrets?:{clientId:string;clientSecret:string;schoolToken:string};error?:string};
+      if(response.status===401)window.dispatchEvent(new Event("jpi-session-invalid"));
+      if(!response.ok||!data.secrets)throw new Error(data.error||"Não foi possível revelar as credenciais protegidas.");
+      setAgendaMasterSecrets(data.secrets);setAgendaMasterSecretsVisible(true);
+    }catch(requestError){
+      setAgendaMasterSecretsError(requestError instanceof Error?requestError.message:"Não foi possível revelar as credenciais protegidas.");
+    }finally{setAgendaMasterSecretsBusy(false);}
+  }
+
+  function hideAgendaMasterSecrets(){
+    setAgendaMasterSecretsVisible(false);
+    setAgendaMasterSecrets(null);
+    setAgendaMasterCopied("");
+    setAgendaMasterSecretsError("");
+  }
+
+  async function copyAgendaMasterSecret(field:"clientId"|"clientSecret"|"schoolToken"){
+    const value=agendaMasterSecrets?.[field];if(!value)return;
+    try{
+      await navigator.clipboard.writeText(value);
+      setAgendaMasterCopied(field);
+      window.setTimeout(()=>setAgendaMasterCopied(current=>current===field?"":current),1800);
+    }catch{setAgendaMasterSecretsError("Não foi possível copiar. Verifique a permissão da área de transferência do navegador.");}
+  }
 
   const load=useCallback(async()=>{
     if(!accessToken){setError("Sessão expirada. Entre novamente.");setLoading(false);return;}
