@@ -537,3 +537,10 @@
  .assistant-resume-card{grid-template-columns:1fr}
  .assistant-resume-card button{justify-content:center}
 }
+
+
+.assistant-sefin-inline-error{display:flex;align-items:flex-start;gap:9px;padding:11px 12px;border:1px solid #f0aaa4;border-radius:11px;background:#fff1f0;color:#a5281d}
+.assistant-sefin-inline-error>svg{width:18px;flex:none;margin-top:1px}
+.assistant-sefin-inline-error>div{display:grid;gap:3px}
+.assistant-sefin-inline-error strong{font-size:10px}
+.assistant-sefin-inline-error span{font-size:8px;line-height:1.45}
