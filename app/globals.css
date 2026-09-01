@@ -544,3 +544,13 @@
 .assistant-sefin-inline-error>div{display:grid;gap:3px}
 .assistant-sefin-inline-error strong{font-size:10px}
 .assistant-sefin-inline-error span{font-size:8px;line-height:1.45}
+
+
+.assistant-backend-ready,.assistant-backend-not-ready,.assistant-backend-checking{display:flex;align-items:flex-start;gap:9px;padding:10px 12px;border-radius:11px;border:1px solid}
+.assistant-backend-ready>svg,.assistant-backend-not-ready>svg,.assistant-backend-checking>svg{width:18px;flex:none;margin-top:1px}
+.assistant-backend-ready>div,.assistant-backend-not-ready>div,.assistant-backend-checking>div{display:grid;gap:3px}
+.assistant-backend-ready strong,.assistant-backend-not-ready strong,.assistant-backend-checking strong{font-size:10px}
+.assistant-backend-ready span,.assistant-backend-not-ready span,.assistant-backend-checking span{font-size:8px;line-height:1.45}
+.assistant-backend-ready{color:#157653;background:#edf9f4;border-color:#bfe0d2}
+.assistant-backend-not-ready{color:#a5281d;background:#fff1f0;border-color:#f0aaa4}
+.assistant-backend-checking{color:#405a78;background:#f0f7ff;border-color:#bcd8f6}
