@@ -687,6 +687,26 @@ export function IssuanceAssistant({onNavigate}:{onNavigate:(page:AppPage)=>void}
     if(target==="Alunos e Responsáveis")sessionStorage.setItem("jpi-student-focus",selected.alunos?.nome||String(selected.aluno_id));
     onNavigate(target);
   }
+  function startNewEmission(){
+    setNewEmissionOpen(true);
+    setNewStudentId(null);
+    setNewCompetence(currentCompetenceInput());
+    setNewValue("");
+    setNewPaymentStatus("Aberto");
+    setNewDescription("");
+    setNewDescriptionEdited(false);
+    setError("");
+    setMessage("Nova emissão iniciada. Selecione um aluno cadastrado abaixo.");
+    window.requestAnimationFrame(()=>{
+      window.requestAnimationFrame(()=>{
+        const section=document.getElementById("assistant-new-emission");
+        section?.scrollIntoView({behavior:"smooth",block:"start"});
+        const input=section?.querySelector("input");
+        if(input instanceof HTMLInputElement)input.focus();
+      });
+    });
+  }
+
   function continueProcess(){
     if(newEmissionOpen){void createPaymentFromStudent();return}
     if(!selected)return;
@@ -704,7 +724,7 @@ export function IssuanceAssistant({onNavigate}:{onNavigate:(page:AppPage)=>void}
     <div className="page-heading assistant-heading">
       <div><span className="eyebrow">FLUXO GUIADO</span><h1>Assistente de Emissão</h1><p>Comece pelo aluno cadastrado, crie a mensalidade e siga até a emissão e o envio da nota.</p></div>
       <div className="form-actions">
-        <button className="primary" onClick={()=>{setNewEmissionOpen(true);setNewStudentId(null);setNewCompetence(currentCompetenceInput());setNewValue("");setNewPaymentStatus("Aberto");setNewDescription("");setNewDescriptionEdited(false);setError("");setMessage("")}} disabled={newEmissionOpen}><Plus size={17}/>Nova emissão</button>
+        <button className="primary" onClick={startNewEmission}><Plus size={17}/>Nova emissão</button>
         <button className="secondary" onClick={()=>void load(true)} disabled={refreshing}><RefreshCw size={17}/>{refreshing?"Atualizando…":"Atualizar"}</button>
       </div>
     </div>
@@ -713,7 +733,7 @@ export function IssuanceAssistant({onNavigate}:{onNavigate:(page:AppPage)=>void}
     {error&&<div className="error-box">{error}</div>}
     {message&&<div className="success-box" role="status">{message}</div>}
 
-    {newEmissionOpen&&<section className="panel assistant-new-start">
+    {newEmissionOpen&&<section id="assistant-new-emission" className="panel assistant-new-start">
       <div className="panel-title">
         <div><span className="eyebrow">ETAPAS 1 E 2</span><h2>Aluno cadastrado → Mensalidade</h2><p>Escolha o aluno e crie a cobrança que dará origem à NFS-e.</p></div>
         {payments.length>0&&<button className="secondary" onClick={()=>{setNewEmissionOpen(false);setError("");setMessage("")}}>Continuar emissão existente</button>}
@@ -902,7 +922,7 @@ export function IssuanceAssistant({onNavigate}:{onNavigate:(page:AppPage)=>void}
               <small>Último canal registrado: {delivery.canal.replace("_"," ")} · {new Date(delivery.created_at).toLocaleString("pt-BR")}</small>
             </div>
             <div className="assistant-complete-actions">
-              <button className="primary" type="button" onClick={()=>{setNewEmissionOpen(true);setResumePaymentId(null);localStorage.removeItem("jpi-issuance-assistant-payment");setNewStudentId(null);setNewCompetence(currentCompetenceInput());setNewValue("");setNewPaymentStatus("Aberto");setNewDescription("");setNewDescriptionEdited(false);setMessage("");setError("")}}><Plus size={16}/>Nova emissão</button>
+              <button className="primary" type="button" onClick={()=>{setResumePaymentId(null);localStorage.removeItem("jpi-issuance-assistant-payment");startNewEmission()}}><Plus size={16}/>Nova emissão</button>
               <button className="secondary" type="button" onClick={()=>focusAndNavigate("Enviar notas")}>Ver histórico de envios</button>
             </div>
           </section>}
