@@ -130,14 +130,13 @@ export function IssuanceAssistant({onNavigate}:{onNavigate:(page:AppPage)=>void}
   const [refreshing,setRefreshing]=useState(false);
   const [error,setError]=useState("");
   const [message,setMessage]=useState("");
-  const [busyAction,setBusyAction]=useState<""|"create-payment"|"validate"|"save-dps"|"approve"|"xml"|"sefin">("");
+  const [busyAction,setBusyAction]=useState<""|"create-payment"|"validate"|"save-dps"|"approve"|"xml">("");
   const [draftCompetence,setDraftCompetence]=useState("");
   const [draftValue,setDraftValue]=useState("");
   const [draftDescription,setDraftDescription]=useState("");
   const [fiscalContext,setFiscalContext]=useState<FiscalContext|null>(null);
   const [homologationConfirmed,setHomologationConfirmed]=useState(false);
   const [sefinError,setSefinError]=useState("");
-  const [homologationBackendReady,setHomologationBackendReady]=useState<boolean|null>(null);
   const [deliveryChannel,setDeliveryChannel]=useState<DeliveryChannel>("email");
   const [activeDocument,setActiveDocument]=useState<DeliveryDocument|null>(null);
   const [deliveryBusy,setDeliveryBusy]=useState(false);
@@ -264,7 +263,7 @@ export function IssuanceAssistant({onNavigate}:{onNavigate:(page:AppPage)=>void}
       "Preparar / editar DPS",
       "Aprovar prévia da DPS",
       "Gerar e validar XML",
-      "Enviar para homologação",
+      "Homologar na NFS-e",
       "Conferir nota concluída",
       delivery?"Envio concluído":"Enviar nota ao responsável",
     ][effectiveCurrent]:"Selecione uma emissão";
@@ -278,16 +277,6 @@ export function IssuanceAssistant({onNavigate}:{onNavigate:(page:AppPage)=>void}
     void loadDeliveryContext().catch(cause=>setError(cause instanceof Error?cause.message:"Não foi possível preparar a conclusão da nota."));
   },[newEmissionOpen,effectiveCurrent,selected?.id,selected?.chave_nfse_homologacao,canSendWhatsapp,canSendAgenda]);
 
-
-  useEffect(()=>{
-    if(newEmissionOpen||effectiveCurrent!==6){setHomologationBackendReady(null);return}
-    let active=true;
-    fetch("/api/nfse/homologation/diagnostic",{cache:"no-store"})
-      .then(response=>response.json())
-      .then((data:{homologationBackendReady?:boolean})=>{if(active)setHomologationBackendReady(data.homologationBackendReady===true)})
-      .catch(()=>{if(active)setHomologationBackendReady(false)});
-    return()=>{active=false};
-  },[newEmissionOpen,effectiveCurrent]);
 
   async function createPaymentFromStudent(){
     if(!supabase||!selectedStudent||!canCreatePayment)return;
@@ -638,45 +627,6 @@ export function IssuanceAssistant({onNavigate}:{onNavigate:(page:AppPage)=>void}
     }finally{setBusyAction("")}
   }
 
-  async function sendHomologationFromAssistant(){
-    if(!supabase||!selected||!canPrepare)return;
-    if(!homologationConfirmed){setSefinError("Confirme o envio para homologação antes de continuar.");return}
-    if(!selected.dps_xml_path||!selected.dps_xml_id){setSefinError("O XML da DPS precisa estar gerado antes da homologação.");return}
-    setBusyAction("sefin");setError("");setSefinError("");setMessage("");
-    const controller=new AbortController();
-    const timeout=window.setTimeout(()=>controller.abort(),55000);
-    try{
-      const {data:{session}}=await supabase.auth.getSession();
-      if(!session)throw new Error("Sua sessão expirou. Entre novamente.");
-      const response=await authenticatedFetch("/api/nfse/homologation/issue",{
-        method:"POST",
-        headers:{Authorization:"Bearer "+session.access_token,"Content-Type":"application/json"},
-        body:JSON.stringify({monthlyId:selected.id}),
-        signal:controller.signal,
-        cache:"no-store"
-      });
-      const data=await response.json().catch(()=>({})) as HomologationResult;
-      if(!response.ok)throw new Error(data.error||"A produção restrita não concluiu a homologação.");
-      if(!data.ok)throw new Error(data.error||"A produção restrita não confirmou a emissão.");
-      setHomologationConfirmed(false);
-      setSefinError("");
-      setMessage(data.alreadyIssued
-        ?"A NFS-e de teste já estava emitida e guardada. O Assistente avançou para a conferência final."
-        :"NFS-e de teste emitida com sucesso na SEFIN. Chave: "+(data.key||"confirmada")+"."
-      );
-      await load(true);
-    }catch(cause){
-      const reason=cause instanceof Error&&cause.name==="AbortError"
-        ?"O envio ultrapassou o tempo de segurança e foi interrompido."
-        :cause instanceof Error?cause.message:"A homologação não foi concluída.";
-      setSefinError(reason+" Nenhuma nova tentativa será feita automaticamente.");
-      await load(true);
-    }finally{
-      window.clearTimeout(timeout);
-      setBusyAction("");
-    }
-  }
-
   const selectedManualSender=whatsappInfo?.senders?.find(sender=>sender.id===manualSenderId)||null;
   const canCurrentDelivery=deliveryChannel==="email"?canSendEmail:deliveryChannel==="whatsapp-manual"?canSendWhatsapp:canSendAgenda;
   const currentDeliveryReady=deliveryChannel==="email"
@@ -728,7 +678,7 @@ export function IssuanceAssistant({onNavigate}:{onNavigate:(page:AppPage)=>void}
     if(effectiveCurrent===3){void saveDps();return}
     if(effectiveCurrent===4){void approvePreview();return}
     if(effectiveCurrent===5){void generateXmlInAssistant();return}
-    if(effectiveCurrent===6){void sendHomologationFromAssistant();return}
+    if(effectiveCurrent===6){focusAndNavigate("NFS-e");return}
     if(effectiveCurrent>=8){void sendCurrentDocument();return}
     focusAndNavigate("NFS-e");
   }
@@ -884,28 +834,23 @@ export function IssuanceAssistant({onNavigate}:{onNavigate:(page:AppPage)=>void}
 
           {effectiveCurrent===6&&selected&&<section className="assistant-sefin-confirm">
             <div className="assistant-workspace-head">
-              <div><span>ETAPA 7 · SEFIN</span><h3>Enviar para homologação</h3><p>Esta ação usa o XML já validado e envia somente para a produção restrita. A produção real continua bloqueada.</p></div>
-              <span className="assistant-safe-tag"><ShieldCheck size={15}/>Homologação</span>
+              <div><span>ETAPA 7 · SEFIN</span><h3>Homologação pelo módulo NFS-e</h3><p>Para esta etapa, o Assistente usa o fluxo de homologação já validado do JPI Fiscal, sem criar uma segunda rotina fiscal.</p></div>
+              <span className="assistant-safe-tag"><ShieldCheck size={15}/>Fluxo existente</span>
             </div>
             <div className="assistant-sefin-body">
               <div className="assistant-sefin-summary">
                 <span><small>Aluno</small><b>{selected.alunos?.nome||"—"}</b></span>
                 <span><small>XML</small><b>{selected.dps_xml_id||"—"}</b></span>
                 <span><small>Valor</small><b>{money(selected.valor_nfse)}</b></span>
-                <span><small>Destino</small><b>SEFIN · Produção restrita</b></span>
+                <span><small>Destino</small><b>NFS-e · Homologação</b></span>
               </div>
-              <div className={homologationBackendReady===true?"assistant-backend-ready":homologationBackendReady===false?"assistant-backend-not-ready":"assistant-backend-checking"}>
+              <div className="assistant-backend-ready">
                 <ShieldCheck/>
                 <div>
-                  <strong>{homologationBackendReady===true?"Backend de homologação pronto":homologationBackendReady===false?"Backend do Preview não está pronto":"Verificando backend de homologação…"}</strong>
-                  <span>{homologationBackendReady===true?"Certificado A1 e cofre seguro disponíveis para a tentativa.":homologationBackendReady===false?"O Preview não consegue acessar a configuração segura necessária para abrir o certificado A1.":"Aguarde alguns segundos antes de enviar."}</span>
+                  <strong>Usar homologação que já funciona</strong>
+                  <span>Ao continuar, o sistema abrirá a mesma nota diretamente na tela NFS-e, com certificado A1, assinatura e transmissão já existentes.</span>
                 </div>
               </div>
-              <label className="assistant-confirm-check">
-                <input type="checkbox" checked={homologationConfirmed} onChange={e=>{setHomologationConfirmed(e.target.checked);if(e.target.checked){setError("");setSefinError("")}}}/>
-                <span><strong>Confirmo o envio desta nota para homologação</strong><small>O sistema fará apenas uma tentativa. Em caso de erro, nenhuma repetição automática será executada.</small></span>
-              </label>
-              {sefinError&&<div className="assistant-sefin-inline-error" role="alert"><CircleAlert/><div><strong>Não foi possível avançar</strong><span>{sefinError}</span></div></div>}
             </div>
           </section>}
 
@@ -1012,8 +957,8 @@ export function IssuanceAssistant({onNavigate}:{onNavigate:(page:AppPage)=>void}
 
           {!canPrepare&&effectiveCurrent>=2&&effectiveCurrent<8&&<div className="notice compact"><ShieldCheck/><span>Seu perfil pode acompanhar o processo, mas não possui permissão para preparar a NFS-e.</span></div>}
           {effectiveCurrent<8&&<div className="assistant-actions">
-            <button className="primary assistant-main-action" onClick={continueProcess} disabled={Boolean(busyAction)||(!canPrepare&&effectiveCurrent>=2&&effectiveCurrent<8)||(effectiveCurrent===6&&homologationBackendReady!==true)}>
-              {busyAction==="validate"?"Validando…":busyAction==="save-dps"?"Salvando DPS…":busyAction==="approve"?"Aprovando…":busyAction==="xml"?"Gerando XML…":busyAction==="sefin"?"Enviando para homologação…":effectiveCurrent===2&&missing.length?"Corrigir cadastro":effectiveCurrent===2?"Validar nota":effectiveCurrent===3?"Salvar DPS e ver prévia":effectiveCurrent===4?"Aprovar prévia":effectiveCurrent===5?"Gerar e validar XML":effectiveCurrent===6?"Enviar para homologação":effectiveCurrent>=8?"Ir para envio":"Continuar processo"} <ChevronRight size={18}/>
+            <button className="primary assistant-main-action" onClick={continueProcess} disabled={Boolean(busyAction)||(!canPrepare&&effectiveCurrent>=2&&effectiveCurrent<8)}>
+              {busyAction==="validate"?"Validando…":busyAction==="save-dps"?"Salvando DPS…":busyAction==="approve"?"Aprovando…":busyAction==="xml"?"Gerando XML…":effectiveCurrent===2&&missing.length?"Corrigir cadastro":effectiveCurrent===2?"Validar nota":effectiveCurrent===3?"Salvar DPS e ver prévia":effectiveCurrent===4?"Aprovar prévia":effectiveCurrent===5?"Gerar e validar XML":effectiveCurrent===6?"Abrir homologação NFS-e":effectiveCurrent>=8?"Ir para envio":"Continuar processo"} <ChevronRight size={18}/>
             </button>
             {effectiveCurrent>2&&effectiveCurrent<8&&<button className="secondary" onClick={()=>focusAndNavigate("NFS-e")}>Abrir NFS-e atual</button>}
             {progress?.finished&&<button className="secondary" onClick={()=>focusAndNavigate("Enviar notas")}>Abrir central de envios</button>}
