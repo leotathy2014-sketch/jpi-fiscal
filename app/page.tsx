@@ -54,6 +54,14 @@ export default function Home() {
           setLoading(false);
           return;
         }
+        const nfseHomologationId=String(url.searchParams.get("nfse_hml")||"").trim();
+        if(/^\d{1,12}$/.test(nfseHomologationId)){
+          sessionStorage.setItem("jpi-nfse-focus",nfseHomologationId);
+          sessionStorage.setItem("jpi-nfse-open-homologation",nfseHomologationId);
+          setPage("NFS-e");
+          url.searchParams.delete("nfse_hml");
+          window.history.replaceState({},document.title,`${url.pathname}${url.search}${url.hash}`);
+        }
         const {data}=await supabase.auth.getSession();
         if(!active)return;
         setEmail(data.session?.user.email??null);
