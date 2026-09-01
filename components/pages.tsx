@@ -1243,6 +1243,7 @@ function CommunicationsSettings({accessToken,onChanged,canEdit,section}:{accessT
   const [agendaMasterSecretsBusy,setAgendaMasterSecretsBusy]=useState(false);
   const [agendaMasterSecretsError,setAgendaMasterSecretsError]=useState("");
   const [agendaMasterCopied,setAgendaMasterCopied]=useState("");
+  const [agendaInfoOpen,setAgendaInfoOpen]=useState(false);
 
   useEffect(()=>{
     if(!agendaMasterSecrets)return;
@@ -1375,7 +1376,7 @@ function CommunicationsSettings({accessToken,onChanged,canEdit,section}:{accessT
           {config?.whatsapp_testada_em&&<small className="last-test">Último teste: {new Date(config.whatsapp_testada_em).toLocaleString("pt-BR")}</small>}
         </form></>}
       {section==="manual-whatsapp"&&<><div className="communication-channel-card data-form"><div className="communication-channel-head"><span className="integration-icon green"><MessageCircle/></span><div><h3>WhatsApps da escola</h3><small>Envio manual pelo Web ou app</small></div><IntegrationStateBadge label={sectionState.label} tone={sectionState.tone}/></div><div className="notice compact"><ShieldCheck/><span>Cadastre até 4 contas da escola, por exemplo Secretaria e Central de Matrícula. Antes de cada envio, o usuário escolherá qual conta utilizar.</span></div><div className="whatsapp-message-editor"><label>Mensagem padrão para os responsáveis<textarea value={manualWhatsappMessage} onChange={event=>setManualWhatsappMessage(event.target.value)} maxLength={2000} rows={9} placeholder={DEFAULT_WHATSAPP_MANUAL_MESSAGE}/><small>Você pode usar: <b>{"{responsavel}"}</b>, <b>{"{aluno}"}</b>, <b>{"{competencia}"}</b>, <b>{"{valor}"}</b> e <b>{"{link}"}</b>. A variável <b>{"{link}"}</b> é obrigatória.</small></label><div className="form-actions"><button type="button" className="secondary" onClick={()=>setManualWhatsappMessage(DEFAULT_WHATSAPP_MANUAL_MESSAGE)} disabled={disabled}>Restaurar mensagem padrão</button><button type="button" className="primary" onClick={saveManualWhatsappMessage} disabled={disabled||manualWhatsappMessage.trim().length<20}>{busy==="save-manual-message"?"Salvando…":"Salvar mensagem do WhatsApp"}</button></div></div>{manualSenders.map((sender,index)=><div className="panel compact-panel" key={sender.id||index}><div className="form-row"><label>Identificação<input value={sender.nome} onChange={event=>updateManualSender(index,"nome",event.target.value)} maxLength={60} placeholder={index===0?"Secretaria":"Central de Matrícula"}/></label><label>Número com WhatsApp<input inputMode="tel" value={sender.numero} onChange={event=>updateManualSender(index,"numero",maskWhatsappPhone(event.target.value))} maxLength={15} placeholder="(21) 99999-9999"/></label></div><div className="form-actions"><label className="checkbox-line"><input type="checkbox" checked={sender.ativo} onChange={event=>updateManualSender(index,"ativo",event.target.checked)}/>Ativo para escolha</label><button type="button" className="secondary" onClick={()=>removeManualSender(index)} disabled={disabled}>Remover</button></div></div>)}<div className="form-actions"><button type="button" className="secondary" onClick={addManualSender} disabled={disabled||manualSenders.length>=4}><Plus size={17}/>Adicionar número</button><button type="button" className="primary" onClick={saveManualSenders} disabled={disabled||!manualSenders.length}>{busy==="save-manual-senders"?"Salvando…":"Salvar WhatsApps da escola"}</button></div><small>O WhatsApp Web/app precisa estar conectado na mesma conta escolhida no JPI Fiscal.</small></div></>}
-      {section==="agenda"&&<><div className={isMaster?"integration-agenda-master-grid":"integration-agenda-stack"}><div className="integration-agenda-stack"><form className="communication-channel-card data-form" onSubmit={saveAgenda}>
+      {section==="agenda"&&<><div className="integration-agenda-stack"><form className="communication-channel-card data-form" onSubmit={saveAgenda}>
           <div className="communication-channel-head"><span className="integration-icon purple"><CalendarDays/></span><div><h3>Agenda Edu</h3><small>Mensagens com os responsáveis</small></div><IntegrationStateBadge label={sectionState.label} tone={sectionState.tone}/></div>
           <div className="notice compact"><ShieldCheck/><span>Documentação oficial v2 confirmada. A conexão usará somente o Sandbox até concluirmos os testes dos responsáveis e anexos.</span></div>
           <label>Identificação da escola (opcional)<input value={agendaEduSchoolIdentifier} onChange={event=>setAgendaEduSchoolIdentifier(event.target.value)} maxLength={100} placeholder="Jardim Escola João Paulo I"/><small>É apenas um nome interno para facilitar a conferência.</small></label>
@@ -1388,8 +1389,12 @@ function CommunicationsSettings({accessToken,onChanged,canEdit,section}:{accessT
           <button className="primary full" disabled={disabled}>{busy==="save-agenda"?"Salvando…":"Salvar configuração da Agenda Edu"}</button>
           <button type="button" className="secondary full" onClick={testAgenda} disabled={disabled||!config?.agenda_edu_credencial_configurada}>{busy==="test-agenda"?"Testando conexão…":"Testar conexão sem enviar mensagem"}</button>
           {config?.agenda_edu_testada_em&&<small className="last-test">Último teste: {new Date(config.agenda_edu_testada_em).toLocaleString("pt-BR")}</small>}
+          {isMaster&&<button type="button" className="agenda-api-info-button" onClick={()=>setAgendaInfoOpen(true)}><KeyRound/><span><strong>Informações da API e credenciais</strong><small>Consultar dados salvos no servidor e credenciais protegidas</small></span></button>}
         </form></div>
-        {isMaster&&<aside className="agenda-master-server-card">
+        {isMaster&&agendaInfoOpen&&<div className="modal-backdrop" onMouseDown={event=>{if(event.target===event.currentTarget){hideAgendaMasterSecrets();setAgendaInfoOpen(false)}}}><div className="modal-card agenda-api-modal">
+          <div className="modal-head agenda-api-modal-head"><div><span className="integration-icon purple"><KeyRound/></span><div><h2>Informações da API e credenciais</h2><p>Dados salvos da Agenda Edu · acesso exclusivo do usuário Master</p></div></div><button type="button" className="icon-button" onClick={()=>{hideAgendaMasterSecrets();setAgendaInfoOpen(false)}} aria-label="Fechar"><X/></button></div>
+          <div className="agenda-api-modal-body">
+          <div className="agenda-master-server-card">
           <div className="agenda-master-server-head"><div><KeyRound/><span><strong>DADOS SALVOS NO SERVIDOR</strong><small>Visível somente para o usuário Master</small></span></div><span className="master-only-badge">MASTER</span></div>
           <div className="agenda-server-status"><span className={config?.agenda_edu_ultimo_status==="conectado"?"connected":config?.agenda_edu_ultimo_status==="erro"?"error":"pending"}></span><div><strong>{config?.agenda_edu_ultimo_status==="conectado"?"Agenda Edu conectada":config?.agenda_edu_ultimo_status==="erro"?"Agenda Edu com erro":"Agenda Edu pendente"}</strong><small>{config?.agenda_edu_channel_id?"Canal de Mensagens identificado no servidor":"Canal de Mensagens ainda não identificado"}</small></div></div>
           <dl className="agenda-server-data">
@@ -1412,7 +1417,9 @@ function CommunicationsSettings({accessToken,onChanged,canEdit,section}:{accessT
             {agendaMasterSecretsError&&<span className="agenda-secret-error">{agendaMasterSecretsError}</span>}
           </div>
           <div className="agenda-server-security"><ShieldCheck/><span><strong>Cofre protegido</strong><small>As credenciais só são recuperadas sob demanda pelo Master; não fazem parte do HTML inicial da página.</small></span></div>
-        </aside>}</div><AgendaEduStudentLinks/></>}
+          </div>
+          </div>
+        </div></div>}</div><AgendaEduStudentLinks/></>}
     </div>}
   </div>;
 }
