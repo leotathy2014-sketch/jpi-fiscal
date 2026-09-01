@@ -58,8 +58,10 @@ export default function Home() {
         if(/^\d{1,12}$/.test(nfseHomologationId)){
           sessionStorage.setItem("jpi-nfse-focus",nfseHomologationId);
           sessionStorage.setItem("jpi-nfse-open-homologation",nfseHomologationId);
+          if(url.searchParams.get("return_assistant")==="1")sessionStorage.setItem("jpi-nfse-return-assistant",nfseHomologationId);
           setPage("NFS-e");
           url.searchParams.delete("nfse_hml");
+          url.searchParams.delete("return_assistant");
           window.history.replaceState({},document.title,`${url.pathname}${url.search}${url.hash}`);
         }
         const {data}=await supabase.auth.getSession();

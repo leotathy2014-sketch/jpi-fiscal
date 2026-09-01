@@ -5,7 +5,7 @@ import { Ban, CalendarDays, Check, CircleDollarSign, Clock3, CloudUpload, FileCh
 import { createSupabaseBrowserClient } from "@/lib/supabase";
 import { authenticatedFetch } from "@/lib/authenticated-fetch";
 import { buildDpsDraft, isValidCpfCnpj, NFSE_OWN_APP_SERIES } from "@/lib/nfse-dps";
-import type { Role } from "./app-shell";
+import type { AppPage, Role } from "./app-shell";
 import { TransmissionProgress } from "./transmission-progress";
 import { useAccess } from "./access";
 
@@ -109,11 +109,20 @@ export function LivePayments({role}:{role:Role}) {
  return <><Heading title="Mensalidades" desc="Cobranças reais; o valor inicial da NFS-e é copiado automaticamente." action={canCreate?<button className="primary" onClick={()=>{closeModal();setOpen(true)}}><Plus size={18}/>Nova cobrança</button>:undefined}/><ErrorBox message={error}/>{items.length===0?<Empty>Cadastre um aluno e depois registre sua primeira mensalidade.</Empty>:<div className="table-card"><table><thead><tr><th>Aluno</th><th>Competência</th><th>Mensalidade</th><th>Valor NFS-e</th><th>Pagamento</th><th>NFS-e</th></tr></thead><tbody>{items.map(p=><tr key={p.id}><td><strong>{p.alunos?.nome||`Aluno #${p.aluno_id}`}</strong></td><td>{p.competencia}</td><td>{money(p.valor_mensalidade)}</td><td>{money(p.valor_nfse)}</td><td><Status>{p.status_pagamento==="Aberto"?"Pendente":p.status_pagamento}</Status></td><td><Status>{p.status_nfse}</Status></td></tr>)}</tbody></table></div>}{open&&<Modal title="Registrar mensalidade" onClose={closeModal}><form className="data-form" onSubmit={create}><label>Aluno<select name="aluno_id" required value={formStudentId} onChange={e=>{const studentId=e.target.value;setFormStudentId(studentId);if(!descriptionEdited){const student=students.find(s=>String(s.id)===studentId);setServiceDescription(student&&formCompetence?defaultServiceDescription(formCompetence,student.segmento):"")}}}><option value="">Selecione</option>{students.map(s=><option value={s.id} key={s.id}>{s.nome}</option>)}</select></label><div className="form-row"><label>Competência<input name="competencia" type="month" max={currentCompetenceInput()} required value={formCompetence} onChange={e=>{const competence=e.target.value;setFormCompetence(competence);if(!descriptionEdited){const student=students.find(s=>String(s.id)===formStudentId);setServiceDescription(student&&competence?defaultServiceDescription(competence,student.segmento):"")}}}/></label><label>Valor<input name="valor" type="text" inputMode="numeric" placeholder="R$ 0,00" onInput={e=>e.currentTarget.value=currencyInput(e.currentTarget.value)} required/></label></div><label>Descrição do Serviço<textarea name="descricao_servico" rows={4} maxLength={1000} placeholder="Descreva o serviço que deverá constar na nota" value={serviceDescription} onChange={e=>{setDescriptionEdited(true);setServiceDescription(upper(e.target.value))}} required/><small>O texto é sugerido automaticamente e poderá ser alterado antes da emissão.</small></label><label>Status do pagamento<select name="status_pagamento" className={`payment-status ${paymentStatus==="Pago"?"paid":"pending"}`} value={paymentStatus} onChange={e=>setPaymentStatus(e.target.value)}><option value="Aberto">Pendente</option><option value="Pago">Pago</option></select></label><div className="notice compact"><WalletCards/><span>O valor e a descrição da NFS-e poderão ser revisados antes da futura emissão.</span></div><div className="form-actions"><button type="button" className="secondary" onClick={closeModal}>Cancelar</button><button className="primary" disabled={busy||students.length===0}>{busy?"Salvando…":"Salvar mensalidade"}</button></div></form></Modal>}</>
 }
 
-export function LiveInvoices({role}:{role:Role}) {
+export function LiveInvoices({role,onNavigate}:{role:Role;onNavigate?:(page:AppPage)=>void}) {
  const {can}=useAccess();
  const supabase=useMemo(()=>createSupabaseBrowserClient(),[]);const [allItems,setItems]=useState<Payment[]>([]);const [documents,setDocuments]=useState<NfseDocument[]>([]);const [editing,setEditing]=useState<number|null>(null);const [value,setValue]=useState("");const [error,setError]=useState("");const [message,setMessage]=useState("");const [validating,setValidating]=useState<number|null>(null);const [preview,setPreview]=useState<DpsPreview|null>(null);const [approving,setApproving]=useState(false);const [generating,setGenerating]=useState(false);const [openingXml,setOpeningXml]=useState<number|null>(null);const [storedXml,setStoredXml]=useState<{title:string;subtitle:string;xml:string}|null>(null);const [homologationPayment,setHomologationPayment]=useState<Payment|null>(null);const [sendingHomologation,setSendingHomologation]=useState(false);const homologationRequestInFlight=useRef(false);const [correctingPayment,setCorrectingPayment]=useState<Payment|null>(null);const [correcting,setCorrecting]=useState(false);const [cancellingPayment,setCancellingPayment]=useState<Payment|null>(null);const [substitutingPayment,setSubstitutingPayment]=useState<Payment|null>(null);const [fiscalOperationBusy,setFiscalOperationBusy]=useState(false);const fiscalOperationInFlight=useRef(false);
  const [nfseSearch,setNfseSearch]=useState(()=>consumeSessionFocus("jpi-nfse-focus"));const [nfsePeriod,setNfsePeriod]=useState("");const [nfseStatus,setNfseStatus]=useState("todas");
  const [homologationFocusId]=useState(()=>Number(consumeSessionFocus("jpi-nfse-open-homologation")||"0"));const [homologationFocusHandled,setHomologationFocusHandled]=useState(false);
+ function returnToAssistantIfRequested(paymentId:number){
+  if(typeof window==="undefined"||!onNavigate)return false;
+  const requested=sessionStorage.getItem("jpi-nfse-return-assistant");
+  if(requested!==String(paymentId))return false;
+  sessionStorage.removeItem("jpi-nfse-return-assistant");
+  localStorage.setItem("jpi-issuance-assistant-payment",String(paymentId));
+  onNavigate("Assistente de emissão");
+  return true;
+ }
  const [batchSelectedIds,setBatchSelectedIds]=useState<Set<number>>(()=>new Set());const [batchModalOpen,setBatchModalOpen]=useState(false);const [batchIssueItems,setBatchIssueItems]=useState<BatchIssueItem[]>([]);const [batchBusy,setBatchBusy]=useState(false);const batchIssueInFlight=useRef(false);
  const load=useCallback(async()=>{if(!supabase)return;const [paymentsResult,documentsResult]=await Promise.all([supabase.from("mensalidades").select("*, alunos(nome,responsavel,segmento,cpf_cnpj,email,whatsapp,cep,logradouro,numero,complemento,bairro,cidade,uf)").order("created_at",{ascending:false}),supabase.from("nfse_documentos_homologacao").select("id,mensalidade_id,versao,chave_acesso,estado,substitui_documento_id,emitida_em").order("versao",{ascending:false})]);if(paymentsResult.error)setError(paymentsResult.error.message);else setItems((paymentsResult.data??[]) as unknown as Payment[]);if(documentsResult.error)setError(documentsResult.error.message);else setDocuments((documentsResult.data??[]) as NfseDocument[])},[supabase]);useEffect(()=>{load()},[load]);
  useEffect(()=>{
@@ -123,7 +132,7 @@ export function LiveInvoices({role}:{role:Role}) {
   if(!payment){setError("A mensalidade indicada pelo Assistente não foi encontrada.");return}
   setNfseSearch(String(payment.id));setNfsePeriod("");setNfseStatus("todas");
   if(!can("nfse.issue")){setError("Seu usuário não possui permissão para emitir em homologação.");return}
-  if(payment.chave_nfse_homologacao){setMessage("Esta NFS-e de teste já foi emitida em homologação.");return}
+  if(payment.chave_nfse_homologacao){if(returnToAssistantIfRequested(payment.id))return;setMessage("Esta NFS-e de teste já foi emitida em homologação.");return}
   if(!payment.dps_xml_path||!payment.dps_xml_id){setError("Esta mensalidade ainda não possui XML da DPS pronto para homologação.");return}
   setError("");setMessage("");setHomologationPayment(payment);
  },[allItems,can,homologationFocusHandled,homologationFocusId]);
@@ -197,6 +206,7 @@ async function sendToHomologation(event:FormEvent<HTMLFormElement>){
     );
     setHomologationPayment(null);
     await load();
+    if(returnToAssistantIfRequested(payment.id))return;
   }catch(cause){
     setHomologationPayment(null);
     const reason=await homologationErrorMessage(cause);
