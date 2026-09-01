@@ -136,6 +136,7 @@ export function IssuanceAssistant({onNavigate}:{onNavigate:(page:AppPage)=>void}
   const [draftDescription,setDraftDescription]=useState("");
   const [fiscalContext,setFiscalContext]=useState<FiscalContext|null>(null);
   const [homologationConfirmed,setHomologationConfirmed]=useState(false);
+  const [sefinError,setSefinError]=useState("");
   const [deliveryChannel,setDeliveryChannel]=useState<DeliveryChannel>("email");
   const [activeDocument,setActiveDocument]=useState<DeliveryDocument|null>(null);
   const [deliveryBusy,setDeliveryBusy]=useState(false);
@@ -197,7 +198,7 @@ export function IssuanceAssistant({onNavigate}:{onNavigate:(page:AppPage)=>void}
     setDraftCompetence(competence);
     setDraftValue(String(selected.valor_nfse));
     setDraftDescription(selected.descricao_servico||defaultServiceDescription(competence,selected.alunos?.segmento));
-    setMessage("");setError("");setHomologationConfirmed(false);setActiveDocument(null);setManualPending(null);
+    setMessage("");setError("");setSefinError("");setHomologationConfirmed(false);setActiveDocument(null);setManualPending(null);
   },[selected?.id]);
   useEffect(()=>{
     if(!selectedStudent){setNewDescription("");setNewDescriptionEdited(false);return}
@@ -628,9 +629,9 @@ export function IssuanceAssistant({onNavigate}:{onNavigate:(page:AppPage)=>void}
 
   async function sendHomologationFromAssistant(){
     if(!supabase||!selected||!canPrepare)return;
-    if(!homologationConfirmed){setError("Confirme o envio para homologação antes de continuar.");return}
-    if(!selected.dps_xml_path||!selected.dps_xml_id){setError("O XML da DPS precisa estar gerado antes da homologação.");return}
-    setBusyAction("sefin");setError("");setMessage("");
+    if(!homologationConfirmed){setSefinError("Confirme o envio para homologação antes de continuar.");return}
+    if(!selected.dps_xml_path||!selected.dps_xml_id){setSefinError("O XML da DPS precisa estar gerado antes da homologação.");return}
+    setBusyAction("sefin");setError("");setSefinError("");setMessage("");
     const controller=new AbortController();
     const timeout=window.setTimeout(()=>controller.abort(),55000);
     try{
@@ -647,6 +648,7 @@ export function IssuanceAssistant({onNavigate}:{onNavigate:(page:AppPage)=>void}
       if(!response.ok)throw new Error(data.error||"A produção restrita não concluiu a homologação.");
       if(!data.ok)throw new Error(data.error||"A produção restrita não confirmou a emissão.");
       setHomologationConfirmed(false);
+      setSefinError("");
       setMessage(data.alreadyIssued
         ?"A NFS-e de teste já estava emitida e guardada. O Assistente avançou para a conferência final."
         :"NFS-e de teste emitida com sucesso na SEFIN. Chave: "+(data.key||"confirmada")+"."
@@ -656,7 +658,7 @@ export function IssuanceAssistant({onNavigate}:{onNavigate:(page:AppPage)=>void}
       const reason=cause instanceof Error&&cause.name==="AbortError"
         ?"O envio ultrapassou o tempo de segurança e foi interrompido."
         :cause instanceof Error?cause.message:"A homologação não foi concluída.";
-      setError(reason+" Nenhuma nova tentativa será feita automaticamente.");
+      setSefinError(reason+" Nenhuma nova tentativa será feita automaticamente.");
       await load(true);
     }finally{
       window.clearTimeout(timeout);
@@ -882,9 +884,10 @@ export function IssuanceAssistant({onNavigate}:{onNavigate:(page:AppPage)=>void}
                 <span><small>Destino</small><b>SEFIN · Produção restrita</b></span>
               </div>
               <label className="assistant-confirm-check">
-                <input type="checkbox" checked={homologationConfirmed} onChange={e=>{setHomologationConfirmed(e.target.checked);if(e.target.checked)setError("")}}/>
+                <input type="checkbox" checked={homologationConfirmed} onChange={e=>{setHomologationConfirmed(e.target.checked);if(e.target.checked){setError("");setSefinError("")}}}/>
                 <span><strong>Confirmo o envio desta nota para homologação</strong><small>O sistema fará apenas uma tentativa. Em caso de erro, nenhuma repetição automática será executada.</small></span>
               </label>
+              {sefinError&&<div className="assistant-sefin-inline-error" role="alert"><CircleAlert/><div><strong>Não foi possível avançar</strong><span>{sefinError}</span></div></div>}
             </div>
           </section>}
 
