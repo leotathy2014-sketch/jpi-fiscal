@@ -1,9 +1,10 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Check, ChevronRight, CircleAlert, FileCode2, FileText, GraduationCap, MailCheck, Plus, ReceiptText, RefreshCw, Search, Send, ShieldCheck, Sparkles, UsersRound, WalletCards } from "lucide-react";
+import { CalendarDays, Check, ChevronRight, CircleAlert, Eye, FileCode2, FileText, GraduationCap, Mail, MailCheck, MessageCircle, Plus, ReceiptText, RefreshCw, Search, Send, ShieldCheck, Sparkles, UsersRound, WalletCards } from "lucide-react";
 import { createSupabaseBrowserClient } from "@/lib/supabase";
-import { isValidCpfCnpj } from "@/lib/nfse-dps";
+import { authenticatedFetch } from "@/lib/authenticated-fetch";
+import { buildDpsDraft, isValidCpfCnpj, NFSE_OWN_APP_SERIES } from "@/lib/nfse-dps";
 import type { AppPage } from "./app-shell";
 import { useAccess } from "./access";
 
@@ -27,6 +28,8 @@ type AssistantPayment={
     cpf_cnpj:string|null;
     email:string|null;
     whatsapp:string|null;
+    agenda_edu_student_id:string|null;
+    agenda_edu_use_external_id:boolean;
     cep:string|null;
     logradouro:string|null;
     numero:string|null;
@@ -42,6 +45,12 @@ type DeliveryState={mensalidade_id:number;status:string;canal:string;created_at:
 type StepState="done"|"current"|"pending"|"warning";
 type AssistantStep={key:string;label:string;short:string;description:string;state:StepState};
 type FiscalContext={cnpj:string|null;razao_social:string|null;cidade:string|null;uf:string|null;regime_tributario:string;pis_aliquota:number;cofins_aliquota:number;pis_cofins_cst:string;pis_cofins_retencao:number};
+type DeliveryDocument={id:number;mensalidade_id:number;versao:number;chave_acesso:string;estado:string;emitida_em:string|null};
+type DeliveryChannel="email"|"whatsapp-manual"|"agenda-edu";
+type ManualSender={id:number;nome:string;numero:string};
+type ManualWhatsappInfo={ready:boolean;testRecipient:string|null;senders:ManualSender[];mode:"manual";cost:"gratuito"};
+type AgendaEduInfo={ready:boolean;environment:string;channelConfigured:boolean;message:string};
+type ManualPending={deliveryId:number;whatsappUrl:string|null;actualRecipient:string;sender?:ManualSender|null};
 
 const money=(value:number)=>Number(value).toLocaleString("pt-BR",{style:"currency",currency:"BRL"});
 const normalize=(value:string)=>value.normalize("NFD").replace(/[\u0300-\u036f]/g,"").toLocaleLowerCase("pt-BR");
@@ -52,6 +61,7 @@ const upper=(value:string)=>value.toLocaleUpperCase("pt-BR");
 const fiscalServiceForSegment=(segment?:string|null)=>{const normalized=normalize(segment||"");if(normalized.includes("medio"))return {code:"08.01.01",description:"Ensino regular médio",nbs:"122013000"};if(normalized.includes("1º")||normalized.includes("6º")||normalized.includes("fundamental"))return {code:"08.01.01",description:"Ensino regular fundamental",nbs:"122012000"};return {code:"08.01.01",description:"Ensino regular pré-escolar",nbs:"122011200"}};
 const defaultServiceDescription=(competence:string,segment?:string|null)=>"MENSALIDADE ESCOLAR - COMPETÊNCIA "+formatCompetence(competence)+" - "+fiscalServiceForSegment(segment).description.toLocaleUpperCase("pt-BR");
 const parseMoneyInput=(value:string)=>{const clean=value.replace(/R\$/g,"").replace(/\s/g,"");if(clean.includes(","))return Number(clean.replace(/\./g,"").replace(",","."));return Number(clean)};
+const dpsDraftVersionPath=(paymentId:number,draftId:string)=>{const timestamp=new Date().toISOString().replace(/\D/g,"").slice(0,17);const revision=timestamp+"-"+crypto.randomUUID().slice(0,8);return "dps/"+paymentId+"/rascunhos/"+revision+"/"+draftId+".xml"};
 
 function statusOrder(payment:AssistantPayment){
   const status=normalize(payment.status_nfse||"");
@@ -98,8 +108,12 @@ export function IssuanceAssistant({onNavigate}:{onNavigate:(page:AppPage)=>void}
   const {can}=useAccess();
   const canPrepare=can("nfse.prepare");
   const canCreatePayment=can("payments.create");
+  const canSendEmail=can("deliveries.send_email");
+  const canSendWhatsapp=can("deliveries.send_whatsapp");
+  const canSendAgenda=can("deliveries.send_agenda");
   const [students,setStudents]=useState<AssistantStudent[]>([]);
   const [newEmissionOpen,setNewEmissionOpen]=useState(true);
+  const [resumePaymentId,setResumePaymentId]=useState<number|null>(null);
   const [newStudentId,setNewStudentId]=useState<number|null>(null);
   const [studentQuery,setStudentQuery]=useState("");
   const [newCompetence,setNewCompetence]=useState(()=>currentCompetenceInput());
@@ -115,18 +129,26 @@ export function IssuanceAssistant({onNavigate}:{onNavigate:(page:AppPage)=>void}
   const [refreshing,setRefreshing]=useState(false);
   const [error,setError]=useState("");
   const [message,setMessage]=useState("");
-  const [busyAction,setBusyAction]=useState<""|"create-payment"|"validate"|"save-dps"|"approve">("");
+  const [busyAction,setBusyAction]=useState<""|"create-payment"|"validate"|"save-dps"|"approve"|"xml">("");
   const [draftCompetence,setDraftCompetence]=useState("");
   const [draftValue,setDraftValue]=useState("");
   const [draftDescription,setDraftDescription]=useState("");
   const [fiscalContext,setFiscalContext]=useState<FiscalContext|null>(null);
+  const [deliveryChannel,setDeliveryChannel]=useState<DeliveryChannel>("email");
+  const [activeDocument,setActiveDocument]=useState<DeliveryDocument|null>(null);
+  const [deliveryBusy,setDeliveryBusy]=useState(false);
+  const [documentBusy,setDocumentBusy]=useState("");
+  const [whatsappInfo,setWhatsappInfo]=useState<ManualWhatsappInfo|null>(null);
+  const [manualSenderId,setManualSenderId]=useState<number|null>(null);
+  const [manualPending,setManualPending]=useState<ManualPending|null>(null);
+  const [agendaEduInfo,setAgendaEduInfo]=useState<AgendaEduInfo|null>(null);
 
   const load=useCallback(async(silent=false)=>{
     if(!supabase)return;
     if(!silent)setLoading(true);else setRefreshing(true);
     setError("");
     const [paymentsResult,studentsResult,deliveriesResult]=await Promise.all([
-      supabase.from("mensalidades").select("id,aluno_id,competencia,valor_nfse,descricao_servico,status_pagamento,status_nfse,dps_xml_path,dps_xml_id,nfse_homologacao_xml_path,chave_nfse_homologacao,homologacao_emitida_em,alunos(nome,responsavel,segmento,cpf_cnpj,email,whatsapp,cep,logradouro,numero,cidade,uf)").order("created_at",{ascending:false}),
+      supabase.from("mensalidades").select("id,aluno_id,competencia,valor_nfse,descricao_servico,status_pagamento,status_nfse,dps_xml_path,dps_xml_id,nfse_homologacao_xml_path,chave_nfse_homologacao,homologacao_emitida_em,alunos(nome,responsavel,segmento,cpf_cnpj,email,whatsapp,agenda_edu_student_id,agenda_edu_use_external_id,cep,logradouro,numero,cidade,uf)").order("created_at",{ascending:false}),
       supabase.from("alunos").select("id,nome,turma,segmento,responsavel,cpf_cnpj,email,whatsapp,cep,logradouro,numero,cidade,uf").order("nome"),
       supabase.from("nfse_entregas").select("mensalidade_id,status,canal,created_at").order("created_at",{ascending:false}),
     ]);
@@ -136,8 +158,12 @@ export function IssuanceAssistant({onNavigate}:{onNavigate:(page:AppPage)=>void}
       const nextPayments=(paymentsResult.data||[]) as unknown as AssistantPayment[];
       setPayments(nextPayments);
       setStudents(studentsResult.error?[]:(studentsResult.data||[]) as AssistantStudent[]);
-      setDeliveries(deliveriesResult.error?[]:(deliveriesResult.data||[]) as DeliveryState[]);
+      const nextDeliveries=deliveriesResult.error?[]:(deliveriesResult.data||[]) as DeliveryState[];
+      setDeliveries(nextDeliveries);
       const remembered=Number(localStorage.getItem("jpi-issuance-assistant-payment")||"0");
+      const rememberedPayment=nextPayments.find(item=>item.id===remembered);
+      const rememberedSent=remembered?nextDeliveries.some(item=>item.mensalidade_id===remembered&&item.status==="enviado"):false;
+      setResumePaymentId(rememberedPayment&&(!rememberedPayment.homologacao_emitida_em||!rememberedSent)?remembered:null);
       setSelectedId(current=>{
         if(current&&nextPayments.some(item=>item.id===current))return current;
         if(remembered&&nextPayments.some(item=>item.id===remembered))return remembered;
@@ -161,6 +187,7 @@ export function IssuanceAssistant({onNavigate}:{onNavigate:(page:AppPage)=>void}
     return students.filter(student=>normalize([student.nome,student.responsavel,student.turma,student.segmento,student.cpf_cnpj].filter(Boolean).join(" ")).includes(q));
   },[studentQuery,students]);
   const selectedStudent=useMemo(()=>students.find(student=>student.id===newStudentId)||null,[newStudentId,students]);
+  const resumePayment=useMemo(()=>payments.find(item=>item.id===resumePaymentId)||null,[payments,resumePaymentId]);
   const selected=useMemo(()=>payments.find(item=>item.id===selectedId)||null,[payments,selectedId]);
   useEffect(()=>{
     if(!selected){setDraftCompetence("");setDraftValue("");setDraftDescription("");return}
@@ -168,7 +195,7 @@ export function IssuanceAssistant({onNavigate}:{onNavigate:(page:AppPage)=>void}
     setDraftCompetence(competence);
     setDraftValue(String(selected.valor_nfse));
     setDraftDescription(selected.descricao_servico||defaultServiceDescription(competence,selected.alunos?.segmento));
-    setMessage("");setError("");
+    setMessage("");setError("");setActiveDocument(null);setManualPending(null);
   },[selected?.id]);
   useEffect(()=>{
     if(!selectedStudent){setNewDescription("");setNewDescriptionEdited(false);return}
@@ -190,7 +217,7 @@ export function IssuanceAssistant({onNavigate}:{onNavigate:(page:AppPage)=>void}
     if(!selected||!progress)return labels.map((label,index)=>({
       key:label.toLowerCase(),label,short:String(index+1),
       description:index===0?"Selecione uma emissão já iniciada.":"Aguardando etapa anterior.",
-      state:index===0?"current" as StepState:"pending" as StepState
+      state:(index===0?"current":"pending") as StepState
     }));
     const completion=[
       true,
@@ -218,7 +245,7 @@ export function IssuanceAssistant({onNavigate}:{onNavigate:(page:AppPage)=>void}
     ];
     return labels.map((label,index)=>({
       key:label.toLowerCase(),label,short:String(index+1),description:descriptions[index],
-      state:completion[index]?"done":index===current?(index===2&&missing.length?"warning":"current"):"pending",
+      state:(completion[index]?"done":index===current?(index===2&&missing.length?"warning":"current"):"pending") as StepState,
     }));
   },[delivery,missing.length,newEmissionOpen,progress,selected,selectedStudent]);
 
@@ -233,7 +260,7 @@ export function IssuanceAssistant({onNavigate}:{onNavigate:(page:AppPage)=>void}
       "Preparar / editar DPS",
       "Aprovar prévia da DPS",
       "Gerar e validar XML",
-      "Enviar para homologação",
+      "Homologar na NFS-e",
       "Conferir nota concluída",
       delivery?"Envio concluído":"Enviar nota ao responsável",
     ][effectiveCurrent]:"Selecione uma emissão";
@@ -241,6 +268,11 @@ export function IssuanceAssistant({onNavigate}:{onNavigate:(page:AppPage)=>void}
     if(newEmissionOpen||effectiveCurrent!==4||fiscalContext||!canPrepare)return;
     void loadFiscalContext().catch(cause=>setError(cause instanceof Error?cause.message:"Não foi possível carregar a configuração fiscal."));
   },[newEmissionOpen,effectiveCurrent,fiscalContext,canPrepare]);
+
+  useEffect(()=>{
+    if(newEmissionOpen||effectiveCurrent<7||!selected?.chave_nfse_homologacao)return;
+    void loadDeliveryContext().catch(cause=>setError(cause instanceof Error?cause.message:"Não foi possível preparar a conclusão da nota."));
+  },[newEmissionOpen,effectiveCurrent,selected?.id,selected?.chave_nfse_homologacao,canSendWhatsapp,canSendAgenda]);
 
 
   async function createPaymentFromStudent(){
@@ -258,6 +290,7 @@ export function IssuanceAssistant({onNavigate}:{onNavigate:(page:AppPage)=>void}
       if(existing.data?.id){
         const existingId=Number(existing.data.id);
         setSelectedId(existingId);
+        setResumePaymentId(existingId);
         localStorage.setItem("jpi-issuance-assistant-payment",String(existingId));
         setNewEmissionOpen(false);
         setMessage("Já existe uma mensalidade para este aluno nesta competência. O Assistente abriu o processo existente para evitar duplicidade.");
@@ -275,6 +308,7 @@ export function IssuanceAssistant({onNavigate}:{onNavigate:(page:AppPage)=>void}
       if(insert.error||!insert.data)throw new Error(insert.error?.message||"Não foi possível criar a mensalidade.");
       const id=Number(insert.data.id);
       setSelectedId(id);
+      setResumePaymentId(id);
       localStorage.setItem("jpi-issuance-assistant-payment",String(id));
       setNewEmissionOpen(false);
       setMessage("Mensalidade criada e nota iniciada. O próximo passo é validar os dados fiscais.");
@@ -398,6 +432,213 @@ export function IssuanceAssistant({onNavigate}:{onNavigate:(page:AppPage)=>void}
     finally{setBusyAction("")}
   }
 
+  async function loadDeliveryContext(){
+    if(!supabase||!selected||!selected.chave_nfse_homologacao)return;
+    const documentResult=await supabase.from("nfse_documentos_homologacao")
+      .select("id,mensalidade_id,versao,chave_acesso,estado,emitida_em")
+      .eq("mensalidade_id",selected.id).eq("estado","ativa").order("versao",{ascending:false}).limit(1).maybeSingle();
+    if(documentResult.error)throw new Error(documentResult.error.message);
+    setActiveDocument((documentResult.data||null) as DeliveryDocument|null);
+    const {data:{session}}=await supabase.auth.getSession();
+    const token=session?.access_token||null;
+    if(!token)return;
+    if(canSendWhatsapp){
+      try{
+        const response=await authenticatedFetch("/api/deliveries/whatsapp-manual",{headers:{Authorization:"Bearer "+token},cache:"no-store"});
+        const data=await response.json().catch(()=>({})) as ManualWhatsappInfo&{error?:string};
+        if(response.ok){
+          setWhatsappInfo(data);
+          setManualSenderId(current=>current&&data.senders?.some(sender=>sender.id===current)?current:null);
+        }
+      }catch{}
+    }
+    if(canSendAgenda){
+      try{
+        const response=await authenticatedFetch("/api/deliveries/agenda-edu",{headers:{Authorization:"Bearer "+token},cache:"no-store"});
+        const data=await response.json().catch(()=>({})) as AgendaEduInfo&{error?:string};
+        if(response.ok)setAgendaEduInfo(data);
+      }catch{}
+    }
+  }
+
+  async function sendCurrentDocument(){
+    if(!supabase||!selected||!activeDocument||deliveryBusy)return;
+    const allowed=deliveryChannel==="email"?canSendEmail:deliveryChannel==="whatsapp-manual"?canSendWhatsapp:canSendAgenda;
+    if(!allowed){setError("Seu perfil não possui permissão para este canal.");return}
+    const {data:{session}}=await supabase.auth.getSession();
+    if(!session){setError("Sua sessão expirou. Entre novamente.");return}
+    setDeliveryBusy(true);setError("");setMessage("");
+    try{
+      if(deliveryChannel==="whatsapp-manual"){
+        if(!whatsappInfo?.ready)throw new Error("O WhatsApp manual ainda não está configurado.");
+        if(!manualSenderId)throw new Error("Escolha qual WhatsApp da escola será usado.");
+        const popup=window.open("about:blank","_blank");if(popup)popup.opener=null;
+        try{
+          const response=await authenticatedFetch("/api/deliveries/whatsapp-manual",{
+            method:"POST",
+            headers:{Authorization:"Bearer "+session.access_token,"Content-Type":"application/json"},
+            body:JSON.stringify({action:"prepare",monthlyId:selected.id,documentId:activeDocument.id,senderId:manualSenderId,requestId:crypto.randomUUID()}),
+            cache:"no-store"
+          });
+          const data=await response.json().catch(()=>({})) as {ok?:boolean;error?:string;deliveryId?:number;whatsappUrl?:string;actualRecipient?:string;sender?:ManualSender};
+          if(!response.ok||!data.ok||!data.deliveryId||!data.whatsappUrl)throw new Error(data.error||"Não foi possível preparar o WhatsApp.");
+          const whatsappUrl=new URL(data.whatsappUrl);
+          if(whatsappUrl.protocol!=="https:"||whatsappUrl.hostname!=="wa.me")throw new Error("O endereço seguro do WhatsApp não pôde ser validado.");
+          if(popup)popup.location.href=whatsappUrl.toString();else window.open(whatsappUrl.toString(),"_blank","noopener,noreferrer");
+          setManualPending({deliveryId:data.deliveryId,whatsappUrl:whatsappUrl.toString(),actualRecipient:data.actualRecipient||"número interno",sender:data.sender||whatsappInfo.senders.find(sender=>sender.id===manualSenderId)||null});
+          setMessage("WhatsApp aberto. Depois de enviar a mensagem, confirme o envio no Assistente.");
+        }catch(cause){popup?.close();throw cause}
+      }else{
+        if(deliveryChannel==="agenda-edu"&&!agendaEduInfo?.ready)throw new Error(agendaEduInfo?.message||"A Agenda Edu ainda está aguardando configuração.");
+        const endpoint=deliveryChannel==="agenda-edu"?"/api/deliveries/agenda-edu":"/api/deliveries/email";
+        const response=await authenticatedFetch(endpoint,{
+          method:"POST",
+          headers:{Authorization:"Bearer "+session.access_token,"Content-Type":"application/json"},
+          body:JSON.stringify({monthlyId:selected.id,documentId:activeDocument.id,requestId:crypto.randomUUID()}),
+          cache:"no-store"
+        });
+        const data=await response.json().catch(()=>({})) as {ok?:boolean;error?:string};
+        if(!response.ok||!data.ok)throw new Error(data.error||"O provedor não confirmou esta entrega.");
+        setMessage(deliveryChannel==="agenda-edu"?"NFS-e enviada pela Agenda Edu e registrada no histórico.":"NFS-e enviada por e-mail e registrada no histórico.");
+        await load(true);
+      }
+    }catch(cause){setError(cause instanceof Error?cause.message:"Não foi possível enviar a nota.");}
+    finally{setDeliveryBusy(false)}
+  }
+
+  async function finishManualDelivery(action:"confirm"|"cancel"){
+    if(!supabase||!manualPending||deliveryBusy)return;
+    const {data:{session}}=await supabase.auth.getSession();
+    if(!session){setError("Sua sessão expirou. Entre novamente.");return}
+    setDeliveryBusy(true);setError("");
+    try{
+      const response=await authenticatedFetch("/api/deliveries/whatsapp-manual",{
+        method:"POST",
+        headers:{Authorization:"Bearer "+session.access_token,"Content-Type":"application/json"},
+        body:JSON.stringify({action,deliveryId:manualPending.deliveryId}),
+        cache:"no-store"
+      });
+      const data=await response.json().catch(()=>({})) as {ok?:boolean;error?:string};
+      if(!response.ok||!data.ok)throw new Error(data.error||"Não foi possível concluir esta tentativa.");
+      setMessage(action==="confirm"?"Envio por WhatsApp confirmado e registrado no histórico.":"Tentativa de WhatsApp cancelada.");
+      setManualPending(null);
+      await load(true);
+    }catch(cause){setError(cause instanceof Error?cause.message:"Não foi possível concluir o envio.");}
+    finally{setDeliveryBusy(false)}
+  }
+
+  async function openCurrentDocument(format:"pdf"|"xml"){
+    if(!supabase||!activeDocument||documentBusy)return;
+    const {data:{session}}=await supabase.auth.getSession();
+    if(!session){setError("Sua sessão expirou. Entre novamente.");return}
+    const popup=window.open("","_blank");if(popup)popup.opener=null;
+    setDocumentBusy(format);setError("");
+    try{
+      const params=new URLSearchParams({documentId:String(activeDocument.id),format,disposition:"inline"});
+      const response=await authenticatedFetch("/api/deliveries/documents?"+params.toString(),{headers:{Authorization:"Bearer "+session.access_token},cache:"no-store"});
+      if(!response.ok){const data=await response.json().catch(()=>({})) as {error?:string};throw new Error(data.error||"O documento não pôde ser aberto.");}
+      const blob=await response.blob();const url=URL.createObjectURL(blob);
+      if(popup)popup.location.href=url;else window.open(url,"_blank","noopener,noreferrer");
+      window.setTimeout(()=>URL.revokeObjectURL(url),60000);
+    }catch(cause){popup?.close();setError(cause instanceof Error?cause.message:"Não foi possível abrir o documento.");}
+    finally{setDocumentBusy("")}
+  }
+
+  async function generateXmlInAssistant(){
+    if(!supabase||!selected||!canPrepare||selected.chave_nfse_homologacao)return;
+    setBusyAction("xml");setError("");setMessage("");
+    let storedPath="";
+    try{
+      if(selected.status_nfse!=="Prévia DPS aprovada")throw new Error("A prévia da DPS precisa estar aprovada antes de gerar o XML.");
+      const context=fiscalContext||await loadFiscalContext();
+      if(!context)throw new Error("Configuração fiscal indisponível.");
+      const service=fiscalServiceForSegment(selected.alunos?.segmento);
+      const description=upper(selected.descricao_servico||draftDescription||defaultServiceDescription(competenceInput(selected.competencia),selected.alunos?.segmento)).trim();
+      const draft=buildDpsDraft({
+        municipalityCode:"3304557",
+        series:NFSE_OWN_APP_SERIES,
+        number:String(selected.id),
+        competence:selected.competencia,
+        provider:{
+          cnpj:context.cnpj||"",
+          municipalRegistration:null,
+          name:context.razao_social
+        },
+        taker:{
+          taxId:selected.alunos?.cpf_cnpj||"",
+          name:selected.alunos?.responsavel||"",
+          email:selected.alunos?.email,
+          phone:selected.alunos?.whatsapp
+        },
+        service:{
+          nationalTaxCode:service.code,
+          nbs:service.nbs,
+          description,
+          amount:Number(selected.valor_nfse),
+          issRate:5,
+          federalTaxes:{
+            cst:context.pis_cofins_cst,
+            pisRate:Number(context.pis_aliquota),
+            cofinsRate:Number(context.cofins_aliquota),
+            withholdingType:Number(context.pis_cofins_retencao)
+          },
+          ibsCbs:{
+            operationIndicator:"030101",
+            taxStatus:"200",
+            taxClassification:"200028"
+          }
+        }
+      });
+      storedPath=dpsDraftVersionPath(selected.id,draft.id);
+      const blob=new Blob([draft.xml],{type:"application/xml"});
+      const upload=await supabase.storage.from("documentos-nfse").upload(storedPath,blob,{contentType:"application/xml",upsert:false});
+      if(upload.error)throw new Error("Não foi possível guardar o XML: "+upload.error.message);
+      const generatedAt=new Date().toISOString();
+      const update=await supabase.from("mensalidades").update({
+        status_nfse:"XML DPS armazenado",
+        descricao_servico:description,
+        dps_xml_path:storedPath,
+        dps_xml_id:draft.id,
+        dps_xml_gerado_em:generatedAt
+      }).eq("id",selected.id).eq("status_nfse","Prévia DPS aprovada").is("chave_nfse_homologacao",null).select("id").maybeSingle();
+      if(update.error||!update.data){
+        await supabase.storage.from("documentos-nfse").remove([storedPath]);
+        throw new Error(update.error?.message||"A nota foi alterada por outro usuário antes da geração do XML.");
+      }
+      const history=await supabase.from("historico_nfse").insert({
+        mensalidade_id:selected.id,
+        evento:"xml_dps_armazenado",
+        valor_anterior:selected.valor_nfse,
+        valor_novo:selected.valor_nfse,
+        detalhes:"XML DPS "+draft.version+" gerado pelo Assistente com Lucro Presumido, PIS/COFINS e IBS/CBS; arquivo privado "+storedPath+"; identificador "+draft.id+". Nenhuma transmissão realizada."
+      });
+      if(history.error)throw new Error("O XML foi guardado, mas o histórico não pôde ser gravado: "+history.error.message);
+      setMessage("XML da DPS gerado, validado e guardado no sistema. A próxima etapa é a homologação na SEFIN.");
+      await load(true);
+    }catch(cause){
+      if(storedPath){
+        const latest=payments.find(item=>item.id===selected.id);
+        if(!latest?.dps_xml_path)await supabase.storage.from("documentos-nfse").remove([storedPath]).catch(()=>undefined);
+      }
+      setError(cause instanceof Error?cause.message:"Não foi possível gerar o XML da DPS.");
+    }finally{setBusyAction("")}
+  }
+
+  const selectedManualSender=whatsappInfo?.senders?.find(sender=>sender.id===manualSenderId)||null;
+  const canCurrentDelivery=deliveryChannel==="email"?canSendEmail:deliveryChannel==="whatsapp-manual"?canSendWhatsapp:canSendAgenda;
+  const currentDeliveryReady=deliveryChannel==="email"
+    ?canSendEmail&&Boolean(activeDocument)
+    :deliveryChannel==="whatsapp-manual"
+      ?canSendWhatsapp&&Boolean(activeDocument)&&Boolean(whatsappInfo?.ready)&&Boolean(selectedManualSender)
+      :canSendAgenda&&Boolean(activeDocument)&&Boolean(agendaEduInfo?.ready);
+  const deliveryRecipient=deliveryChannel==="email"
+    ?"Caixa interna de homologação"
+    :deliveryChannel==="whatsapp-manual"
+      ?whatsappInfo?.testRecipient||"Número interno não configurado"
+      :agendaEduInfo?.ready
+        ?"Responsáveis vinculados no Sandbox"
+        :"Aguardando Agenda Edu";
+
   function focusAndNavigate(target:"NFS-e"|"Enviar notas"|"Alunos e Responsáveis"){
     if(!selected)return;
     const focus=String(selected.id);
@@ -406,6 +647,41 @@ export function IssuanceAssistant({onNavigate}:{onNavigate:(page:AppPage)=>void}
     if(target==="Alunos e Responsáveis")sessionStorage.setItem("jpi-student-focus",selected.alunos?.nome||String(selected.aluno_id));
     onNavigate(target);
   }
+  function openOfficialHomologation(){
+    if(!selected)return;
+    const focus=String(selected.id);
+    const officialOrigin="https://jpi-fiscal.vercel.app";
+    if(window.location.origin===officialOrigin){
+      sessionStorage.setItem("jpi-nfse-focus",focus);
+      sessionStorage.setItem("jpi-nfse-open-homologation",focus);
+      onNavigate("NFS-e");
+      return;
+    }
+    const url=new URL(officialOrigin);
+    url.searchParams.set("nfse_hml",focus);
+    window.open(url.toString(),"_blank","noopener,noreferrer");
+    setMessage("Homologação aberta no JPI Fiscal oficial. Depois de concluir, volte a esta aba e clique em Atualizar.");
+  }
+  function startNewEmission(){
+    setNewEmissionOpen(true);
+    setNewStudentId(null);
+    setNewCompetence(currentCompetenceInput());
+    setNewValue("");
+    setNewPaymentStatus("Aberto");
+    setNewDescription("");
+    setNewDescriptionEdited(false);
+    setError("");
+    setMessage("Nova emissão iniciada. Selecione um aluno cadastrado abaixo.");
+    window.requestAnimationFrame(()=>{
+      window.requestAnimationFrame(()=>{
+        const section=document.getElementById("assistant-new-emission");
+        section?.scrollIntoView({behavior:"smooth",block:"start"});
+        const input=section?.querySelector("input");
+        if(input instanceof HTMLInputElement)input.focus();
+      });
+    });
+  }
+
   function continueProcess(){
     if(newEmissionOpen){void createPaymentFromStudent();return}
     if(!selected)return;
@@ -413,7 +689,9 @@ export function IssuanceAssistant({onNavigate}:{onNavigate:(page:AppPage)=>void}
     if(effectiveCurrent===2){void validateSelected();return}
     if(effectiveCurrent===3){void saveDps();return}
     if(effectiveCurrent===4){void approvePreview();return}
-    if(effectiveCurrent>=8){focusAndNavigate("Enviar notas");return}
+    if(effectiveCurrent===5){void generateXmlInAssistant();return}
+    if(effectiveCurrent===6){openOfficialHomologation();return}
+    if(effectiveCurrent>=8){void sendCurrentDocument();return}
     focusAndNavigate("NFS-e");
   }
 
@@ -421,7 +699,7 @@ export function IssuanceAssistant({onNavigate}:{onNavigate:(page:AppPage)=>void}
     <div className="page-heading assistant-heading">
       <div><span className="eyebrow">FLUXO GUIADO</span><h1>Assistente de Emissão</h1><p>Comece pelo aluno cadastrado, crie a mensalidade e siga até a emissão e o envio da nota.</p></div>
       <div className="form-actions">
-        <button className="primary" onClick={()=>{setNewEmissionOpen(true);setNewStudentId(null);setNewCompetence(currentCompetenceInput());setNewValue("");setNewPaymentStatus("Aberto");setNewDescription("");setNewDescriptionEdited(false);setError("");setMessage("")}} disabled={newEmissionOpen}><Plus size={17}/>Nova emissão</button>
+        <button className="primary" onClick={startNewEmission}><Plus size={17}/>Nova emissão</button>
         <button className="secondary" onClick={()=>void load(true)} disabled={refreshing}><RefreshCw size={17}/>{refreshing?"Atualizando…":"Atualizar"}</button>
       </div>
     </div>
@@ -430,11 +708,16 @@ export function IssuanceAssistant({onNavigate}:{onNavigate:(page:AppPage)=>void}
     {error&&<div className="error-box">{error}</div>}
     {message&&<div className="success-box" role="status">{message}</div>}
 
-    {newEmissionOpen&&<section className="panel assistant-new-start">
+    {newEmissionOpen&&<section id="assistant-new-emission" className="panel assistant-new-start">
       <div className="panel-title">
         <div><span className="eyebrow">ETAPAS 1 E 2</span><h2>Aluno cadastrado → Mensalidade</h2><p>Escolha o aluno e crie a cobrança que dará origem à NFS-e.</p></div>
         {payments.length>0&&<button className="secondary" onClick={()=>{setNewEmissionOpen(false);setError("");setMessage("")}}>Continuar emissão existente</button>}
       </div>
+      {resumePayment&&<div className="assistant-resume-card">
+        <RefreshCw size={20}/>
+        <div><span>EMISSÃO EM ANDAMENTO</span><strong>{resumePayment.alunos?.nome||("Aluno #"+resumePayment.aluno_id)}</strong><small>{resumePayment.competencia} · {money(resumePayment.valor_nfse)} · {resumePayment.status_nfse}</small></div>
+        <button className="secondary" type="button" onClick={()=>{setSelectedId(resumePayment.id);setNewEmissionOpen(false);setError("");setMessage("")}}>Continuar de onde parei <ChevronRight size={16}/></button>
+      </div>}
       <div className="assistant-new-start-grid">
         <div className="assistant-new-students">
           <div className="search-input"><Search/><input value={studentQuery} onChange={e=>setStudentQuery(e.target.value)} placeholder="Buscar aluno, responsável, turma ou CPF"/></div>
@@ -561,6 +844,119 @@ export function IssuanceAssistant({onNavigate}:{onNavigate:(page:AppPage)=>void}
             </div>}
           </section>}
 
+          {effectiveCurrent===6&&selected&&<section className="assistant-sefin-confirm">
+            <div className="assistant-workspace-head">
+              <div><span>ETAPA 7 · SEFIN</span><h3>Homologação pelo módulo NFS-e</h3><p>Para esta etapa, o Assistente usa o fluxo de homologação já validado do JPI Fiscal, sem criar uma segunda rotina fiscal.</p></div>
+              <span className="assistant-safe-tag"><ShieldCheck size={15}/>Fluxo existente</span>
+            </div>
+            <div className="assistant-sefin-body">
+              <div className="assistant-sefin-summary">
+                <span><small>Aluno</small><b>{selected.alunos?.nome||"—"}</b></span>
+                <span><small>XML</small><b>{selected.dps_xml_id||"—"}</b></span>
+                <span><small>Valor</small><b>{money(selected.valor_nfse)}</b></span>
+                <span><small>Destino</small><b>NFS-e · Homologação</b></span>
+              </div>
+              <div className="assistant-backend-ready">
+                <ShieldCheck/>
+                <div>
+                  <strong>Usar homologação que já funciona</strong>
+                  <span>Ao continuar, o sistema abrirá a mesma nota no JPI Fiscal oficial, usando o certificado A1 e a senha protegida já configurados no servidor.</span>
+                </div>
+              </div>
+            </div>
+          </section>}
+
+          {effectiveCurrent===7&&selected&&selected.chave_nfse_homologacao&&<section className="assistant-sefin-result">
+            <Check size={22}/>
+            <div><span>HOMOLOGAÇÃO CONCLUÍDA</span><h3>NFS-e de teste confirmada pela SEFIN</h3><p>Chave: <strong>{selected.chave_nfse_homologacao}</strong></p>{selected.homologacao_emitida_em&&<small>Processada em {new Date(selected.homologacao_emitida_em).toLocaleString("pt-BR")}</small>}</div>
+          </section>}
+
+          {effectiveCurrent>=7&&selected&&selected.chave_nfse_homologacao&&<section className="assistant-finalization">
+            <div className="assistant-workspace-head">
+              <div><span>CONCLUSÃO</span><h3>Documento fiscal de homologação</h3><p>A nota foi confirmada pela SEFIN. Confira o documento antes do envio.</p></div>
+              <span className="assistant-safe-tag"><Check size={15}/>Concluída</span>
+            </div>
+            <div className="assistant-finalization-body">
+              <div className="assistant-finalization-main">
+                <div><small>Aluno</small><strong>{selected.alunos?.nome||"—"}</strong></div>
+                <div><small>Competência</small><strong>{selected.competencia}</strong></div>
+                <div><small>Valor</small><strong>{money(selected.valor_nfse)}</strong></div>
+                <div><small>Chave SEFIN</small><strong className="assistant-key">{selected.chave_nfse_homologacao}</strong></div>
+              </div>
+              <div className="assistant-document-actions">
+                <button className="secondary" onClick={()=>void openCurrentDocument("pdf")} disabled={!activeDocument||Boolean(documentBusy)}><Eye size={16}/>{documentBusy==="pdf"?"Abrindo…":"Visualizar PDF"}</button>
+                <button className="secondary" onClick={()=>void openCurrentDocument("xml")} disabled={!activeDocument||Boolean(documentBusy)}><FileCode2 size={16}/>{documentBusy==="xml"?"Abrindo…":"Visualizar XML"}</button>
+                {!activeDocument&&<span>Preparando documento ativo…</span>}
+              </div>
+            </div>
+          </section>}
+
+          {effectiveCurrent>=8&&delivery&&selected&&<section className="assistant-complete-card">
+            <Check size={28}/>
+            <div>
+              <span>PROCESSO CONCLUÍDO</span>
+              <h3>Nota emitida e envio registrado</h3>
+              <p>{selected.alunos?.nome} · {selected.competencia} · {money(selected.valor_nfse)}</p>
+              <small>Último canal registrado: {delivery.canal.replace("_"," ")} · {new Date(delivery.created_at).toLocaleString("pt-BR")}</small>
+            </div>
+            <div className="assistant-complete-actions">
+              <button className="primary" type="button" onClick={()=>{setResumePaymentId(null);localStorage.removeItem("jpi-issuance-assistant-payment");startNewEmission()}}><Plus size={16}/>Nova emissão</button>
+              <button className="secondary" type="button" onClick={()=>focusAndNavigate("Enviar notas")}>Ver histórico de envios</button>
+            </div>
+          </section>}
+
+          {effectiveCurrent>=8&&selected&&<section className="assistant-delivery-panel">
+            <div className="assistant-workspace-head">
+              <div><span>ETAPA 9 · ENVIAR</span><h3>Escolha como entregar a nota</h3><p>Os canais usam as mesmas integrações e o mesmo histórico da tela Enviar notas.</p></div>
+              <span className="assistant-safe-tag"><ShieldCheck size={15}/>Histórico ativo</span>
+            </div>
+            <div className="assistant-delivery-channels">
+              <button type="button" className={deliveryChannel==="email"?"active email":"email"} onClick={()=>{setDeliveryChannel("email");setError("");setMessage("")}}>
+                <span><Mail size={20}/></span><div><strong>E-mail</strong><small>{canSendEmail?"Disponível":"Sem permissão"}</small></div>
+              </button>
+              <button type="button" className={deliveryChannel==="whatsapp-manual"?"active whatsapp":"whatsapp"} onClick={()=>{setDeliveryChannel("whatsapp-manual");setError("");setMessage("")}}>
+                <span><MessageCircle size={20}/></span><div><strong>WhatsApp</strong><small>{whatsappInfo?.ready?"Manual gratuito":"Configuração necessária"}</small></div>
+              </button>
+              <button type="button" className={deliveryChannel==="agenda-edu"?"active agenda":"agenda"} onClick={()=>{setDeliveryChannel("agenda-edu");setError("");setMessage("")}}>
+                <span><CalendarDays size={20}/></span><div><strong>Agenda Edu</strong><small>{agendaEduInfo?.ready?"Sandbox disponível":"Aguardando Agenda Edu"}</small></div>
+              </button>
+            </div>
+
+            <div className="assistant-delivery-details">
+              <div className="assistant-delivery-recipient">
+                <small>DESTINO DE HOMOLOGAÇÃO</small>
+                <strong>{deliveryRecipient}</strong>
+                <span>{deliveryChannel==="email"?selected.alunos?.email||"E-mail do responsável não informado":deliveryChannel==="whatsapp-manual"?selected.alunos?.whatsapp||"WhatsApp do responsável não informado":selected.alunos?.agenda_edu_student_id?"Aluno vinculado à Agenda Edu":"Aluno ainda sem vínculo da Agenda Edu"}</span>
+              </div>
+
+              {deliveryChannel==="whatsapp-manual"&&<>
+                {whatsappInfo?.senders?.length?<div className="assistant-sender-list">
+                  <small>ESCOLHA O WHATSAPP DA ESCOLA</small>
+                  <div>{whatsappInfo.senders.map(sender=><button type="button" key={sender.id} className={manualSenderId===sender.id?"selected":""} onClick={()=>setManualSenderId(sender.id)}><MessageCircle size={16}/><span><strong>{sender.nome}</strong><small>{sender.numero}</small></span>{manualSenderId===sender.id&&<Check size={15}/>}</button>)}</div>
+                </div>:<div className="assistant-warning-box"><CircleAlert/><div><strong>Nenhum remetente disponível</strong><span>Cadastre o número da escola em Configurações → Integrações antes de usar o WhatsApp.</span></div></div>}
+              </>}
+
+              {deliveryChannel==="agenda-edu"&&!agendaEduInfo?.ready&&<div className="assistant-warning-box"><CircleAlert/><div><strong>Aguardando Agenda Edu</strong><span>{agendaEduInfo?.message||"A integração ainda depende das informações que a Agenda Edu precisa liberar."}</span></div></div>}
+
+              {manualPending&&deliveryChannel==="whatsapp-manual"&&<div className="assistant-manual-confirm">
+                <MessageCircle size={22}/>
+                <div><strong>Mensagem preparada no WhatsApp</strong><span>Destino de teste: {manualPending.actualRecipient}{manualPending.sender?" · Remetente: "+manualPending.sender.nome:""}</span><small>Depois de clicar em Enviar no WhatsApp, confirme abaixo para registrar o histórico.</small></div>
+                <div>
+                  {manualPending.whatsappUrl&&<button className="secondary" type="button" onClick={()=>window.open(manualPending.whatsappUrl||"","_blank","noopener,noreferrer")}>Abrir WhatsApp</button>}
+                  <button className="primary" type="button" onClick={()=>void finishManualDelivery("confirm")} disabled={deliveryBusy}>Confirmar envio</button>
+                  <button className="secondary" type="button" onClick={()=>void finishManualDelivery("cancel")} disabled={deliveryBusy}>Cancelar</button>
+                </div>
+              </div>}
+
+              {!manualPending&&<div className="assistant-delivery-send-row">
+                <div><small>Canal selecionado</small><strong>{deliveryChannel==="email"?"E-mail":deliveryChannel==="whatsapp-manual"?"WhatsApp manual":"Agenda Edu"}</strong><span>{currentDeliveryReady?"Pronto para enviar":"Ainda não está pronto para este envio"}</span></div>
+                <button className="primary" type="button" onClick={()=>void sendCurrentDocument()} disabled={!currentDeliveryReady||deliveryBusy}>
+                  <Send size={17}/>{deliveryBusy?"Enviando…":deliveryChannel==="whatsapp-manual"?"Preparar WhatsApp":"Enviar agora"}
+                </button>
+              </div>}
+            </div>
+          </section>}
+
           <div className="assistant-next-card">
             {effectiveCurrent===2&&<><ShieldCheck/><div><strong>Validação automática e segura</strong><span>Confira dados do tomador, competência, valor, configuração fiscal e certificado A1 antes de preparar a DPS.</span></div></>}
             {effectiveCurrent===3&&<><FileText/><div><strong>DPS em foco</strong><span>Os campos editáveis estão logo acima. Salve a revisão para avançar automaticamente para a prévia.</span></div></>}
@@ -572,13 +968,13 @@ export function IssuanceAssistant({onNavigate}:{onNavigate:(page:AppPage)=>void}
           </div>
 
           {!canPrepare&&effectiveCurrent>=2&&effectiveCurrent<8&&<div className="notice compact"><ShieldCheck/><span>Seu perfil pode acompanhar o processo, mas não possui permissão para preparar a NFS-e.</span></div>}
-          <div className="assistant-actions">
+          {effectiveCurrent<8&&<div className="assistant-actions">
             <button className="primary assistant-main-action" onClick={continueProcess} disabled={Boolean(busyAction)||(!canPrepare&&effectiveCurrent>=2&&effectiveCurrent<8)}>
-              {busyAction==="validate"?"Validando…":busyAction==="save-dps"?"Salvando DPS…":busyAction==="approve"?"Aprovando…":effectiveCurrent===2&&missing.length?"Corrigir cadastro":effectiveCurrent===2?"Validar nota":effectiveCurrent===3?"Salvar DPS e ver prévia":effectiveCurrent===4?"Aprovar prévia":effectiveCurrent>=8?"Ir para envio":"Continuar processo"} <ChevronRight size={18}/>
+              {busyAction==="validate"?"Validando…":busyAction==="save-dps"?"Salvando DPS…":busyAction==="approve"?"Aprovando…":busyAction==="xml"?"Gerando XML…":effectiveCurrent===2&&missing.length?"Corrigir cadastro":effectiveCurrent===2?"Validar nota":effectiveCurrent===3?"Salvar DPS e ver prévia":effectiveCurrent===4?"Aprovar prévia":effectiveCurrent===5?"Gerar e validar XML":effectiveCurrent===6?"Abrir homologação NFS-e":effectiveCurrent>=8?"Ir para envio":"Continuar processo"} <ChevronRight size={18}/>
             </button>
-            {effectiveCurrent>2&&effectiveCurrent<8&&<button className="secondary" onClick={()=>focusAndNavigate("NFS-e")}>Abrir NFS-e atual</button>}
-            {progress?.finished&&<button className="secondary" onClick={()=>focusAndNavigate("Enviar notas")}>Ir direto para envio</button>}
-          </div>
+            {effectiveCurrent>2&&effectiveCurrent<8&&<button className="secondary" onClick={()=>effectiveCurrent===6?openOfficialHomologation():focusAndNavigate("NFS-e")}>{effectiveCurrent===6?"Abrir homologação oficial":"Abrir NFS-e atual"}</button>}
+            {progress?.finished&&<button className="secondary" onClick={()=>focusAndNavigate("Enviar notas")}>Abrir central de envios</button>}
+          </div>}
         </>}
       </article>
     </section>}

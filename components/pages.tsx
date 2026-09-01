@@ -1348,7 +1348,7 @@ function Integrations({accessToken}:{accessToken:string|null}) {
   const supabase=useMemo(()=>createSupabaseBrowserClient(),[]);
   const {can}=useAccess();const canEdit=can("settings.integrations.edit");const canTestFiscal=can("nfse.test_connection");
   const [section,setSection]=useState<IntegrationSection>("overview");
-  const [sefinAvailability,setSefinAvailability]=useState<"checking"|"available"|"unstable"|"unknown"|"session">("checking");
+  const [sefinAvailability,setSefinAvailability]=useState<"checking"|"available"|"unstable"|"unavailable"|"unknown"|"session">("checking");
   const [sefinCheckedAt,setSefinCheckedAt]=useState<Date|null>(null);
   const [productionEnabled,setProductionEnabled]=useState(false);
   const [communicationConfig,setCommunicationConfig]=useState<CommunicationConfig|null>(null);
@@ -1450,8 +1450,8 @@ function Integrations({accessToken}:{accessToken:string|null}) {
   },[busy]);
 
   const elapsedLabel=`${String(Math.floor(elapsed/60)).padStart(2,"0")}:${String(elapsed%60).padStart(2,"0")}`;
-  const sefinLabel=sefinAvailability==="available"?"SEFIN disponível":sefinAvailability==="unstable"?"SEFIN instável":sefinAvailability==="session"?"Sessão expirada":sefinAvailability==="unknown"?"SEFIN sem resposta":"SEFIN verificando";
-  const sefinTone=sefinAvailability==="available"?"available":sefinAvailability==="unstable"?"unstable":sefinAvailability==="session"?"unstable":sefinAvailability==="unknown"?"unknown":"checking";
+  const sefinLabel=sefinAvailability==="available"?"SEFIN disponível":sefinAvailability==="unstable"?"SEFIN com oscilação":sefinAvailability==="unavailable"?"SEFIN indisponível":sefinAvailability==="session"?"Sessão expirada":sefinAvailability==="unknown"?"Status não confirmado":"SEFIN verificando";
+  const sefinTone=sefinAvailability==="available"?"available":sefinAvailability==="unstable"?"unstable":sefinAvailability==="unavailable"||sefinAvailability==="session"?"unavailable":sefinAvailability==="unknown"?"unknown":"checking";
   const operationalLabel=productionEnabled?"Pronto e enviando":"Homologação";
 
   async function testHomologation(event:FormEvent<HTMLFormElement>){
@@ -1469,11 +1469,11 @@ function Integrations({accessToken}:{accessToken:string|null}) {
       const data=await response.json().catch(()=>({})) as {ok?:boolean;environment?:string;error?:string;ready?:boolean;issuanceStatus?:number};
       window.dispatchEvent(new Event("jpi-sefin-status-updated"));
       if(!response.ok||!data?.ok){setError(data?.error||"Não foi possível testar a integração.");return}
-      if(!data.ready){setError("O servidor de emissão está instável. Não tente enviar a nota agora.");return}
+      if(!data.ready){setSefinAvailability("unstable");setError("A API de emissão apresentou oscilação. Aguarde alguns instantes e teste novamente antes de enviar.");return}
       setTested(true);setSefinAvailability("available");setSefinCheckedAt(new Date());setMessage(`Certificado confirmado e servidor da SEFIN respondendo no ambiente de ${data.environment}. Nenhuma nota foi emitida neste teste.`);
     }catch(requestError){
       const timedOut=requestError instanceof Error&&(requestError.message==="JPI_CONNECTION_TIMEOUT"||requestError.name==="AbortError");
-      setError(timedOut?"A conexão foi encerrada após 25 segundos sem resposta.":"A conexão foi interrompida. Confira sua internet e tente novamente.");
+      setSefinAvailability("unknown");setError(timedOut?"A verificação não respondeu dentro do prazo. O status da SEFIN ficou não confirmado; tente novamente em alguns instantes.":"A verificação foi interrompida. O status da SEFIN ficou não confirmado; teste novamente.");
     }finally{if(timeout)window.clearTimeout(timeout);setBusy(false);setConnectionStage("")}
   }
 
@@ -1483,9 +1483,13 @@ function Integrations({accessToken}:{accessToken:string|null}) {
   const manualWhatsappState=manualWhatsappReady?{label:"Configurado",tone:"connected" as IntegrationStateTone}:{label:"Pendente",tone:"pending" as IntegrationStateTone};
   const nfseOverallState=productionEnabled&&sefinAvailability==="available"
     ? {label:"Pronto e enviando",tone:"connected" as IntegrationStateTone}
-    : sefinAvailability==="unstable"||sefinAvailability==="session"
-      ? {label:"Desconectado",tone:"disconnected" as IntegrationStateTone}
-      : {label:"Homologação",tone:"pending" as IntegrationStateTone};
+    : sefinAvailability==="unstable"
+      ? {label:"Oscilação",tone:"pending" as IntegrationStateTone}
+      : sefinAvailability==="unavailable"||sefinAvailability==="session"
+        ? {label:"Indisponível",tone:"disconnected" as IntegrationStateTone}
+        : sefinAvailability==="unknown"
+          ? {label:"Não confirmado",tone:"pending" as IntegrationStateTone}
+          : {label:"Homologação",tone:"pending" as IntegrationStateTone};
 
   const integrationItems=[
     {key:"overview" as const,label:"Visão geral",Icon:SlidersHorizontal,status:"",tone:"neutral" as IntegrationStateTone},
