@@ -654,11 +654,13 @@ export function IssuanceAssistant({onNavigate}:{onNavigate:(page:AppPage)=>void}
     if(window.location.origin===officialOrigin){
       sessionStorage.setItem("jpi-nfse-focus",focus);
       sessionStorage.setItem("jpi-nfse-open-homologation",focus);
+      sessionStorage.setItem("jpi-nfse-return-assistant",focus);
       onNavigate("NFS-e");
       return;
     }
     const url=new URL(officialOrigin);
     url.searchParams.set("nfse_hml",focus);
+    url.searchParams.set("return_assistant","1");
     window.open(url.toString(),"_blank","noopener,noreferrer");
     setMessage("Homologação aberta no JPI Fiscal oficial. Depois de concluir, volte a esta aba e clique em Atualizar.");
   }
