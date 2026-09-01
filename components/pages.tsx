@@ -1243,6 +1243,8 @@ function CommunicationsSettings({accessToken,onChanged,canEdit,section}:{accessT
   const [agendaMasterSecretsBusy,setAgendaMasterSecretsBusy]=useState(false);
   const [agendaMasterSecretsError,setAgendaMasterSecretsError]=useState("");
   const [agendaMasterCopied,setAgendaMasterCopied]=useState("");
+  const [agendaApiInfoOpen,setAgendaApiInfoOpen]=useState(false);
+  const [agendaInfoOpen,setAgendaInfoOpen]=useState(false);
 
   useEffect(()=>{
     if(!agendaMasterSecrets)return;
@@ -1375,9 +1377,10 @@ function CommunicationsSettings({accessToken,onChanged,canEdit,section}:{accessT
           {config?.whatsapp_testada_em&&<small className="last-test">Último teste: {new Date(config.whatsapp_testada_em).toLocaleString("pt-BR")}</small>}
         </form></>}
       {section==="manual-whatsapp"&&<><div className="communication-channel-card data-form"><div className="communication-channel-head"><span className="integration-icon green"><MessageCircle/></span><div><h3>WhatsApps da escola</h3><small>Envio manual pelo Web ou app</small></div><IntegrationStateBadge label={sectionState.label} tone={sectionState.tone}/></div><div className="notice compact"><ShieldCheck/><span>Cadastre até 4 contas da escola, por exemplo Secretaria e Central de Matrícula. Antes de cada envio, o usuário escolherá qual conta utilizar.</span></div><div className="whatsapp-message-editor"><label>Mensagem padrão para os responsáveis<textarea value={manualWhatsappMessage} onChange={event=>setManualWhatsappMessage(event.target.value)} maxLength={2000} rows={9} placeholder={DEFAULT_WHATSAPP_MANUAL_MESSAGE}/><small>Você pode usar: <b>{"{responsavel}"}</b>, <b>{"{aluno}"}</b>, <b>{"{competencia}"}</b>, <b>{"{valor}"}</b> e <b>{"{link}"}</b>. A variável <b>{"{link}"}</b> é obrigatória.</small></label><div className="form-actions"><button type="button" className="secondary" onClick={()=>setManualWhatsappMessage(DEFAULT_WHATSAPP_MANUAL_MESSAGE)} disabled={disabled}>Restaurar mensagem padrão</button><button type="button" className="primary" onClick={saveManualWhatsappMessage} disabled={disabled||manualWhatsappMessage.trim().length<20}>{busy==="save-manual-message"?"Salvando…":"Salvar mensagem do WhatsApp"}</button></div></div>{manualSenders.map((sender,index)=><div className="panel compact-panel" key={sender.id||index}><div className="form-row"><label>Identificação<input value={sender.nome} onChange={event=>updateManualSender(index,"nome",event.target.value)} maxLength={60} placeholder={index===0?"Secretaria":"Central de Matrícula"}/></label><label>Número com WhatsApp<input inputMode="tel" value={sender.numero} onChange={event=>updateManualSender(index,"numero",maskWhatsappPhone(event.target.value))} maxLength={15} placeholder="(21) 99999-9999"/></label></div><div className="form-actions"><label className="checkbox-line"><input type="checkbox" checked={sender.ativo} onChange={event=>updateManualSender(index,"ativo",event.target.checked)}/>Ativo para escolha</label><button type="button" className="secondary" onClick={()=>removeManualSender(index)} disabled={disabled}>Remover</button></div></div>)}<div className="form-actions"><button type="button" className="secondary" onClick={addManualSender} disabled={disabled||manualSenders.length>=4}><Plus size={17}/>Adicionar número</button><button type="button" className="primary" onClick={saveManualSenders} disabled={disabled||!manualSenders.length}>{busy==="save-manual-senders"?"Salvando…":"Salvar WhatsApps da escola"}</button></div><small>O WhatsApp Web/app precisa estar conectado na mesma conta escolhida no JPI Fiscal.</small></div></>}
-      {section==="agenda"&&<><div className={isMaster?"integration-agenda-master-grid":"integration-agenda-stack"}><div className="integration-agenda-stack"><form className="communication-channel-card data-form" onSubmit={saveAgenda}>
+      {section==="agenda"&&<><div className="integration-agenda-stack"><form className="communication-channel-card data-form" onSubmit={saveAgenda}>
           <div className="communication-channel-head"><span className="integration-icon purple"><CalendarDays/></span><div><h3>Agenda Edu</h3><small>Mensagens com os responsáveis</small></div><IntegrationStateBadge label={sectionState.label} tone={sectionState.tone}/></div>
           <div className="notice compact"><ShieldCheck/><span>Documentação oficial v2 confirmada. A conexão usará somente o Sandbox até concluirmos os testes dos responsáveis e anexos.</span></div>
+          {isMaster&&<button type="button" className="agenda-api-info-button" onClick={()=>setAgendaApiInfoOpen(true)}><KeyRound/><span><strong>Informações da API e credenciais</strong><small>Consultar conexão, dados salvos no servidor e credenciais protegidas.</small></span><ArrowUpRight/></button>}
           <label>Identificação da escola (opcional)<input value={agendaEduSchoolIdentifier} onChange={event=>setAgendaEduSchoolIdentifier(event.target.value)} maxLength={100} placeholder="Jardim Escola João Paulo I"/><small>É apenas um nome interno para facilitar a conferência.</small></label>
           <label>ID do canal de família (opcional)<input value={agendaEduChannelId} onChange={event=>setAgendaEduChannelId(event.target.value)} maxLength={100} placeholder="Informado ou localizado após o teste"/><small>O canal precisa incluir as turmas dos alunos que receberão as NFS-e.</small></label>
           <div className="smtp-server-summary"><span>Ambiente oficial</span><strong>Sandbox</strong><small>sandbox-api.agendaedu.dev · nenhuma mensagem real nesta etapa.</small></div>
@@ -1388,32 +1391,54 @@ function CommunicationsSettings({accessToken,onChanged,canEdit,section}:{accessT
           <button className="primary full" disabled={disabled}>{busy==="save-agenda"?"Salvando…":"Salvar configuração da Agenda Edu"}</button>
           <button type="button" className="secondary full" onClick={testAgenda} disabled={disabled||!config?.agenda_edu_credencial_configurada}>{busy==="test-agenda"?"Testando conexão…":"Testar conexão sem enviar mensagem"}</button>
           {config?.agenda_edu_testada_em&&<small className="last-test">Último teste: {new Date(config.agenda_edu_testada_em).toLocaleString("pt-BR")}</small>}
-        </form></div>
-        {isMaster&&<aside className="agenda-master-server-card">
-          <div className="agenda-master-server-head"><div><KeyRound/><span><strong>DADOS SALVOS NO SERVIDOR</strong><small>Visível somente para o usuário Master</small></span></div><span className="master-only-badge">MASTER</span></div>
-          <div className="agenda-server-status"><span className={config?.agenda_edu_ultimo_status==="conectado"?"connected":config?.agenda_edu_ultimo_status==="erro"?"error":"pending"}></span><div><strong>{config?.agenda_edu_ultimo_status==="conectado"?"Agenda Edu conectada":config?.agenda_edu_ultimo_status==="erro"?"Agenda Edu com erro":"Agenda Edu pendente"}</strong><small>{config?.agenda_edu_channel_id?"Canal de Mensagens identificado no servidor":"Canal de Mensagens ainda não identificado"}</small></div></div>
-          <dl className="agenda-server-data">
-            <div><dt>Provedor</dt><dd>{config?.agenda_edu_provider||"agenda_edu"}</dd></div>
-            <div><dt>Ambiente</dt><dd>{config?.agenda_edu_environment==="homologacao"?"Sandbox / Homologação":config?.agenda_edu_environment||"Não informado"}</dd></div>
-            <div><dt>Escola</dt><dd>{config?.agenda_edu_school_identifier||"Não informada"}</dd></div>
-            <div><dt>Channel ID</dt><dd className="mono">{config?.agenda_edu_channel_id||"Não salvo"}</dd></div>
-            <div><dt>Credenciais da API</dt><dd>{config?.agenda_edu_credencial_configurada?"Configuradas no cofre seguro":"Não configuradas"}</dd></div>
-            <div className="agenda-secret-row"><dt>Client ID</dt><dd><span className={agendaMasterSecretsVisible?"revealed":"masked"}>{agendaMasterSecretsVisible&&agendaMasterSecrets?.clientId?agendaMasterSecrets.clientId:"••••••••••••••••"}</span><button type="button" className="agenda-secret-copy" disabled={!agendaMasterSecretsVisible||!agendaMasterSecrets?.clientId} onClick={()=>void copyAgendaMasterSecret("clientId")} title="Copiar Client ID" aria-label="Copiar Client ID">{agendaMasterCopied==="clientId"?<Check/>:<Copy/>}</button></dd></div>
-            <div className="agenda-secret-row"><dt>Client Secret</dt><dd><span className={agendaMasterSecretsVisible?"revealed":"masked"}>{agendaMasterSecretsVisible&&agendaMasterSecrets?.clientSecret?agendaMasterSecrets.clientSecret:"••••••••••••••••"}</span><button type="button" className="agenda-secret-copy" disabled={!agendaMasterSecretsVisible||!agendaMasterSecrets?.clientSecret} onClick={()=>void copyAgendaMasterSecret("clientSecret")} title="Copiar Client Secret" aria-label="Copiar Client Secret">{agendaMasterCopied==="clientSecret"?<Check/>:<Copy/>}</button></dd></div>
-            <div className="agenda-secret-row"><dt>X-School-Token</dt><dd><span className={agendaMasterSecretsVisible?"revealed":"masked"}>{agendaMasterSecretsVisible&&agendaMasterSecrets?.schoolToken?agendaMasterSecrets.schoolToken:"••••••••••••••••"}</span><button type="button" className="agenda-secret-copy" disabled={!agendaMasterSecretsVisible||!agendaMasterSecrets?.schoolToken} onClick={()=>void copyAgendaMasterSecret("schoolToken")} title="Copiar X-School-Token" aria-label="Copiar X-School-Token">{agendaMasterCopied==="schoolToken"?<Check/>:<Copy/>}</button></dd></div>
-            <div><dt>Documentação API</dt><dd>{config?.agenda_edu_documentacao_confirmada?"Confirmada":"Pendente"}</dd></div>
-            <div><dt>Último status</dt><dd>{config?.agenda_edu_ultimo_status||"Não testado"}</dd></div>
-            <div><dt>Último teste</dt><dd>{config?.agenda_edu_testada_em?new Date(config.agenda_edu_testada_em).toLocaleString("pt-BR"):"Ainda não realizado"}</dd></div>
-            <div><dt>Endpoint API</dt><dd className="mono">sandbox-api.agendaedu.dev/v2</dd></div>
-          </dl>
-          <div className="agenda-master-secret-controls">
-            {!agendaMasterSecretsVisible?<button type="button" className="secondary full" onClick={()=>void revealAgendaMasterSecrets()} disabled={agendaMasterSecretsBusy||!config?.agenda_edu_credencial_configurada}><Eye/>{agendaMasterSecretsBusy?"Carregando credenciais…":"Revelar credenciais protegidas"}</button>:<button type="button" className="secondary full" onClick={hideAgendaMasterSecrets}><EyeOff/>Ocultar credenciais agora</button>}
-            <small>Após revelar, os valores ficam disponíveis somente nesta tela por até 60 segundos e não são salvos no navegador.</small>
-            {agendaMasterSecretsError&&<span className="agenda-secret-error">{agendaMasterSecretsError}</span>}
-          </div>
-          <div className="agenda-server-security"><ShieldCheck/><span><strong>Cofre protegido</strong><small>As credenciais só são recuperadas sob demanda pelo Master; não fazem parte do HTML inicial da página.</small></span></div>
-        </aside>}</div><AgendaEduStudentLinks/></>}
-    </div>}
+        </form></div><AgendaEduStudentLinks/>
+        {isMaster&&agendaApiInfoOpen&&<div className="agenda-api-modal-backdrop" role="presentation" onMouseDown={event=>{if(event.currentTarget===event.target){setAgendaApiInfoOpen(false);hideAgendaMasterSecrets();}}}>
+          <section className="agenda-api-modal" role="dialog" aria-modal="true" aria-labelledby="agenda-api-modal-title">
+            <header className="agenda-api-modal-head">
+              <div className="agenda-api-modal-title"><span><KeyRound/></span><div><small>ACESSO EXCLUSIVO DO MASTER</small><h2 id="agenda-api-modal-title">Informações da API e credenciais</h2><p>Dados salvos no servidor para consulta e manutenção futura da integração Agenda Edu.</p></div></div>
+              <button type="button" className="agenda-api-modal-close" onClick={()=>{setAgendaApiInfoOpen(false);hideAgendaMasterSecrets();}} aria-label="Fechar"><X/></button>
+            </header>
+
+            <div className="agenda-api-modal-body">
+              <section className="agenda-api-status-card">
+                <div className="agenda-api-status-copy"><span className={config?.agenda_edu_ultimo_status==="conectado"?"connected":config?.agenda_edu_ultimo_status==="erro"?"error":"pending"}></span><div><small>STATUS DA INTEGRAÇÃO</small><strong>{config?.agenda_edu_ultimo_status==="conectado"?"Agenda Edu conectada":config?.agenda_edu_ultimo_status==="erro"?"Agenda Edu com erro":"Agenda Edu pendente"}</strong><p>{config?.agenda_edu_channel_id?"Canal de Mensagens identificado e salvo no servidor.":"Canal de Mensagens ainda não identificado."}</p></div></div>
+                <span className="master-only-badge">MASTER</span>
+              </section>
+
+              <div className="agenda-api-modal-grid">
+                <section className="agenda-api-info-section">
+                  <div className="agenda-api-section-title"><Link2/><div><strong>Conexão e identificação</strong><small>Informações salvas no banco e utilizadas pela integração.</small></div></div>
+                  <dl className="agenda-api-data-list">
+                    <div><dt>Provedor</dt><dd>{config?.agenda_edu_provider||"agenda_edu"}</dd></div>
+                    <div><dt>Ambiente</dt><dd>{config?.agenda_edu_environment==="homologacao"?"Sandbox / Homologação":config?.agenda_edu_environment||"Não informado"}</dd></div>
+                    <div><dt>Escola</dt><dd>{config?.agenda_edu_school_identifier||"Não informada"}</dd></div>
+                    <div><dt>Channel ID</dt><dd className="mono">{config?.agenda_edu_channel_id||"Não salvo"}</dd></div>
+                    <div><dt>Endpoint da API</dt><dd className="mono">sandbox-api.agendaedu.dev/v2</dd></div>
+                    <div><dt>Documentação API</dt><dd>{config?.agenda_edu_documentacao_confirmada?"Confirmada":"Pendente"}</dd></div>
+                    <div><dt>Último status</dt><dd>{config?.agenda_edu_ultimo_status||"Não testado"}</dd></div>
+                    <div><dt>Último teste</dt><dd>{config?.agenda_edu_testada_em?new Date(config.agenda_edu_testada_em).toLocaleString("pt-BR"):"Ainda não realizado"}</dd></div>
+                  </dl>
+                </section>
+
+                <section className="agenda-api-info-section credentials">
+                  <div className="agenda-api-section-title"><ShieldCheck/><div><strong>Credenciais protegidas</strong><small>Carregadas do cofre somente quando o Master solicitar.</small></div></div>
+                  <div className="agenda-api-credential-list">
+                    <div><label>Client ID</label><div><span className={agendaMasterSecretsVisible?"revealed":"masked"}>{agendaMasterSecretsVisible&&agendaMasterSecrets?.clientId?agendaMasterSecrets.clientId:"••••••••••••••••••••"}</span><button type="button" disabled={!agendaMasterSecretsVisible||!agendaMasterSecrets?.clientId} onClick={()=>void copyAgendaMasterSecret("clientId")} title="Copiar Client ID">{agendaMasterCopied==="clientId"?<Check/>:<Copy/>}</button></div></div>
+                    <div><label>Client Secret</label><div><span className={agendaMasterSecretsVisible?"revealed":"masked"}>{agendaMasterSecretsVisible&&agendaMasterSecrets?.clientSecret?agendaMasterSecrets.clientSecret:"••••••••••••••••••••"}</span><button type="button" disabled={!agendaMasterSecretsVisible||!agendaMasterSecrets?.clientSecret} onClick={()=>void copyAgendaMasterSecret("clientSecret")} title="Copiar Client Secret">{agendaMasterCopied==="clientSecret"?<Check/>:<Copy/>}</button></div></div>
+                    <div><label>X-School-Token</label><div><span className={agendaMasterSecretsVisible?"revealed":"masked"}>{agendaMasterSecretsVisible&&agendaMasterSecrets?.schoolToken?agendaMasterSecrets.schoolToken:"••••••••••••••••••••"}</span><button type="button" disabled={!agendaMasterSecretsVisible||!agendaMasterSecrets?.schoolToken} onClick={()=>void copyAgendaMasterSecret("schoolToken")} title="Copiar X-School-Token">{agendaMasterCopied==="schoolToken"?<Check/>:<Copy/>}</button></div></div>
+                  </div>
+                  <div className="agenda-api-secret-actions">
+                    {!agendaMasterSecretsVisible?<button type="button" className="primary" onClick={()=>void revealAgendaMasterSecrets()} disabled={agendaMasterSecretsBusy||!config?.agenda_edu_credencial_configurada}><Eye/>{agendaMasterSecretsBusy?"Carregando…":"Revelar credenciais"}</button>:<button type="button" className="secondary" onClick={hideAgendaMasterSecrets}><EyeOff/>Ocultar credenciais</button>}
+                    <small>Os valores revelados ficam disponíveis por no máximo 60 segundos e não são salvos no navegador.</small>
+                    {agendaMasterSecretsError&&<span className="agenda-secret-error">{agendaMasterSecretsError}</span>}
+                  </div>
+                </section>
+              </div>
+
+              <div className="agenda-api-security-note"><ShieldCheck/><div><strong>Proteção mantida</strong><span>Somente o perfil Master consegue abrir esta janela e solicitar os valores reais das credenciais ao servidor.</span></div></div>
+            </div>
+          </section>
+        </div>}</>}    </div>}
   </div>;
 }
 
