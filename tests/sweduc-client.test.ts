@@ -2,13 +2,15 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {createSweducAccessToken,getSweducStudentDetailsWithToken,listSweducStudentsWithToken,normalizeSweducHost,parseSweducCredentials,serializeSweducCredentials} from "../lib/sweduc.ts";
 
-const credentials={host:"https://escola.sweduc.com.br",clientId:"cliente",clientSecret:"segredo"};
+const credentials={host:"https://joaopauloi.escolarsw.com.br",clientId:"cliente",clientSecret:"segredo"};
 
 test("normaliza somente hosts HTTPS oficiais da SWeduc",()=>{
+  assert.equal(normalizeSweducHost("https://joaopauloi.escolarsw.com.br/"),"https://joaopauloi.escolarsw.com.br");
   assert.equal(normalizeSweducHost("https://escola.sweduc.com.br/"),"https://escola.sweduc.com.br");
   assert.throws(()=>normalizeSweducHost("http://escola.sweduc.com.br"),/HTTPS/);
   assert.throws(()=>normalizeSweducHost("https://localhost"),/HOST oficial/);
   assert.throws(()=>normalizeSweducHost("https://example.com"),/HOST oficial/);
+  assert.throws(()=>normalizeSweducHost("https://falsoescolarsw.com.br"),/HOST oficial/);
 });
 
 test("mantém as três credenciais juntas no segredo protegido",()=>{
@@ -21,7 +23,7 @@ test("gera OAuth client_credentials com autenticação Basic sem credenciais na 
   const fakeFetch:typeof fetch=async(input,init)=>{capturedUrl=String(input);capturedInit=init;return new Response(JSON.stringify({access_token:"token",expires_in:3600}),{status:200,headers:{"Content-Type":"application/json"}})};
   const result=await createSweducAccessToken(credentials,fakeFetch);
   assert.equal(result.accessToken,"token");
-  assert.equal(capturedUrl,"https://escola.sweduc.com.br/oauth/v2/token");
+  assert.equal(capturedUrl,"https://joaopauloi.escolarsw.com.br/oauth/v2/token");
   assert.match(String(capturedInit?.body),/grant_type=client_credentials/);
   assert.doesNotMatch(String(capturedInit?.body),/username|password/);
   assert.doesNotMatch(capturedUrl,/cliente|segredo/);

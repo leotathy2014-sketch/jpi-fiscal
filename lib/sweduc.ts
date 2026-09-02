@@ -9,6 +9,7 @@ export type SweducStudentDetail={
 };
 type FetchLike=typeof fetch;
 const SWEDUC_TIMEOUT_MS=15000;
+const SWEDUC_HOST_DOMAINS=["sweduc.com.br","escolarsw.com.br"] as const;
 
 export function normalizeSweducHost(value:string){
   const raw=value.trim().replace(/\/+$/g,"");
@@ -17,7 +18,7 @@ export function normalizeSweducHost(value:string){
   if(parsed.protocol!=="https:")throw new Error("O HOST da SWeduc precisa usar HTTPS.");
   if(parsed.username||parsed.password||parsed.search||parsed.hash)throw new Error("O HOST da SWeduc não pode conter credenciais ou parâmetros.");
   const hostname=parsed.hostname.toLowerCase();
-  if(hostname!=="sweduc.com.br"&&!hostname.endsWith(".sweduc.com.br"))throw new Error("Informe o HOST oficial fornecido pela SWeduc.");
+  if(!SWEDUC_HOST_DOMAINS.some(domain=>hostname===domain||hostname.endsWith(`.${domain}`)))throw new Error("Informe o HOST oficial fornecido pela SWeduc.");
   return `${parsed.protocol}//${parsed.host}${parsed.pathname.replace(/\/+$/g,"")}`;
 }
 
