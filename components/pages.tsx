@@ -1688,6 +1688,7 @@ function Permissions() {
   const [definitions,setDefinitions]=useState<PermissionDefinition[]>([]);
   const [rolePermissions,setRolePermissions]=useState<RolePermissionRow[]>([]);
   const [open,setOpen]=useState(false);
+  const [editingUser,setEditingUser]=useState<ManagedUser|null>(null);
   const [busy,setBusy]=useState(false);
   const [permissionBusy,setPermissionBusy]=useState("");
   const [error,setError]=useState("");
@@ -1774,6 +1775,27 @@ function Permissions() {
     setMessage(changes.active!==undefined?`Usuário ${next.active?"ATIVADO":"BLOQUEADO"} com sucesso.`:`Perfil do usuário alterado para ${roleLabels[next.role]} com sucesso.`);await loadUsers();
   }
 
+  async function updateIdentity(e:FormEvent<HTMLFormElement>){
+    e.preventDefault();
+    if(!supabase||!canManageUsers||!editingUser||editingUser.role==="master")return;
+    setBusy(true);setError("");setMessage("");
+    const form=new FormData(e.currentTarget);
+    const nome=String(form.get("nome")||"").trim().toLocaleUpperCase("pt-BR");
+    const email=String(form.get("email")||"").trim().toLowerCase();
+    const emailChanged=email!==editingUser.email.toLowerCase();
+    const invitePending=Boolean(editingUser.invited_at&&!editingUser.confirmed_at);
+    const {data,error}=await supabase.functions.invoke("manage-users",{body:{action:"update_identity",id:editingUser.id,nome,email}});
+    setBusy(false);
+    if(error||data?.error){setError(data?.error||error?.message||"Não foi possível alterar os dados do usuário.");return}
+    setEditingUser(null);
+    setMessage(emailChanged
+      ?invitePending
+        ?"Dados atualizados. Reenvie o convite para que o usuário receba o acesso no novo e-mail."
+        :"Dados atualizados. O usuário deverá entrar com o novo e-mail."
+      :"Nome do usuário atualizado com sucesso.");
+    await loadUsers();
+  }
+
   async function resendInvite(user:ManagedUser){
     if(!supabase||!canManageUsers||user.role==="master")return;
     setBusy(true);setError("");setMessage("");
@@ -1812,7 +1834,7 @@ function Permissions() {
           </select>}</td>
           <td><Status>{user.active&&user.invited_at&&!user.confirmed_at?"Convite pendente":user.active?"Ativo":"Bloqueado"}</Status></td>
           <td>{user.last_sign_in_at?new Date(user.last_sign_in_at).toLocaleString("pt-BR"):user.invited_at?"Convite pendente":"Nunca acessou"}</td>
-          <td>{user.role==="master"?<span className="master-lock"><ShieldCheck/>Protegido</span>:canManageUsers?<div className="user-access-actions">{user.active&&user.invited_at&&!user.confirmed_at&&<button type="button" className="secondary resend-invite" disabled={busy} onClick={()=>void resendInvite(user)}><Mail/>Reenviar convite</button>}<button className={`access-toggle ${user.active?"active":"blocked"}`} disabled={busy} onClick={()=>updateUser(user,{active:!user.active})}>{user.active?"Bloquear":"Ativar"}</button></div>:<span className="muted">Somente leitura</span>}</td>
+          <td>{user.role==="master"?<span className="master-lock"><ShieldCheck/>Protegido</span>:canManageUsers?<div className="user-access-actions"><button type="button" className="secondary edit-user" disabled={busy} onClick={()=>{setError("");setMessage("");setEditingUser(user)}}><UserCog/>Editar dados</button>{user.active&&user.invited_at&&!user.confirmed_at&&<button type="button" className="secondary resend-invite" disabled={busy} onClick={()=>void resendInvite(user)}><Mail/>Reenviar convite</button>}<button className={`access-toggle ${user.active?"active":"blocked"}`} disabled={busy} onClick={()=>updateUser(user,{active:!user.active})}>{user.active?"Bloquear":"Ativar"}</button></div>:<span className="muted">Somente leitura</span>}</td>
         </tr>)}</tbody>
       </table>{rows.length===0&&!error&&<div className="empty-row">Nenhum usuário encontrado.</div>}</div>
     </>}
@@ -1858,6 +1880,15 @@ function Permissions() {
         <label>Perfil<select name="role" defaultValue="consulta"><option value="admin">Administrador</option><option value="financeiro">Financeiro</option><option value="secretaria">Secretaria</option><option value="consulta">Consulta</option></select></label>
         <div className="notice compact"><ShieldCheck/><span>O usuário receberá um link seguro para definir sua própria senha. O perfil Master não é criado por convite comum.</span></div>
         <div className="form-actions"><button type="button" className="secondary" onClick={()=>setOpen(false)}>Cancelar</button><button className="primary" disabled={busy}>{busy?"Enviando…":"Enviar convite"}</button></div>
+      </form>
+    </div></div>}
+    {editingUser&&canManageUsers&&editingUser.role!=="master"&&<div className="modal-backdrop"><div className="modal-card small-modal">
+      <div className="modal-head"><h2>Alterar dados do usuário</h2><button type="button" className="icon-button" aria-label="Fechar" onClick={()=>setEditingUser(null)}><X/></button></div>
+      <form className="data-form" onSubmit={updateIdentity}>
+        <label>Nome completo<input name="nome" defaultValue={editingUser.nome||""} onInput={upperCompanyInput} required/></label>
+        <label>E-mail<input name="email" type="email" defaultValue={editingUser.email} onInput={event=>(event.currentTarget.value=event.currentTarget.value.toLocaleLowerCase("pt-BR"))} required/></label>
+        <div className="notice compact"><ShieldCheck/><span>{editingUser.invited_at&&!editingUser.confirmed_at?"Se alterar o e-mail, reenvie o convite para o novo endereço após salvar.":"A alteração é aplicada ao acesso deste usuário. Se trocar o e-mail, ele deverá utilizá-lo no próximo acesso."}</span></div>
+        <div className="form-actions"><button type="button" className="secondary" disabled={busy} onClick={()=>setEditingUser(null)}>Cancelar</button><button className="primary" disabled={busy}>{busy?"Salvando…":"Salvar alterações"}</button></div>
       </form>
     </div></div>}
   </>;

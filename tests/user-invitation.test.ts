@@ -32,3 +32,13 @@ test("permite reenviar convites que continuam pendentes",()=>{
   assert.match(permissions,/data\?\.resent_at/);
   assert.match(permissions,/Convite reenviado em/);
 });
+
+test("permite alterar nome e e-mail sem liberar o perfil Master",()=>{
+  assert.match(manageUsers,/action === "update_identity"/);
+  assert.match(manageUsers,/auth\.admin\.updateUserById\(authUserId, authChanges\)/);
+  assert.match(manageUsers,/target\.role === "master"/);
+  assert.match(manageUsers,/invite_resent_at = null/);
+  assert.match(permissions,/Editar dados/);
+  assert.match(permissions,/Alterar dados do usuário/);
+  assert.match(permissions,/Reenvie o convite para que o usuário receba o acesso no novo e-mail/);
+});

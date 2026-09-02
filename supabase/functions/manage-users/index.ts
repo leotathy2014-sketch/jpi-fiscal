@@ -96,7 +96,7 @@ Deno.serve(async (req: Request) => {
     if (action === "list" && !canViewUsers) {
       return reply({ error: "Seu perfil não possui permissão para visualizar usuários." }, 403);
     }
-    if ((action === "invite" || action === "resend_invite" || action === "update") && !canManageUsers) {
+    if ((action === "invite" || action === "resend_invite" || action === "update" || action === "update_identity") && !canManageUsers) {
       return reply({ error: "Seu perfil não possui permissão para gerenciar usuários." }, 403);
     }
 
@@ -223,6 +223,72 @@ Deno.serve(async (req: Request) => {
         if (authUpdateError) throw authUpdateError;
       }
       return reply({ success: true });
+    }
+
+    if (action === "update_identity") {
+      const id = Number(body.id);
+      const nome = String(body.nome ?? "").trim().toLocaleUpperCase("pt-BR");
+      const email = String(body.email ?? "").trim().toLowerCase();
+      const validEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+      if (!Number.isInteger(id) || nome.length < 2 || nome.length > 120 || email.length > 254 || !validEmail) {
+        return reply({ error: "Informe um nome e um e-mail válidos." }, 400);
+      }
+
+      const { data: target, error: targetError } = await admin
+        .from("app_users")
+        .select("id,user_id,nome,email,role")
+        .eq("id", id)
+        .single();
+      if (targetError) throw targetError;
+      if (target.role === "master") {
+        return reply({ error: "Os dados do perfil Master são protegidos e não podem ser alterados por esta tela." }, 400);
+      }
+
+      const { data: duplicate, error: duplicateError } = await admin
+        .from("app_users")
+        .select("id")
+        .ilike("email", email)
+        .neq("id", id)
+        .maybeSingle();
+      if (duplicateError) throw duplicateError;
+      if (duplicate) return reply({ error: "Este e-mail já está vinculado a outro usuário." }, 409);
+
+      let authUserId = target.user_id as string | null;
+      if (!authUserId) {
+        const { data: authList, error: authListError } = await admin.auth.admin.listUsers({ page: 1, perPage: 1000 });
+        if (authListError) throw authListError;
+        authUserId = authList.users.find((item) => item.email?.toLowerCase() === target.email.toLowerCase())?.id ?? null;
+      }
+      if (!authUserId) {
+        return reply({ error: "A conta de acesso deste usuário não foi localizada. Reenvie o convite e tente novamente." }, 400);
+      }
+
+      const { data: authResult, error: authReadError } = await admin.auth.admin.getUserById(authUserId);
+      const authUser = authResult.user;
+      if (authReadError || !authUser) throw authReadError ?? new Error("Conta de acesso não localizada.");
+      const emailChanged = email !== target.email.toLowerCase();
+      const previousMetadata = authUser.user_metadata ?? {};
+      const authChanges = emailChanged
+        ? { email, email_confirm: Boolean(authUser.email_confirmed_at), user_metadata: { ...previousMetadata, nome } }
+        : { user_metadata: { ...previousMetadata, nome } };
+      const { error: authUpdateError } = await admin.auth.admin.updateUserById(authUserId, authChanges);
+      if (authUpdateError) {
+        const duplicateAuth = authUpdateError.message.toLowerCase().includes("already") || authUpdateError.message.toLowerCase().includes("registered");
+        return reply({ error: duplicateAuth ? "Este e-mail já possui uma conta de acesso." : "Não foi possível alterar a conta de acesso do usuário." }, 400);
+      }
+
+      const changedAt = new Date().toISOString();
+      const appUpdate: Record<string, unknown> = { user_id: authUserId, nome, email, updated_at: changedAt };
+      if (emailChanged) appUpdate.invite_resent_at = null;
+      const { error: appUpdateError } = await admin.from("app_users").update(appUpdate).eq("id", id);
+      if (appUpdateError) {
+        const rollback = emailChanged
+          ? { email: target.email, email_confirm: Boolean(authUser.email_confirmed_at), user_metadata: previousMetadata }
+          : { user_metadata: previousMetadata };
+        await admin.auth.admin.updateUserById(authUserId, rollback);
+        throw appUpdateError;
+      }
+      return reply({ success: true, email_changed: emailChanged, invite_pending: !authUser.email_confirmed_at });
     }
 
     return reply({ error: "Ação inválida." }, 400);
