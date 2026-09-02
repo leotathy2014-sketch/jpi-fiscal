@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { createSupabaseBrowserClient, hasSupabaseConfig } from "@/lib/supabase";
 import { AppShell, type AppPage, type Role } from "@/components/app-shell";
-import { Login, RecoveryConfirm, SetPassword } from "@/components/login";
+import { InviteConfirm, Login, RecoveryConfirm, SetPassword } from "@/components/login";
 import { BrandLogo } from "@/components/branding";
 import { AccessProvider } from "@/components/access";
 
@@ -20,7 +20,9 @@ export default function Home() {
   const [needsPassword, setNeedsPassword] = useState(false);
   const [passwordRecovery, setPasswordRecovery] = useState(false);
   const [recoveryTokenHash,setRecoveryTokenHash]=useState("");
+  const [inviteTokenHash,setInviteTokenHash]=useState("");
   const [authError, setAuthError] = useState("");
+  const [authMessage, setAuthMessage] = useState("");
 
   useEffect(() => {
     if (!supabase) { setLoading(false); return; }
@@ -29,6 +31,11 @@ export default function Home() {
       try{
         const url=new URL(window.location.href);
         const tokenHash=String(url.searchParams.get("token_hash")||"").trim();
+        if(url.searchParams.get("invite_confirm")==="1"&&tokenHash.length>=20&&tokenHash.length<=512){
+          setInviteTokenHash(tokenHash);
+          setLoading(false);
+          return;
+        }
         if(url.searchParams.get("recovery_confirm")==="1"&&tokenHash.length>=20&&tokenHash.length<=512){
           setRecoveryTokenHash(tokenHash);
           setLoading(false);
@@ -36,10 +43,11 @@ export default function Home() {
         }
         const code=url.searchParams.get("code");
         if(code){
+          const recoveryRequested=url.searchParams.get("recovery")==="1"||url.searchParams.get("type")==="recovery";
           const {data,error}=await supabase.auth.exchangeCodeForSession(code);
           if(!active)return;
           if(error||!data.session){
-            setAuthError("Este link de recuperação é inválido ou expirou. Solicite um novo link em “Esqueci minha senha”.");
+            setAuthError(recoveryRequested?"Este link de recuperação é inválido ou expirou. Solicite um novo link em “Esqueci minha senha”.":"Este link de acesso é inválido ou expirou. Solicite um novo convite ao administrador.");
             setPasswordRecovery(false);
             window.history.replaceState({},document.title,window.location.pathname);
             setLoading(false);
@@ -47,8 +55,9 @@ export default function Home() {
           }
           setEmail(data.session.user.email??null);
           setAccessToken(data.session.access_token);
-          setNeedsPassword(false);
-          setPasswordRecovery(true);
+          const firstAccess=data.session.user.user_metadata?.needs_password===true;
+          setNeedsPassword(firstAccess);
+          setPasswordRecovery(recoveryRequested&&!firstAccess);
           setAuthError("");
           window.history.replaceState({},document.title,window.location.pathname);
           setLoading(false);
@@ -71,7 +80,7 @@ export default function Home() {
         setNeedsPassword(data.session?.user.user_metadata?.needs_password===true);
         if(data.session&&(url.searchParams.get("recovery")==="1"||url.hash.includes("type=recovery")))setPasswordRecovery(true);
       }catch{
-        if(active)setAuthError("Não foi possível validar o link de recuperação. Solicite um novo link.");
+        if(active)setAuthError("Não foi possível validar este link. Solicite um novo convite ou link de recuperação.");
       }finally{
         if(active)setLoading(false);
       }
@@ -114,6 +123,7 @@ export default function Home() {
 
   async function signIn(inputEmail: string, password: string, remember: boolean) {
     setAuthError("");
+    setAuthMessage("");
     if (!supabase) { localStorage.setItem("jpi-demo-session", "1");setRole("Master");setPermissions([]);setAccessReady(true); setEmail(inputEmail); return; }
     if (remember) localStorage.setItem("jpi-remembered-email", inputEmail); else localStorage.removeItem("jpi-remembered-email");
     const { error } = await supabase.auth.signInWithPassword({ email: inputEmail, password });
@@ -176,6 +186,7 @@ export default function Home() {
     setPasswordRecovery(true);
     setRecoveryTokenHash("");
     setAuthError("");
+    setAuthMessage("");
     window.history.replaceState({},document.title,window.location.pathname);
   }
   function cancelPasswordRecovery(){
@@ -184,19 +195,44 @@ export default function Home() {
     window.history.replaceState({},document.title,window.location.pathname);
   }
 
+  async function confirmInvitation(){
+    if(!supabase||!inviteTokenHash)throw new Error("Este convite é inválido.");
+    const result=await supabase.auth.verifyOtp({token_hash:inviteTokenHash,type:"invite"} as never);
+    if(result.error)throw new Error("Este convite expirou ou já foi utilizado. Peça ao administrador para reenviar o convite.");
+    const {data}=await supabase.auth.getSession();
+    if(!data.session)throw new Error("Não foi possível confirmar o convite. Peça um novo envio ao administrador.");
+    setEmail(data.session.user.email??null);
+    setAccessToken(data.session.access_token);
+    setNeedsPassword(true);
+    setPasswordRecovery(false);
+    setInviteTokenHash("");
+    setAuthError("");
+    setAuthMessage("");
+    window.history.replaceState({},document.title,window.location.pathname);
+  }
+  function cancelInvitation(){
+    setInviteTokenHash("");
+    setAuthError("");
+    setAuthMessage("");
+    window.history.replaceState({},document.title,window.location.pathname);
+  }
+
   async function definePassword(password:string){
     if(!supabase)return;
+    const wasRecovery=passwordRecovery;
     const {error}=await supabase.auth.updateUser({password,data:{needs_password:false}});
     if(error)throw error;
     await supabase.auth.signOut({scope:"local"});
     setNeedsPassword(false);setPasswordRecovery(false);setAccessReady(false);setPermissions([]);setAccessToken(null);setEmail(null);
-    setAuthError("Senha alterada com sucesso. Entre novamente com a nova senha.");
+    setAuthError("");
+    setAuthMessage(wasRecovery?"Senha alterada com sucesso. Entre novamente com a nova senha.":"Cadastro concluído com sucesso. Entre com seu e-mail e a senha que você criou.");
   }
 
   if (loading) return <div className="splash"><BrandLogo/><p>Carregando sistema…</p></div>;
+  if(inviteTokenHash)return <InviteConfirm onContinue={confirmInvitation} onCancel={cancelInvitation}/>;
   if(recoveryTokenHash)return <RecoveryConfirm onContinue={confirmPasswordRecovery} onCancel={cancelPasswordRecovery}/>;
   const demoSession = typeof window !== "undefined" && localStorage.getItem("jpi-demo-session") === "1";
-  if (!email && !demoSession) return <Login onSignIn={signIn} onResetPassword={requestPasswordReset} configured={hasSupabaseConfig()} externalError={authError} />;
+  if (!email && !demoSession) return <Login onSignIn={signIn} onResetPassword={requestPasswordReset} configured={hasSupabaseConfig()} externalError={authError} externalMessage={authMessage} />;
   if (email&&(needsPassword||passwordRecovery)) return <SetPassword onSave={definePassword} recovery={passwordRecovery}/>;
   if (email&&!accessReady) return <div className="splash"><BrandLogo/><p>Verificando permissões…</p></div>;
   return <AccessProvider role={role} permissions={permissions}><AppShell email={email ?? "administrador@jpi.edu.br"} accessToken={accessToken} role={role} page={page} onPageChange={setPage} onSignOut={signOut} /></AccessProvider>;

@@ -1655,6 +1655,7 @@ type ManagedUser = {
   created_at: string;
   last_sign_in_at: string | null;
   invited_at: string | null;
+  confirmed_at: string | null;
 };
 type PermissionDefinition={
   permission_key:string;
@@ -1772,6 +1773,15 @@ function Permissions() {
     setMessage(changes.active!==undefined?`Usuário ${next.active?"ATIVADO":"BLOQUEADO"} com sucesso.`:`Perfil do usuário alterado para ${roleLabels[next.role]} com sucesso.`);await loadUsers();
   }
 
+  async function resendInvite(user:ManagedUser){
+    if(!supabase||!canManageUsers||user.role==="master")return;
+    setBusy(true);setError("");setMessage("");
+    const {data,error}=await supabase.functions.invoke("manage-users",{body:{action:"resend_invite",id:user.id}});
+    setBusy(false);
+    if(error||data?.error){setError(data?.error||error?.message||"Não foi possível reenviar o convite.");return}
+    setMessage(`Novo convite enviado para ${user.email}. Oriente o usuário a usar somente o e-mail mais recente.`);await loadUsers();
+  }
+
   if(!canViewUsers)return <div className="notice warning"><ShieldCheck/><span>Seu perfil não possui permissão para visualizar usuários.</span></div>;
 
   return <>
@@ -1798,9 +1808,9 @@ function Permissions() {
           <td>{user.role==="master"?<span className="role-master-static"><KeyRound/>Master</span>:<select className="role-select" value={user.role} disabled={busy||!canManageUsers} onChange={event=>updateUser(user,{role:event.target.value as ManagedUser["role"]})}>
             <option value="admin">Administrador</option><option value="financeiro">Financeiro</option><option value="secretaria">Secretaria</option><option value="consulta">Consulta</option>
           </select>}</td>
-          <td><Status>{user.active?"Ativo":"Bloqueado"}</Status></td>
+          <td><Status>{user.active&&user.invited_at&&!user.confirmed_at?"Convite pendente":user.active?"Ativo":"Bloqueado"}</Status></td>
           <td>{user.last_sign_in_at?new Date(user.last_sign_in_at).toLocaleString("pt-BR"):user.invited_at?"Convite pendente":"Nunca acessou"}</td>
-          <td>{user.role==="master"?<span className="master-lock"><ShieldCheck/>Protegido</span>:canManageUsers?<button className={`access-toggle ${user.active?"active":"blocked"}`} disabled={busy} onClick={()=>updateUser(user,{active:!user.active})}>{user.active?"Bloquear":"Ativar"}</button>:<span className="muted">Somente leitura</span>}</td>
+          <td>{user.role==="master"?<span className="master-lock"><ShieldCheck/>Protegido</span>:canManageUsers?<div className="user-access-actions">{user.active&&user.invited_at&&!user.confirmed_at&&<button type="button" className="secondary resend-invite" disabled={busy} onClick={()=>void resendInvite(user)}><Mail/>Reenviar convite</button>}<button className={`access-toggle ${user.active?"active":"blocked"}`} disabled={busy} onClick={()=>updateUser(user,{active:!user.active})}>{user.active?"Bloquear":"Ativar"}</button></div>:<span className="muted">Somente leitura</span>}</td>
         </tr>)}</tbody>
       </table>{rows.length===0&&!error&&<div className="empty-row">Nenhum usuário encontrado.</div>}</div>
     </>}
