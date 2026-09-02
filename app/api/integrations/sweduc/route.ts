@@ -49,15 +49,15 @@ export async function POST(request:NextRequest){
   let body:Record<string,unknown>;try{body=await request.json()}catch{return json({error:"Dados da solicitação inválidos."},400)}
   const action=String(body.action||"");
   if(action==="save"){
-    const host=normalizeSweducHost(String(body.host||""));let clientId=String(body.clientId||"").trim();let clientSecret=String(body.clientSecret||"").trim();let username=String(body.username||"").trim();let password=String(body.password||"");
-    const supplied=[clientId,clientSecret,username,password].filter(Boolean).length;
+    const host=normalizeSweducHost(String(body.host||""));let clientId=String(body.clientId||"").trim();let clientSecret=String(body.clientSecret||"").trim();
+    const supplied=[clientId,clientSecret].filter(Boolean).length;
     const {data:current}=await auth.supabase.from("sweduc_config").select("credencial_configurada").eq("id",true).single();
-    if(supplied>0&&supplied<4)return json({error:"Informe CLIENT_ID, CLIENT_SECRET, usuário e senha juntos."},400);
-    if(!current?.credencial_configurada&&supplied!==4)return json({error:"Informe todas as credenciais da SWeduc."},400);
-    if([clientId,clientSecret,username,password].some(value=>value.length>2000))return json({error:"Uma credencial ultrapassa o tamanho permitido."},400);
+    if(supplied===1)return json({error:"Informe CLIENT_ID e CLIENT_SECRET juntos."},400);
+    if(!current?.credencial_configurada&&supplied!==2)return json({error:"Informe CLIENT_ID e CLIENT_SECRET da SWeduc."},400);
+    if([clientId,clientSecret].some(value=>value.length>2000))return json({error:"Uma credencial ultrapassa o tamanho permitido."},400);
     const {error:updateError}=await auth.supabase.from("sweduc_config").update({host,ultimo_status:"pendente",ultimo_erro:null,updated_at:new Date().toISOString(),updated_by:auth.user.id}).eq("id",true);
     if(updateError)return json({error:"Não foi possível salvar a configuração da SWeduc."},500);
-    if(supplied===4){const backendSecret=process.env.JPI_BACKEND_SECRET;if(!backendSecret)return json({error:"O cofre seguro não está disponível."},503);const protectedValue=serializeSweducCredentials({host,clientId,clientSecret,username,password});const saved=await auth.supabase.rpc("store_sweduc_secret",{p_secret:protectedValue,p_backend_secret:backendSecret});clientId="";clientSecret="";username="";password="";if(saved.error)return json({error:"Não foi possível guardar as credenciais no cofre seguro."},500)}
+    if(supplied===2){const backendSecret=process.env.JPI_BACKEND_SECRET;if(!backendSecret)return json({error:"O cofre seguro não está disponível."},503);const protectedValue=serializeSweducCredentials({host,clientId,clientSecret});const saved=await auth.supabase.rpc("store_sweduc_secret",{p_secret:protectedValue,p_backend_secret:backendSecret});clientId="";clientSecret="";if(saved.error)return json({error:"Não foi possível guardar as credenciais no cofre seguro."},500)}
     return json({ok:true,message:"Configuração da SWeduc salva com segurança. Faça o teste de conexão antes de sincronizar."});
   }
   if(action==="test"){

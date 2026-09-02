@@ -1,4 +1,4 @@
-export type SweducCredentials={host:string;clientId:string;clientSecret:string;username:string;password:string};
+export type SweducCredentials={host:string;clientId:string;clientSecret:string};
 export type SweducStudentSummary={
   nome:string;data_nascimento:string|null;num_aluno:string|null;ano_letivo:string|null;
   num_matricula:string|null;status:string|null;unidade:string|null;curso:string|null;
@@ -24,8 +24,8 @@ export function serializeSweducCredentials(credentials:SweducCredentials){return
 export function parseSweducCredentials(value:string):SweducCredentials{
   let parsed:Partial<SweducCredentials>={};
   try{parsed=JSON.parse(value) as Partial<SweducCredentials>}catch{throw new Error("As credenciais protegidas da SWeduc precisam ser cadastradas novamente.")}
-  const result={host:normalizeSweducHost(String(parsed.host||"")),clientId:String(parsed.clientId||"").trim(),clientSecret:String(parsed.clientSecret||"").trim(),username:String(parsed.username||"").trim(),password:String(parsed.password||"")};
-  if(!result.clientId||!result.clientSecret||!result.username||!result.password)throw new Error("As credenciais protegidas da SWeduc estão incompletas.");
+  const result={host:normalizeSweducHost(String(parsed.host||"")),clientId:String(parsed.clientId||"").trim(),clientSecret:String(parsed.clientSecret||"").trim()};
+  if(!result.clientId||!result.clientSecret)throw new Error("As credenciais protegidas da SWeduc estão incompletas.");
   return result;
 }
 
@@ -36,7 +36,7 @@ async function apiMessage(response:Response,fallback:string){
 
 export async function createSweducAccessToken(credentials:SweducCredentials,fetchImpl:FetchLike=fetch){
   const basic=Buffer.from(`${credentials.clientId}:${credentials.clientSecret}`,"utf8").toString("base64");
-  const body=new URLSearchParams({grant_type:"password",username:credentials.username,password:credentials.password});
+  const body=new URLSearchParams({grant_type:"client_credentials"});
   const response=await fetchImpl(`${normalizeSweducHost(credentials.host)}/oauth/v2/token`,{method:"POST",headers:{Accept:"application/json","Content-Type":"application/x-www-form-urlencoded",Authorization:`Basic ${basic}`},body,cache:"no-store"});
   if(!response.ok)throw new Error(await apiMessage(response,"A SWeduc não aceitou as credenciais informadas."));
   const result=await response.json() as {access_token?:string;expires_in?:number;token_type?:string};

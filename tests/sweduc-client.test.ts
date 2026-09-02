@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {createSweducAccessToken,getSweducStudentDetailsWithToken,listSweducStudentsWithToken,normalizeSweducHost,parseSweducCredentials,serializeSweducCredentials} from "../lib/sweduc.ts";
 
-const credentials={host:"https://escola.sweduc.com.br",clientId:"cliente",clientSecret:"segredo",username:"usuario",password:"senha-segura"};
+const credentials={host:"https://escola.sweduc.com.br",clientId:"cliente",clientSecret:"segredo"};
 
 test("normaliza somente hosts HTTPS oficiais da SWeduc",()=>{
   assert.equal(normalizeSweducHost("https://escola.sweduc.com.br/"),"https://escola.sweduc.com.br");
@@ -11,20 +11,20 @@ test("normaliza somente hosts HTTPS oficiais da SWeduc",()=>{
   assert.throws(()=>normalizeSweducHost("https://example.com"),/HOST oficial/);
 });
 
-test("mantém as cinco credenciais juntas no segredo protegido",()=>{
+test("mantém as três credenciais juntas no segredo protegido",()=>{
   assert.deepEqual(parseSweducCredentials(serializeSweducCredentials(credentials)),credentials);
   assert.throws(()=>parseSweducCredentials("{}"),/HOST válido|incompletas/);
 });
 
-test("gera OAuth password com autenticação Basic sem credenciais na URL",async()=>{
+test("gera OAuth client_credentials com autenticação Basic sem credenciais na URL",async()=>{
   let capturedUrl="";let capturedInit:RequestInit|undefined;
   const fakeFetch:typeof fetch=async(input,init)=>{capturedUrl=String(input);capturedInit=init;return new Response(JSON.stringify({access_token:"token",expires_in:3600}),{status:200,headers:{"Content-Type":"application/json"}})};
   const result=await createSweducAccessToken(credentials,fakeFetch);
   assert.equal(result.accessToken,"token");
   assert.equal(capturedUrl,"https://escola.sweduc.com.br/oauth/v2/token");
-  assert.match(String(capturedInit?.body),/grant_type=password/);
-  assert.match(String(capturedInit?.body),/username=usuario/);
-  assert.doesNotMatch(capturedUrl,/cliente|segredo|usuario|senha/);
+  assert.match(String(capturedInit?.body),/grant_type=client_credentials/);
+  assert.doesNotMatch(String(capturedInit?.body),/username|password/);
+  assert.doesNotMatch(capturedUrl,/cliente|segredo/);
   assert.match(String((capturedInit?.headers as Record<string,string>).Authorization),/^Basic /);
 });
 

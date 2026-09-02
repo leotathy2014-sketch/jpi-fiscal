@@ -22,7 +22,9 @@ test("protege credenciais e exige permissão de integração",()=>{
 });
 
 test("oferece configuração, teste, sincronização e consulta",()=>{
-  for(const label of ["HOST","CLIENT_ID","CLIENT_SECRET","Usuário","Senha","Testar conexão","Sincronizar alunos","Buscar aluno por nome"])assert.match(ui,new RegExp(label));
+  for(const label of ["HOST","CLIENT_ID","CLIENT_SECRET","Testar conexão","Sincronizar alunos","Buscar aluno por nome"])assert.match(ui,new RegExp(label));
+  assert.doesNotMatch(ui,/<label>Usuário|<label>Senha/);
+  assert.match(route,/supplied===2/);assert.doesNotMatch(route,/body\.username|body\.password/);
   assert.match(route,/action==="test"/);assert.match(route,/action==="sync"/);assert.match(route,/sweduc_alunos/);
 });
 
