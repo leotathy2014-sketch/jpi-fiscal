@@ -1,6 +1,6 @@
 "use client";
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
-import { AlertCircle, ArrowUpRight, Building2, CalendarDays, Check, CircleDollarSign, Clock3, Copy, Eye, EyeOff, FileCheck2, FilePlus2, Filter, KeyRound, Link2, Mail, MessageCircle, MoreHorizontal, Palette, Plus, Search, ShieldCheck, SlidersHorizontal, Trash2, UploadCloud, UserCog, UsersRound, WalletCards, X } from "lucide-react";
+import { AlertCircle, ArrowUpRight, BookOpenCheck, Building2, CalendarDays, Check, CircleDollarSign, Clock3, Copy, Eye, EyeOff, FileCheck2, FilePlus2, Filter, KeyRound, Link2, Mail, MessageCircle, MoreHorizontal, Palette, Plus, Search, ShieldCheck, SlidersHorizontal, Trash2, UploadCloud, UserCog, UsersRound, WalletCards, X } from "lucide-react";
 import type { Role } from "./app-shell";
 import { createSupabaseBrowserClient } from "@/lib/supabase";
 import { authenticatedFetch } from "@/lib/authenticated-fetch";
@@ -8,6 +8,7 @@ import { TransmissionProgress } from "./transmission-progress";
 import { AgendaEduStudentLinks } from "./agenda-edu-student-links";
 import { BrandLogo } from "./branding";
 import { useAccess } from "./access";
+import { SweducSettings } from "./sweduc-settings";
 
 const money = (n: number) => n.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 const onlyDigits = (value: string, limit: number) => value.replace(/\D/g, "").slice(0, limit);
@@ -1442,7 +1443,7 @@ function CommunicationsSettings({accessToken,onChanged,canEdit,section}:{accessT
   </div>;
 }
 
-type IntegrationSection="overview"|"nfse"|"email"|"whatsapp"|"manual-whatsapp"|"agenda";
+type IntegrationSection="overview"|"nfse"|"email"|"whatsapp"|"manual-whatsapp"|"agenda"|"sweduc";
 
 function Integrations({accessToken}:{accessToken:string|null}) {
   const supabase=useMemo(()=>createSupabaseBrowserClient(),[]);
@@ -1452,6 +1453,7 @@ function Integrations({accessToken}:{accessToken:string|null}) {
   const [sefinCheckedAt,setSefinCheckedAt]=useState<Date|null>(null);
   const [productionEnabled,setProductionEnabled]=useState(false);
   const [communicationConfig,setCommunicationConfig]=useState<CommunicationConfig|null>(null);
+  const [sweducConfig,setSweducConfig]=useState<{credencial_configurada:boolean;ultimo_status:string}|null>(null);
   const [manualWhatsappReady,setManualWhatsappReady]=useState(false);
   const [busy,setBusy]=useState(false);
   const [tested,setTested]=useState(false);
@@ -1580,6 +1582,7 @@ function Integrations({accessToken}:{accessToken:string|null}) {
   const emailState=integrationState(communicationConfig?.email_ultimo_status,Boolean(communicationConfig?.email_credencial_configurada));
   const whatsappState=integrationState(communicationConfig?.whatsapp_ultimo_status,Boolean(communicationConfig?.whatsapp_token_configurado));
   const agendaState=integrationState(communicationConfig?.agenda_edu_ultimo_status,Boolean(communicationConfig?.agenda_edu_credencial_configurada));
+  const sweducState=integrationState(sweducConfig?.ultimo_status,Boolean(sweducConfig?.credencial_configurada));
   const manualWhatsappState=manualWhatsappReady?{label:"Configurado",tone:"connected" as IntegrationStateTone}:{label:"Pendente",tone:"pending" as IntegrationStateTone};
   const nfseOverallState=productionEnabled&&sefinAvailability==="available"
     ? {label:"Pronto e enviando",tone:"connected" as IntegrationStateTone}
@@ -1598,6 +1601,7 @@ function Integrations({accessToken}:{accessToken:string|null}) {
     {key:"whatsapp" as const,label:"WhatsApp API",Icon:MessageCircle,status:whatsappState.label,tone:whatsappState.tone},
     {key:"manual-whatsapp" as const,label:"WhatsApps da escola",Icon:MessageCircle,status:manualWhatsappState.label,tone:manualWhatsappState.tone},
     {key:"agenda" as const,label:"Agenda Edu",Icon:CalendarDays,status:agendaState.label,tone:agendaState.tone},
+    {key:"sweduc" as const,label:"SWeduc",Icon:BookOpenCheck,status:sweducState.label,tone:sweducState.tone},
   ];
 
   return <>
@@ -1616,6 +1620,7 @@ function Integrations({accessToken}:{accessToken:string|null}) {
         <button type="button" className="integration-overview-card" onClick={()=>setSection("whatsapp")}><span className="integration-icon green"><MessageCircle/></span><div><strong>WhatsApp API</strong><small>Meta Cloud API e dados de homologação.</small></div><IntegrationStateBadge label={whatsappState.label} tone={whatsappState.tone}/></button>
         <button type="button" className="integration-overview-card" onClick={()=>setSection("manual-whatsapp")}><span className="integration-icon green"><MessageCircle/></span><div><strong>WhatsApps da escola</strong><small>Números manuais e mensagem padrão para responsáveis.</small></div><IntegrationStateBadge label={manualWhatsappState.label} tone={manualWhatsappState.tone}/></button>
         <button type="button" className="integration-overview-card" onClick={()=>setSection("agenda")}><span className="integration-icon purple"><CalendarDays/></span><div><strong>Agenda Edu</strong><small>Sandbox, credenciais e canal escolar.</small></div><IntegrationStateBadge label={agendaState.label} tone={agendaState.tone}/></button>
+        <button type="button" className="integration-overview-card" onClick={()=>setSection("sweduc")}><span className="integration-icon blue"><BookOpenCheck/></span><div><strong>SWeduc</strong><small>Alunos, matrículas, responsáveis e financeiro.</small></div><IntegrationStateBadge label={sweducState.label} tone={sweducState.tone}/></button>
         <div className="integration-overview-card static"><span className="integration-icon green"><Building2/></span><div><strong>Supabase</strong><small>Banco de dados, autenticação e sessões.</small></div><IntegrationStateBadge label="Conectado" tone="connected"/></div>
       </div>
     </div>}
@@ -1635,6 +1640,7 @@ function Integrations({accessToken}:{accessToken:string|null}) {
 
     {(section==="email"||section==="whatsapp"||section==="manual-whatsapp"||section==="agenda")&&
       <CommunicationsSettings accessToken={accessToken} onChanged={setCommunicationConfig} canEdit={canEdit} section={section}/>}
+    {section==="sweduc"&&<SweducSettings accessToken={accessToken} canEdit={canEdit} onStatus={setSweducConfig}/>}
   </>;
 }
 
