@@ -26,6 +26,9 @@ test("confirma o convite somente após ação do usuário e abre a criação de 
 test("permite reenviar convites que continuam pendentes",()=>{
   assert.match(manageUsers,/action === "resend_invite"/);
   assert.match(manageUsers,/confirmed_at: authUser\?\.email_confirmed_at/);
+  assert.match(manageUsers,/invite_resent_at: resentAt/);
   assert.match(permissions,/Reenviar convite/);
   assert.match(permissions,/user\.invited_at&&!user\.confirmed_at/);
+  assert.match(permissions,/data\?\.resent_at/);
+  assert.match(permissions,/Convite reenviado em/);
 });

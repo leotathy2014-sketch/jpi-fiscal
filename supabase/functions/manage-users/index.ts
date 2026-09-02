@@ -104,7 +104,7 @@ Deno.serve(async (req: Request) => {
       const [{ data: authData, error: authError }, { data: appUsers, error: appError }] =
         await Promise.all([
           admin.auth.admin.listUsers({ page: 1, perPage: 1000 }),
-          admin.from("app_users").select("id,user_id,nome,email,role,active,created_at").order("created_at"),
+          admin.from("app_users").select("id,user_id,nome,email,role,active,created_at,invite_resent_at").order("created_at"),
         ]);
       if (authError || appError) throw authError ?? appError;
       const users = (appUsers ?? []).map((item) => {
@@ -179,7 +179,16 @@ Deno.serve(async (req: Request) => {
         console.error("invite-send", sendError instanceof Error ? sendError.message : "falha no envio");
         return reply({ error: "O convite foi preparado, mas o e-mail não pôde ser enviado agora. Use “Reenviar convite” em alguns minutos." }, 503);
       }
-      return reply({ success: true, resent: action === "resend_invite" });
+      let resentAt: string | null = null;
+      if (action === "resend_invite") {
+        resentAt = new Date().toISOString();
+        const { error: resentUpdateError } = await admin.from("app_users").update({
+          invite_resent_at: resentAt,
+          updated_at: resentAt,
+        }).eq("email", email);
+        if (resentUpdateError) throw resentUpdateError;
+      }
+      return reply({ success: true, resent: action === "resend_invite", resent_at: resentAt });
     }
 
     if (action === "update") {

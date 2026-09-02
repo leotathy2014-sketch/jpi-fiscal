@@ -1656,6 +1656,7 @@ type ManagedUser = {
   last_sign_in_at: string | null;
   invited_at: string | null;
   confirmed_at: string | null;
+  invite_resent_at: string | null;
 };
 type PermissionDefinition={
   permission_key:string;
@@ -1779,6 +1780,7 @@ function Permissions() {
     const {data,error}=await supabase.functions.invoke("manage-users",{body:{action:"resend_invite",id:user.id}});
     setBusy(false);
     if(error||data?.error){setError(data?.error||error?.message||"Não foi possível reenviar o convite.");return}
+    if(data?.resent_at)setRows(current=>current.map(item=>item.id===user.id?{...item,invite_resent_at:String(data.resent_at)}:item));
     setMessage(`Novo convite enviado para ${user.email}. Oriente o usuário a usar somente o e-mail mais recente.`);await loadUsers();
   }
 
@@ -1804,7 +1806,7 @@ function Permissions() {
       <div className="table-card permission-users-table"><table>
         <thead><tr><th>Usuário</th><th>Perfil</th><th>Status</th><th>Último acesso</th><th>Acesso</th></tr></thead>
         <tbody>{rows.map(user=><tr key={user.id} className={user.role==="master"?"master-user-row":""}>
-          <td><div className="name-cell"><div className="avatar soft">{(user.nome||user.email)[0].toUpperCase()}</div><div><strong>{user.nome||"USUÁRIO CONVIDADO"}{user.role==="master"&&<span className="inline-master-tag">MASTER</span>}</strong><span className="subcell">{user.email}</span></div></div></td>
+          <td><div className="name-cell"><div className="avatar soft">{(user.nome||user.email)[0].toUpperCase()}</div><div><strong>{user.nome||"USUÁRIO CONVIDADO"}{user.role==="master"&&<span className="inline-master-tag">MASTER</span>}</strong><span className="subcell">{user.email}</span>{user.invite_resent_at&&<span className="invite-resent-mark" role="status"><Check/>Convite reenviado em {new Date(user.invite_resent_at).toLocaleString("pt-BR",{dateStyle:"short",timeStyle:"short"})}</span>}</div></div></td>
           <td>{user.role==="master"?<span className="role-master-static"><KeyRound/>Master</span>:<select className="role-select" value={user.role} disabled={busy||!canManageUsers} onChange={event=>updateUser(user,{role:event.target.value as ManagedUser["role"]})}>
             <option value="admin">Administrador</option><option value="financeiro">Financeiro</option><option value="secretaria">Secretaria</option><option value="consulta">Consulta</option>
           </select>}</td>
