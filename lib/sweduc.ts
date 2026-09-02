@@ -8,6 +8,7 @@ export type SweducStudentDetail={
   detalhes:Record<string,unknown>;responsaveis:Array<Record<string,unknown>>;financeiro:Array<Record<string,unknown>>;
 };
 type FetchLike=typeof fetch;
+const SWEDUC_TIMEOUT_MS=15000;
 
 export function normalizeSweducHost(value:string){
   const raw=value.trim().replace(/\/+$/g,"");
@@ -37,7 +38,7 @@ async function apiMessage(response:Response,fallback:string){
 export async function createSweducAccessToken(credentials:SweducCredentials,fetchImpl:FetchLike=fetch){
   const basic=Buffer.from(`${credentials.clientId}:${credentials.clientSecret}`,"utf8").toString("base64");
   const body=new URLSearchParams({grant_type:"client_credentials"});
-  const response=await fetchImpl(`${normalizeSweducHost(credentials.host)}/oauth/v2/token`,{method:"POST",headers:{Accept:"application/json","Content-Type":"application/x-www-form-urlencoded",Authorization:`Basic ${basic}`},body,cache:"no-store"});
+  const response=await fetchImpl(`${normalizeSweducHost(credentials.host)}/oauth/v2/token`,{method:"POST",headers:{Accept:"application/json","Content-Type":"application/x-www-form-urlencoded",Authorization:`Basic ${basic}`},body,cache:"no-store",redirect:"error",signal:AbortSignal.timeout(SWEDUC_TIMEOUT_MS)});
   if(!response.ok)throw new Error(await apiMessage(response,"A SWeduc não aceitou as credenciais informadas."));
   const result=await response.json() as {access_token?:string;expires_in?:number;token_type?:string};
   if(!result.access_token)throw new Error("A SWeduc não retornou o token de acesso esperado.");
@@ -52,7 +53,7 @@ export async function listSweducStudents(credentials:SweducCredentials,input:Rec
 export async function listSweducStudentsWithToken(host:string,accessToken:string,input:Record<string,string|number|undefined>={},fetchImpl:FetchLike=fetch){
   const query=new URLSearchParams();
   for(const [key,value] of Object.entries(input))if(value!==undefined&&String(value).trim())query.set(key,String(value));
-  const response=await fetchImpl(`${normalizeSweducHost(host)}/api/v2/alunos/listar?${query}`,{headers:{Accept:"application/json",Authorization:`Bearer ${accessToken}`},cache:"no-store"});
+  const response=await fetchImpl(`${normalizeSweducHost(host)}/api/v2/alunos/listar?${query}`,{headers:{Accept:"application/json",Authorization:`Bearer ${accessToken}`},cache:"no-store",redirect:"error",signal:AbortSignal.timeout(SWEDUC_TIMEOUT_MS)});
   if(!response.ok)throw new Error(await apiMessage(response,"A SWeduc não permitiu consultar os alunos."));
   return await response.json() as {current_page?:number;data?:SweducStudentSummary[];total?:number;last_page?:number;per_page?:number;next_page_url?:string|null};
 }
@@ -65,7 +66,7 @@ export async function getSweducStudentDetails(credentials:SweducCredentials,matr
 
 export async function getSweducStudentDetailsWithToken(host:string,accessToken:string,matriculaId:number,fetchImpl:FetchLike=fetch){
   if(!Number.isInteger(matriculaId)||matriculaId<=0)throw new Error("A matrícula informada é inválida.");
-  const response=await fetchImpl(`${normalizeSweducHost(host)}/api/v2/alunos/detalhes?matricula_id=${matriculaId}`,{headers:{Accept:"application/json",Authorization:`Bearer ${accessToken}`},cache:"no-store"});
+  const response=await fetchImpl(`${normalizeSweducHost(host)}/api/v2/alunos/detalhes?matricula_id=${matriculaId}`,{headers:{Accept:"application/json",Authorization:`Bearer ${accessToken}`},cache:"no-store",redirect:"error",signal:AbortSignal.timeout(SWEDUC_TIMEOUT_MS)});
   if(!response.ok)throw new Error(await apiMessage(response,"A SWeduc não permitiu consultar os detalhes da matrícula."));
   const result=await response.json() as Partial<SweducStudentDetail>;
   return {detalhes:result.detalhes||{},responsaveis:Array.isArray(result.responsaveis)?result.responsaveis:[],financeiro:Array.isArray(result.financeiro)?result.financeiro:[]};

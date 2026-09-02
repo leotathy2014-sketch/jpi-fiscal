@@ -703,6 +703,19 @@
 .sweduc-api-doc-link{display:inline-flex;align-items:center;gap:6px;color:#1466df;text-decoration:none}
 .sweduc-api-doc-link:hover{text-decoration:underline}
 .sweduc-api-doc-link svg{width:14px;height:14px}
+.sweduc-temporary-test{display:flex;align-items:center;justify-content:space-between;gap:14px;padding:13px 14px;border:1px solid #bcd6f3;border-radius:12px;background:linear-gradient(135deg,#f8fbff,#edf6ff)}
+.sweduc-temporary-test>div{display:flex;align-items:flex-start;gap:10px;min-width:0;color:#1466df}
+.sweduc-temporary-test>div>svg{width:20px;height:20px;flex:none;margin-top:1px}
+.sweduc-temporary-test span{display:grid;gap:3px}
+.sweduc-temporary-test strong{font-size:13.5px;color:#214f83}
+.sweduc-temporary-test small{font-size:12px;line-height:1.45;color:#62778e}
+.sweduc-temporary-test>button{min-width:160px;flex:none}
+.sweduc-temporary-result{display:flex;align-items:flex-start;gap:10px;padding:13px 14px;border:1px solid #bfe1d2;border-radius:12px;background:#edf9f4;color:#157653}
+.sweduc-temporary-result>svg{width:20px;height:20px;flex:none;margin-top:1px}
+.sweduc-temporary-result>div{display:grid;gap:3px}
+.sweduc-temporary-result strong{font-size:13.5px}
+.sweduc-temporary-result span,.sweduc-temporary-result small{font-size:12px;line-height:1.45}
+.sweduc-temporary-result small{color:#397561}
 
 @media(max-width:850px){
  .agenda-api-modal-backdrop{padding:12px}
@@ -720,4 +733,6 @@
  .agenda-api-info-section{padding:13px}
  .agenda-api-info-button{grid-template-columns:auto 1fr}
  .agenda-api-info-button>svg:last-child{display:none}
+ .sweduc-temporary-test{align-items:stretch;flex-direction:column}
+ .sweduc-temporary-test>button{width:100%;min-width:0}
 }

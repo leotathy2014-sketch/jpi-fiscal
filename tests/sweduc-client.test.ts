@@ -26,6 +26,8 @@ test("gera OAuth client_credentials com autenticação Basic sem credenciais na 
   assert.doesNotMatch(String(capturedInit?.body),/username|password/);
   assert.doesNotMatch(capturedUrl,/cliente|segredo/);
   assert.match(String((capturedInit?.headers as Record<string,string>).Authorization),/^Basic /);
+  assert.equal(capturedInit?.redirect,"error");
+  assert.ok(capturedInit?.signal instanceof AbortSignal);
 });
 
 test("usa os endpoints oficiais de listagem e detalhes",async()=>{
