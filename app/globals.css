@@ -690,6 +690,19 @@
 .agenda-api-security-note>div{display:grid;gap:2px}
 .agenda-api-security-note strong{font-size:13px}
 .agenda-api-security-note span{font-size:12.5px;line-height:1.45}
+.sweduc-api-info-button{border-color:#c9dcf5;background:linear-gradient(135deg,#fbfdff,#eef6ff);color:#245a96}
+.sweduc-api-info-button:hover{border-color:#91b9e8;background:#f3f8ff;box-shadow:0 6px 18px #1466df12}
+.sweduc-api-info-button>svg:first-child,.sweduc-api-info-button>svg:last-child{color:#1466df}
+.sweduc-api-info-button strong{color:#214f83}
+.sweduc-api-info-button small{color:#62778e}
+.sweduc-api-modal .agenda-api-modal-head{background:linear-gradient(135deg,#fbfdff,#eef6ff)}
+.sweduc-api-modal .agenda-api-modal-title>span{background:#e3f0ff;color:#1466df}
+.sweduc-api-modal .agenda-api-modal-title small{color:#1466df}
+.sweduc-api-modal .agenda-api-info-section.credentials{border-color:#cfdef0;background:#fbfdff}
+.sweduc-api-modal .agenda-api-info-section.credentials .agenda-api-section-title>svg{color:#1466df}
+.sweduc-api-doc-link{display:inline-flex;align-items:center;gap:6px;color:#1466df;text-decoration:none}
+.sweduc-api-doc-link:hover{text-decoration:underline}
+.sweduc-api-doc-link svg{width:14px;height:14px}
 
 @media(max-width:850px){
  .agenda-api-modal-backdrop{padding:12px}

@@ -1447,7 +1447,7 @@ type IntegrationSection="overview"|"nfse"|"email"|"whatsapp"|"manual-whatsapp"|"
 
 function Integrations({accessToken}:{accessToken:string|null}) {
   const supabase=useMemo(()=>createSupabaseBrowserClient(),[]);
-  const {can}=useAccess();const canEdit=can("settings.integrations.edit");const canTestFiscal=can("nfse.test_connection");
+  const {can,isMaster}=useAccess();const canEdit=can("settings.integrations.edit");const canTestFiscal=can("nfse.test_connection");
   const [section,setSection]=useState<IntegrationSection>("overview");
   const [sefinAvailability,setSefinAvailability]=useState<"checking"|"available"|"unstable"|"unavailable"|"unknown"|"session">("checking");
   const [sefinCheckedAt,setSefinCheckedAt]=useState<Date|null>(null);
@@ -1640,7 +1640,7 @@ function Integrations({accessToken}:{accessToken:string|null}) {
 
     {(section==="email"||section==="whatsapp"||section==="manual-whatsapp"||section==="agenda")&&
       <CommunicationsSettings accessToken={accessToken} onChanged={setCommunicationConfig} canEdit={canEdit} section={section}/>}
-    {section==="sweduc"&&<SweducSettings accessToken={accessToken} canEdit={canEdit} onStatus={setSweducConfig}/>}
+    {section==="sweduc"&&<SweducSettings accessToken={accessToken} canEdit={canEdit} isMaster={isMaster} onStatus={setSweducConfig}/>}
   </>;
 }
 

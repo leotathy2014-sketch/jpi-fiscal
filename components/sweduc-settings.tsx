@@ -1,22 +1,29 @@
 "use client";
 import {FormEvent,useCallback,useEffect,useState} from "react";
-import {BookOpenCheck,KeyRound,RefreshCw,Search,ShieldCheck,UsersRound} from "lucide-react";
+import {ArrowUpRight,BookOpenCheck,Check,Copy,Eye,EyeOff,KeyRound,Link2,RefreshCw,Search,ShieldCheck,UsersRound,X} from "lucide-react";
 import {authenticatedFetch} from "@/lib/authenticated-fetch";
 
 type Config={host:string|null;credencial_configurada:boolean;ultimo_status:string;testada_em:string|null;sincronizada_em:string|null;ultimo_erro:string|null;total_sincronizado:number};
 type Student={matricula_id:number;nome:string;numero_matricula:string|null;status:string|null;unidade:string|null;curso:string|null;serie:string|null;turma:string|null;ano_letivo:string|null;responsaveis:Array<{nome?:string;parentesco?:string;telefones?:Array<{numero?:string}>;emails?:Array<{email?:string}>}>;financeiro:Array<{numero_titulo?:string;valor?:string;situacao?:string}>};
-export function SweducSettings({accessToken,canEdit,onStatus}:{accessToken:string|null;canEdit:boolean;onStatus?:(config:Config)=>void}){
+export function SweducSettings({accessToken,canEdit,isMaster,onStatus}:{accessToken:string|null;canEdit:boolean;isMaster:boolean;onStatus?:(config:Config)=>void}){
   const [config,setConfig]=useState<Config|null>(null);const [students,setStudents]=useState<Student[]>([]);const [host,setHost]=useState("");const [clientId,setClientId]=useState("");const [clientSecret,setClientSecret]=useState("");const [search,setSearch]=useState("");const [busy,setBusy]=useState("");const [error,setError]=useState("");const [message,setMessage]=useState("");
+  const [apiInfoOpen,setApiInfoOpen]=useState(false);const [masterSecrets,setMasterSecrets]=useState<{clientId:string;clientSecret:string}|null>(null);const [secretsVisible,setSecretsVisible]=useState(false);const [secretsBusy,setSecretsBusy]=useState(false);const [secretsError,setSecretsError]=useState("");const [copied,setCopied]=useState("");
   const load=useCallback(async(query="")=>{if(!accessToken)return;const response=await authenticatedFetch(`/api/integrations/sweduc${query?`?search=${encodeURIComponent(query)}`:""}`,{headers:{Authorization:`Bearer ${accessToken}`},cache:"no-store"});const data=await response.json().catch(()=>({})) as {config?:Config;students?:Student[];error?:string};if(response.status===401)window.dispatchEvent(new Event("jpi-session-invalid"));if(!response.ok||!data.config)throw new Error(data.error||"Não foi possível carregar a SWeduc.");setConfig(data.config);setHost(current=>current||data.config?.host||"");setStudents(data.students||[]);onStatus?.(data.config)},[accessToken,onStatus]);
   useEffect(()=>{load().catch(e=>setError(e instanceof Error?e.message:"Não foi possível carregar a SWeduc."))},[load]);
+  useEffect(()=>{if(!masterSecrets)return;const timer=window.setTimeout(()=>{setMasterSecrets(null);setSecretsVisible(false);setCopied("")},60000);return()=>window.clearTimeout(timer)},[masterSecrets]);
   async function run(action:string,payload:Record<string,string|number>={}){if(!accessToken)throw new Error("Sessão expirada.");const response=await authenticatedFetch("/api/integrations/sweduc",{method:"POST",headers:{Authorization:`Bearer ${accessToken}`,"Content-Type":"application/json"},body:JSON.stringify({action,...payload}),cache:"no-store"});const data=await response.json().catch(()=>({})) as {message?:string;error?:string;nextPage?:number|null;lastPage?:number;synced?:number};if(response.status===401)window.dispatchEvent(new Event("jpi-session-invalid"));if(!response.ok)throw new Error(data.error||"Não foi possível concluir a operação.");return data}
   async function act(name:string,fn:()=>Promise<{message?:string}>){setBusy(name);setError("");setMessage("");try{const result=await fn();setMessage(result.message||"Operação concluída.");await load();}catch(e){setError(e instanceof Error?e.message:"Não foi possível concluir a operação.")}finally{setBusy("")}}
   async function save(event:FormEvent){event.preventDefault();await act("save",()=>run("save",{host,clientId,clientSecret}));setClientId("");setClientSecret("")}
   async function syncAll(){setBusy("sync");setError("");setMessage("Iniciando sincronização…");let page=1;let totalSynced=0;try{while(page<=100){const result=await run("sync",{page});totalSynced+=Number(result.synced||0);setMessage(result.nextPage?`Sincronizando página ${page} de ${result.lastPage||"…"} · ${totalSynced} matrícula(s) atualizada(s).`:`Sincronização concluída: ${totalSynced} matrícula(s) importada(s) ou atualizada(s).`);if(!result.nextPage)break;page=result.nextPage}await load();}catch(e){setError(e instanceof Error?`${e.message} ${totalSynced?`${totalSynced} matrícula(s) já foram preservadas.`:""}`:"Não foi possível concluir a sincronização.")}finally{setBusy("")}}
+  async function revealSecrets(){if(!isMaster||!accessToken)return;setSecretsBusy(true);setSecretsError("");setCopied("");try{const response=await authenticatedFetch("/api/integrations/sweduc/master-secrets",{method:"POST",headers:{Authorization:`Bearer ${accessToken}`,"Content-Type":"application/json"},body:JSON.stringify({confirm:true}),cache:"no-store"});const data=await response.json().catch(()=>({})) as {secrets?:{clientId:string;clientSecret:string};error?:string};if(response.status===401)window.dispatchEvent(new Event("jpi-session-invalid"));if(!response.ok||!data.secrets)throw new Error(data.error||"Não foi possível revelar as credenciais protegidas.");setMasterSecrets(data.secrets);setSecretsVisible(true)}catch(e){setSecretsError(e instanceof Error?e.message:"Não foi possível revelar as credenciais protegidas.")}finally{setSecretsBusy(false)}}
+  function hideSecrets(){setSecretsVisible(false);setMasterSecrets(null);setCopied("");setSecretsError("")}
+  function closeApiInfo(){setApiInfoOpen(false);hideSecrets()}
+  async function copySecret(field:"clientId"|"clientSecret"){const value=masterSecrets?.[field];if(!value)return;try{await navigator.clipboard.writeText(value);setCopied(field);window.setTimeout(()=>setCopied(current=>current===field?"":current),1800)}catch{setSecretsError("Não foi possível copiar. Verifique a permissão da área de transferência do navegador.")}}
   const tone=config?.ultimo_status==="conectado"?"connected":config?.ultimo_status==="erro"?"disconnected":"pending";const label=config?.ultimo_status==="conectado"?"Conectado":config?.ultimo_status==="erro"?"Erro":config?.credencial_configurada?"Pendente":"Não configurado";
   return <div className="integration-detail-panel"><div className="integration-detail-heading"><span className="integration-icon blue"><BookOpenCheck/></span><div><h2>SWeduc</h2><p>Alunos, matrículas, responsáveis e dados financeiros.</p></div><span className={`integration-state-badge ${tone}`}><i/>{label}</span></div>
     {error&&<div className="error-box">{error}</div>}{message&&<div className="success-box">{message}</div>}
     <div className="notice compact"><ShieldCheck/><span>Esta integração é independente da Agenda Edu. HOST, CLIENT_ID e CLIENT_SECRET ficam protegidos e nunca aparecem em logs ou no código.</span></div>
+    {isMaster&&<button type="button" className="agenda-api-info-button sweduc-api-info-button" onClick={()=>setApiInfoOpen(true)}><KeyRound/><span><strong>Informações API e credenciais SWeduc</strong><small>Consultar endpoints, dados salvos e credenciais protegidas.</small></span><ArrowUpRight/></button>}
     <form className="communication-channel-card data-form" onSubmit={save}><div className="communication-channel-head"><span className="integration-icon blue"><KeyRound/></span><div><h3>Conexão segura</h3><small>OAuth 2 · API oficial de Alunos</small></div></div>
       <label>HOST<input type="url" value={host} onChange={e=>setHost(e.target.value)} placeholder="https://seu-host.sweduc.com.br" required disabled={!canEdit}/></label>
       <label>CLIENT_ID<input type="password" value={clientId} onChange={e=>setClientId(e.target.value)} placeholder={config?.credencial_configurada?"Protegido — deixe vazio para manter":"CLIENT_ID fornecido pela SWeduc"} autoComplete="new-password" disabled={!canEdit}/></label>
@@ -27,5 +34,45 @@ export function SweducSettings({accessToken,canEdit,onStatus}:{accessToken:strin
     <div className="communication-channel-card"><div className="communication-channel-head"><span className="integration-icon blue"><UsersRound/></span><div><h3>Alunos importados</h3><small>{config?.total_sincronizado||0} matrícula(s) na última sincronização</small></div></div><div className="toolbar"><div className="search-input"><Search/><input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Buscar aluno por nome"/></div><button type="button" className="secondary" onClick={()=>void load(search).catch(e=>setError(e.message))}>Consultar</button></div>
       <div className="table-card"><table><thead><tr><th>Aluno</th><th>Matrícula</th><th>Turma / série</th><th>Responsáveis e contatos</th><th>Financeiro</th><th>Situação</th></tr></thead><tbody>{students.map(student=><tr key={student.matricula_id}><td><strong>{student.nome}</strong><span className="subcell">{student.unidade||"Unidade não informada"}</span></td><td>{student.numero_matricula||student.matricula_id}<span className="subcell">{student.ano_letivo||"—"}</span></td><td>{[student.turma,student.serie].filter(Boolean).join(" · ")||"—"}<span className="subcell">{student.curso||""}</span></td><td>{student.responsaveis[0]?.nome||"Não informado"}<span className="subcell">{student.responsaveis[0]?.telefones?.[0]?.numero||student.responsaveis[0]?.emails?.[0]?.email||"Sem contato"}</span></td><td>{student.financeiro.length?`${student.financeiro.length} título(s) disponível(is)`:"Sem dados"}</td><td><span className="status">{student.status||"Não informado"}</span></td></tr>)}{!students.length&&<tr><td colSpan={6}>Nenhum aluno sincronizado ou encontrado.</td></tr>}</tbody></table></div>
     </div>
+    {isMaster&&apiInfoOpen&&<div className="agenda-api-modal-backdrop" role="presentation" onMouseDown={event=>{if(event.currentTarget===event.target)closeApiInfo()}}>
+      <section className="agenda-api-modal sweduc-api-modal" role="dialog" aria-modal="true" aria-labelledby="sweduc-api-modal-title">
+        <header className="agenda-api-modal-head">
+          <div className="agenda-api-modal-title"><span><KeyRound/></span><div><small>ACESSO EXCLUSIVO DO MASTER</small><h2 id="sweduc-api-modal-title">Informações API e credenciais SWeduc</h2><p>Dados de conexão guardados para consulta e manutenção futura da integração.</p></div></div>
+          <button type="button" className="agenda-api-modal-close" onClick={closeApiInfo} aria-label="Fechar"><X/></button>
+        </header>
+        <div className="agenda-api-modal-body">
+          <section className="agenda-api-status-card">
+            <div className="agenda-api-status-copy"><span className={config?.ultimo_status==="conectado"?"connected":config?.ultimo_status==="erro"?"error":"pending"}></span><div><small>STATUS DA INTEGRAÇÃO</small><strong>{config?.ultimo_status==="conectado"?"SWeduc conectada":config?.ultimo_status==="erro"?"SWeduc com erro":"SWeduc pendente"}</strong><p>{config?.credencial_configurada?"Credenciais guardadas no cofre seguro do servidor.":"Credenciais ainda não cadastradas."}</p></div></div>
+            <span className="master-only-badge">MASTER</span>
+          </section>
+          <div className="agenda-api-modal-grid">
+            <section className="agenda-api-info-section">
+              <div className="agenda-api-section-title"><Link2/><div><strong>Conexão e endpoints</strong><small>Referência rápida para manutenção futura.</small></div></div>
+              <dl className="agenda-api-data-list">
+                <div><dt>HOST</dt><dd className="mono">{config?.host||"Não informado"}</dd></div>
+                <div><dt>Autenticação</dt><dd>OAuth 2 · client_credentials</dd></div>
+                <div><dt>Obter token</dt><dd className="mono">POST /oauth/v2/token</dd></div>
+                <div><dt>Listar alunos</dt><dd className="mono">GET /api/v2/alunos/listar</dd></div>
+                <div><dt>Detalhar matrícula</dt><dd className="mono">GET /api/v2/alunos/detalhes?matricula_id=...</dd></div>
+                <div><dt>Documentação</dt><dd><a className="sweduc-api-doc-link" href="https://assets.sweduc.com.br/assets-website/docs_api_alunos.html" target="_blank" rel="noreferrer">Abrir documentação oficial <ArrowUpRight/></a></dd></div>
+              </dl>
+            </section>
+            <section className="agenda-api-info-section credentials">
+              <div className="agenda-api-section-title"><ShieldCheck/><div><strong>Credenciais protegidas</strong><small>Carregadas do cofre somente quando o Master solicitar.</small></div></div>
+              <div className="agenda-api-credential-list">
+                <div><label>CLIENT_ID</label><div><span className={secretsVisible?"revealed":"masked"}>{secretsVisible&&masterSecrets?.clientId?masterSecrets.clientId:"••••••••••••••••••••"}</span><button type="button" disabled={!secretsVisible||!masterSecrets?.clientId} onClick={()=>void copySecret("clientId")} title="Copiar CLIENT_ID">{copied==="clientId"?<Check/>:<Copy/>}</button></div></div>
+                <div><label>CLIENT_SECRET</label><div><span className={secretsVisible?"revealed":"masked"}>{secretsVisible&&masterSecrets?.clientSecret?masterSecrets.clientSecret:"••••••••••••••••••••"}</span><button type="button" disabled={!secretsVisible||!masterSecrets?.clientSecret} onClick={()=>void copySecret("clientSecret")} title="Copiar CLIENT_SECRET">{copied==="clientSecret"?<Check/>:<Copy/>}</button></div></div>
+              </div>
+              <div className="agenda-api-secret-actions">
+                {!secretsVisible?<button type="button" className="primary" onClick={()=>void revealSecrets()} disabled={secretsBusy||!config?.credencial_configurada}><Eye/>{secretsBusy?"Carregando…":"Revelar credenciais"}</button>:<button type="button" className="secondary" onClick={hideSecrets}><EyeOff/>Ocultar credenciais</button>}
+                <small>Os valores revelados ficam disponíveis por no máximo 60 segundos e não são salvos no navegador.</small>
+                {secretsError&&<span className="agenda-secret-error">{secretsError}</span>}
+              </div>
+            </section>
+          </div>
+          <div className="agenda-api-security-note"><ShieldCheck/><div><strong>Proteção mantida</strong><span>Somente o perfil Master consegue abrir esta janela e solicitar os valores reais ao servidor.</span></div></div>
+        </div>
+      </section>
+    </div>}
   </div>;
 }

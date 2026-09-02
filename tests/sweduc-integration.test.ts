@@ -3,6 +3,7 @@ import {readFileSync} from "node:fs";
 import test from "node:test";
 
 const route=readFileSync(new URL("../app/api/integrations/sweduc/route.ts",import.meta.url),"utf8");
+const secretRoute=readFileSync(new URL("../app/api/integrations/sweduc/master-secrets/route.ts",import.meta.url),"utf8");
 const ui=readFileSync(new URL("../components/sweduc-settings.tsx",import.meta.url),"utf8");
 const settings=readFileSync(new URL("../components/pages.tsx",import.meta.url),"utf8");
 const migration=readFileSync(new URL("../supabase/migrations/20260901120000_criar_integracao_sweduc.sql",import.meta.url),"utf8");
@@ -17,13 +18,16 @@ test("cria uma integração SWeduc separada da Agenda Edu",()=>{
 
 test("protege credenciais e exige permissão de integração",()=>{
   assert.match(route,/JPI_BACKEND_SECRET/);assert.match(route,/store_sweduc_secret/);assert.match(route,/settings\.integrations\.edit/);
+  assert.match(secretRoute,/get_my_access/);assert.match(secretRoute,/role\|\|""\)\.toLowerCase\(\)!=="master"/);assert.match(secretRoute,/get_sweduc_secret/);
+  assert.match(secretRoute,/expiresIn:60/);assert.doesNotMatch(secretRoute,/console\.(log|error)/);
   assert.match(migration,/vault\.create_secret/);assert.match(migration,/vault\.update_secret/);assert.match(migration,/enable row level security/);
   assert.doesNotMatch(ui,/console\.(log|error)/);assert.doesNotMatch(route,/console\.(log|error)/);
 });
 
 test("oferece configuração, teste, sincronização e consulta",()=>{
-  for(const label of ["HOST","CLIENT_ID","CLIENT_SECRET","Testar conexão","Sincronizar alunos","Buscar aluno por nome"])assert.match(ui,new RegExp(label));
+  for(const label of ["HOST","CLIENT_ID","CLIENT_SECRET","Informações API e credenciais SWeduc","Revelar credenciais","Testar conexão","Sincronizar alunos","Buscar aluno por nome"])assert.match(ui,new RegExp(label));
   assert.doesNotMatch(ui,/<label>Usuário|<label>Senha/);
+  assert.match(ui,/isMaster&&apiInfoOpen/);assert.match(ui,/\/api\/integrations\/sweduc\/master-secrets/);
   assert.match(route,/supplied===2/);assert.doesNotMatch(route,/body\.username|body\.password/);
   assert.match(route,/action==="test"/);assert.match(route,/action==="sync"/);assert.match(route,/sweduc_alunos/);
 });
