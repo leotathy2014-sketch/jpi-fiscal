@@ -32,6 +32,21 @@ test("gera OAuth client_credentials com autenticação Basic sem credenciais na 
   assert.ok(capturedInit?.signal instanceof AbortSignal);
 });
 
+test("permite testar OAuth password sem guardar usuário ou senha na URL",async()=>{
+  let capturedUrl="";let capturedInit:RequestInit|undefined;
+  const fakeFetch:typeof fetch=async(input,init)=>{capturedUrl=String(input);capturedInit=init;return new Response(JSON.stringify({access_token:"token-password",expires_in:3600}),{status:200,headers:{"Content-Type":"application/json"}})};
+  const result=await createSweducAccessToken(credentials,fakeFetch,{grantType:"password",username:"usuario-teste",password:"senha-teste"});
+  assert.equal(result.accessToken,"token-password");
+  assert.equal(capturedUrl,"https://joaopauloi.escolarsw.com.br/oauth/v2/token");
+  assert.match(String(capturedInit?.body),/grant_type=password/);
+  assert.match(String(capturedInit?.body),/client_id=cliente/);
+  assert.match(String(capturedInit?.body),/client_secret=segredo/);
+  assert.match(String(capturedInit?.body),/username=usuario-teste/);
+  assert.match(String(capturedInit?.body),/password=senha-teste/);
+  assert.doesNotMatch(capturedUrl,/usuario-teste|senha-teste|cliente|segredo/);
+  assert.doesNotMatch(Object.keys((capturedInit?.headers||{}) as Record<string,string>).join(","),/Authorization/);
+});
+
 test("usa os endpoints oficiais de listagem e detalhes",async()=>{
   const urls:string[]=[];const fakeFetch:typeof fetch=async(input)=>{const url=String(input);urls.push(url);return new Response(JSON.stringify(url.includes("detalhes")?{detalhes:{matricula_id:101},responsaveis:[{nome:"Maria"}],financeiro:[{titulo_id:7}]}:{current_page:1,data:[{nome:"João",matricula_id:101}],last_page:1,total:1}),{status:200,headers:{"Content-Type":"application/json"}})};
   const listing=await listSweducStudentsWithToken(credentials.host,"token",{page:1,search:"João"},fakeFetch);

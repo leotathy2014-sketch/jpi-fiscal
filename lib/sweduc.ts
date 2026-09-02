@@ -7,6 +7,8 @@ export type SweducStudentSummary={
 export type SweducStudentDetail={
   detalhes:Record<string,unknown>;responsaveis:Array<Record<string,unknown>>;financeiro:Array<Record<string,unknown>>;
 };
+export type SweducTokenGrant="client_credentials"|"password";
+export type SweducTokenOptions={grantType?:SweducTokenGrant;username?:string;password?:string};
 type FetchLike=typeof fetch;
 const SWEDUC_TIMEOUT_MS=15000;
 const SWEDUC_HOST_DOMAINS=["sweduc.com.br","escolarsw.com.br"] as const;
@@ -36,10 +38,15 @@ async function apiMessage(response:Response,fallback:string){
   return body.error_description||body.message||body.error||fallback;
 }
 
-export async function createSweducAccessToken(credentials:SweducCredentials,fetchImpl:FetchLike=fetch){
+export async function createSweducAccessToken(credentials:SweducCredentials,fetchImpl:FetchLike=fetch,options:SweducTokenOptions={}){
+  const grantType=options.grantType||"client_credentials";
   const basic=Buffer.from(`${credentials.clientId}:${credentials.clientSecret}`,"utf8").toString("base64");
-  const body=new URLSearchParams({grant_type:"client_credentials"});
-  const response=await fetchImpl(`${normalizeSweducHost(credentials.host)}/oauth/v2/token`,{method:"POST",headers:{Accept:"application/json","Content-Type":"application/x-www-form-urlencoded",Authorization:`Basic ${basic}`},body,cache:"no-store",redirect:"error",signal:AbortSignal.timeout(SWEDUC_TIMEOUT_MS)});
+  const body=grantType==="password"
+    ?new URLSearchParams({grant_type:"password",client_id:credentials.clientId,client_secret:credentials.clientSecret,username:String(options.username||""),password:String(options.password||"")})
+    :new URLSearchParams({grant_type:"client_credentials"});
+  const headers:Record<string,string>={Accept:"application/json","Content-Type":"application/x-www-form-urlencoded"};
+  if(grantType==="client_credentials")headers.Authorization=`Basic ${basic}`;
+  const response=await fetchImpl(`${normalizeSweducHost(credentials.host)}/oauth/v2/token`,{method:"POST",headers,body,cache:"no-store",redirect:"error",signal:AbortSignal.timeout(SWEDUC_TIMEOUT_MS)});
   if(!response.ok)throw new Error(await apiMessage(response,"A SWeduc não aceitou as credenciais informadas."));
   const result=await response.json() as {access_token?:string;expires_in?:number;token_type?:string};
   if(!result.access_token)throw new Error("A SWeduc não retornou o token de acesso esperado.");

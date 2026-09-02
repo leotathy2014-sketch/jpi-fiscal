@@ -28,11 +28,12 @@ test("protege credenciais e exige permissão de integração",()=>{
 });
 
 test("oferece configuração, teste, sincronização e consulta",()=>{
-  for(const label of ["HOST","CLIENT_ID","CLIENT_SECRET","Informações API e credenciais SWeduc","Revelar credenciais","Teste antes de gravar","Testar sem salvar","Testar credenciais salvas","Sincronizar alunos","Buscar aluno por nome"])assert.match(ui,new RegExp(label));
-  assert.doesNotMatch(ui,/<label>Usuário|<label>Senha/);
+  for(const label of ["HOST","CLIENT_ID","CLIENT_SECRET","Informações API e credenciais SWeduc","Revelar credenciais","Teste antes de gravar","Testar sem salvar","Testar credenciais salvas","Sincronizar alunos","Buscar aluno por nome","Testar com usuário e senha","USUÁRIO","SENHA"])assert.match(ui,new RegExp(label));
+  assert.match(ui,/useUsernamePassword/);assert.match(ui,/grantType===\"password\"/);
   assert.match(ui,/isMaster&&apiInfoOpen/);assert.match(ui,/\/api\/integrations\/sweduc\/master-secrets/);
   assert.match(ui,/\/api\/integrations\/sweduc\/test-credentials/);assert.match(ui,/Nenhuma credencial ou aluno será salvo/);
-  assert.match(route,/supplied===2/);assert.doesNotMatch(route,/body\.username|body\.password/);
+  assert.match(route,/supplied===2/);assert.doesNotMatch(route,/supabase\.from\("sweduc_secrets"\)/);
+  assert.match(temporaryTestRoute,/useUsernamePassword/);assert.match(temporaryTestRoute,/username/);assert.match(temporaryTestRoute,/password/);assert.match(temporaryTestRoute,/grantType/);
   assert.match(route,/action==="test"/);assert.match(route,/action==="sync"/);assert.match(route,/sweduc_alunos/);
   assert.match(temporaryTestRoute,/createSweducAccessToken/);assert.match(temporaryTestRoute,/listSweducStudentsWithToken/);assert.match(temporaryTestRoute,/getSweducStudentDetailsWithToken/);assert.match(temporaryTestRoute,/Nada foi salvo ou importado/);
 });
