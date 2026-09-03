@@ -45,7 +45,6 @@ async function mapInBatches<T,R>(items:T[],size:number,mapper:(item:T)=>Promise<
 export async function GET(request:NextRequest){
   const auth=await authorize(request);if(!auth.ok)return auth.response;
   if(!await hasServerPermission(auth.supabase,"settings.integrations.view")&&!await hasServerPermission(auth.supabase,"settings.integrations.edit"))return json({error:"Seu usuário não possui permissão para consultar esta integração."},403);
-  const search=request.nextUrl.searchParams.get("search")?.trim()||"";
   const {data:config,error}=await auth.supabase.from("sweduc_config").select("host,credencial_configurada,ultimo_status,testada_em,sincronizada_em,ultimo_erro,total_sincronizado").eq("id",true).maybeSingle();
   if(error||!config)return json({error:"A estrutura da integração SWeduc ainda não foi aplicada ao banco."},503);
   let authMethod:SweducTokenGrant="client_credentials";let usuarioConfigurado=false;
@@ -59,10 +58,7 @@ export async function GET(request:NextRequest){
     try{const saved=await credentials(auth.supabase);const resolved=await resolveSweducAcademicYear(saved.host,activeAcademicYear);academicYears=resolved.years;activeAcademicYear=resolved.selected.year}catch{}
   }
   if(!academicYears.length)academicYears=[{id:0,year:activeAcademicYear}];
-  let query=auth.supabase.from("sweduc_alunos").select("matricula_id,aluno_id,nome,data_nascimento,numero_aluno,numero_matricula,status,unidade,curso,serie,turma,ano_letivo,responsaveis,financeiro,sincronizado_em",{count:"exact"}).eq("ano_letivo",String(activeAcademicYear)).order("nome").limit(100);
-  if(search)query=query.ilike("nome",`%${search.replace(/[%_]/g,"")}%`);
-  const students=await query;
-  return json({ok:true,config:{...config,auth_method:authMethod,usuario_configurado:usuarioConfigurado,ano_letivo_ativo:defaultAcademicYear},academicYears,selectedAcademicYear:activeAcademicYear,students:students.data||[],total:students.count||0});
+  return json({ok:true,config:{...config,auth_method:authMethod,usuario_configurado:usuarioConfigurado,ano_letivo_ativo:defaultAcademicYear},academicYears,selectedAcademicYear:activeAcademicYear,students:[],total:0});
 }
 
 export async function POST(request:NextRequest){
@@ -102,22 +98,24 @@ export async function POST(request:NextRequest){
     try{activeCredentials=await credentials(auth.supabase);const activeYear=await getSweducActiveAcademicYear(activeCredentials.host);const sample=await listSweducStudents(activeCredentials,{page:1,ano_letivo_id:activeYear.id});const at=new Date().toISOString();await auth.supabase.from("sweduc_config").update({host:activeCredentials.host,ultimo_status:"conectado",testada_em:at,ultimo_erro:null,updated_at:at,updated_by:auth.user.id}).eq("id",true);return json({ok:true,academicYear:activeYear.year,message:`Conexão confirmada para o ano letivo ${activeYear.year}. A SWeduc retornou ${Number(sample.total||sample.data?.length||0)} matrícula(s). Nenhum dado foi importado neste teste.`});}catch(error){const message=safeSweducError(error,activeCredentials);await auth.supabase.from("sweduc_config").update({ultimo_status:"erro",ultimo_erro:message,updated_at:new Date().toISOString(),updated_by:auth.user.id}).eq("id",true);return json({error:message},400)}
   }
   if(action==="sync"){
-    let synced=0;let totalAvailable=0;let activeCredentials:SweducCredentials|undefined;let activeAccessToken="";const rawPage=Number(body.page||1);const requestedPage=Number.isSafeInteger(rawPage)?Math.max(1,Math.min(rawPage,MAX_SWEDUC_PAGES)):1;
+    let synced=0;let totalAvailable=0;let activeCredentials:SweducCredentials|undefined;let activeAccessToken="";const rawPage=Number(body.page||1);const requestedPage=Number.isSafeInteger(rawPage)?Math.max(1,Math.min(rawPage,MAX_SWEDUC_PAGES)):1;const search=String(body.search||"").trim().toLocaleLowerCase("pt-BR");
     try{
-      const creds=await credentials(auth.supabase);activeCredentials=creds;const rawYear=Number(body.academicYear||0);const resolved=await resolveSweducAcademicYear(creds.host,Number.isSafeInteger(rawYear)&&rawYear>1900?rawYear:undefined);const activeYear=resolved.selected;const token=await createSweducAccessToken(creds);activeAccessToken=token.accessToken;await auth.supabase.from("sweduc_config").update({ultimo_status:"sincronizando",ultimo_erro:null,updated_at:new Date().toISOString(),updated_by:auth.user.id}).eq("id",true);
+      const creds=await credentials(auth.supabase);activeCredentials=creds;const rawYear=Number(body.academicYear||0);const resolved=await resolveSweducAcademicYear(creds.host,Number.isSafeInteger(rawYear)&&rawYear>1900?rawYear:undefined);const activeYear=resolved.selected;const token=await createSweducAccessToken(creds);activeAccessToken=token.accessToken;await auth.supabase.from("sweduc_config").update({ultimo_status:"conectado",ultimo_erro:null,updated_at:new Date().toISOString(),updated_by:auth.user.id}).eq("id",true);
       const page=requestedPage;let lastPage=requestedPage;
+      let rows:Array<Record<string,unknown>>=[];
       {
         const listing=await listSweducStudentsWithToken(creds.host,token.accessToken,{page,ano_letivo_id:activeYear.id});lastPage=Math.min(Math.max(1,Number(listing.last_page||page)),MAX_SWEDUC_PAGES);totalAvailable=Number(listing.total||0);
-        const rows=await mapInBatches(listing.data||[],5,async(summary:SweducStudentSummary)=>{
+        const summaries=(listing.data||[]).filter((summary:SweducStudentSummary)=>!search||String(summary.nome||"").toLocaleLowerCase("pt-BR").includes(search));
+        rows=await mapInBatches(summaries,5,async(summary:SweducStudentSummary)=>{
           let detail:{detalhes:Record<string,unknown>;responsaveis:Array<Record<string,unknown>>;financeiro:Array<Record<string,unknown>>}={detalhes:{},responsaveis:[],financeiro:[]};let detailError="";
           try{detail=await getSweducStudentDetailsWithToken(creds.host,token.accessToken,Number(summary.matricula_id))}catch(error){detailError=safeSweducError(error,creds,[token.accessToken])}
           const d=detail.detalhes;
           return {matricula_id:Number(summary.matricula_id),aluno_id:Number(summary.aluno_id||d.aluno_id)||null,nome:String(summary.nome||d.nome||"Aluno sem nome"),data_nascimento:String(summary.data_nascimento||d.data_nascimento||"")||null,numero_aluno:String(summary.num_aluno||d.numeroaluno||"")||null,numero_matricula:String(summary.num_matricula||"")||null,status:String(summary.status||d.status||"")||null,unidade:String(summary.unidade||d.unidade||"")||null,curso:String(summary.curso||d.curso||"")||null,serie:String(summary.serie||d.serie||"")||null,turma:String(summary.turma||d.turma||"")||null,ano_letivo:String(summary.ano_letivo||d.ano_letivo||"")||null,endereco:String(d.endereco||"")||null,responsaveis:detail.responsaveis,financeiro:detail.financeiro,dados_origem:{resumo:summary,detalhes:d,detalhes_erro:detailError||undefined},sincronizado_em:new Date().toISOString()};
         });
-        if(rows.length){const result=await auth.supabase.from("sweduc_alunos").upsert(rows,{onConflict:"matricula_id"});if(result.error)throw new Error("Não foi possível atualizar os alunos no JPI Fiscal.");synced+=rows.length}
+        synced+=rows.length;
       }
-      const hasNext=page<lastPage;const at=new Date().toISOString();const statusUpdate:Record<string,unknown>={ultimo_status:hasNext?"sincronizando":"conectado",ultimo_erro:null,updated_at:at,updated_by:auth.user.id};if(!hasNext){statusUpdate.sincronizada_em=at;statusUpdate.total_sincronizado=totalAvailable||synced}await auth.supabase.from("sweduc_config").update(statusUpdate).eq("id",true);
-      return json({ok:true,synced,page,lastPage,nextPage:hasNext?page+1:null,academicYear:activeYear.year,message:hasNext?`Página ${page} de ${lastPage} do ano letivo ${activeYear.year} sincronizada.`:`Sincronização do ano letivo ${activeYear.year} concluída.`});
+      const hasNext=page<lastPage;const at=new Date().toISOString();const statusUpdate:Record<string,unknown>={ultimo_status:"conectado",ultimo_erro:null,updated_at:at,updated_by:auth.user.id};if(!hasNext){statusUpdate.sincronizada_em=at;statusUpdate.total_sincronizado=totalAvailable}await auth.supabase.from("sweduc_config").update(statusUpdate).eq("id",true);
+      return json({ok:true,synced,students:rows,page,lastPage,nextPage:hasNext?page+1:null,academicYear:activeYear.year,totalAvailable,message:hasNext?`Página ${page} de ${lastPage} do ano letivo ${activeYear.year} consultada na SWeduc.`:`Consulta do ano letivo ${activeYear.year} concluída. Nada foi salvo no banco.`});
     }catch(error){const message=safeSweducError(error,activeCredentials,[activeAccessToken]);await auth.supabase.from("sweduc_config").update({ultimo_status:"erro",ultimo_erro:message,updated_at:new Date().toISOString(),updated_by:auth.user.id}).eq("id",true);return json({error:message,synced},400)}
   }
   if(action==="import"){
@@ -125,8 +123,8 @@ export async function POST(request:NextRequest){
     if(!canCreate&&!canEdit)return json({error:"Seu usuário não possui permissão para importar alunos para a emissão."},403);
     const matriculaId=Number(body.matriculaId||0);const responsibleIndex=Number(body.responsibleIndex||0);
     if(!Number.isSafeInteger(matriculaId)||matriculaId<=0)return json({error:"Selecione uma matrícula SWeduc válida."},400);
-    const {data:student,error:studentError}=await auth.supabase.from("sweduc_alunos").select("matricula_id,aluno_id,nome,data_nascimento,numero_aluno,numero_matricula,status,unidade,curso,serie,turma,ano_letivo,responsaveis,financeiro,dados_origem").eq("matricula_id",matriculaId).maybeSingle();
-    if(studentError||!student)return json({error:"Matrícula SWeduc não encontrada. Sincronize o ano letivo antes de importar."},404);
+    const student=body.student&&typeof body.student==="object"?body.student as Record<string,unknown>:null;
+    if(!student||Number(student.matricula_id)!==matriculaId)return json({error:"Consulte a matrícula na SWeduc antes de carregar para a nota."},400);
     const responsaveis=Array.isArray(student.responsaveis)?student.responsaveis as Array<Record<string,unknown>>:[];
     const selectedResponsible=responsaveis[Math.max(0,Math.min(responsibleIndex,responsaveis.length-1))]||null;
     const details=((student.dados_origem as {detalhes?:Record<string,unknown>}|null)?.detalhes)||{};
