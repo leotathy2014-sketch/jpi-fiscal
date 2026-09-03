@@ -31,7 +31,7 @@ test("protege credenciais e exige permissão de integração",()=>{
 });
 
 test("oferece configuração, teste e consulta sem salvar lista de alunos",()=>{
-  for(const label of ["HOST","CLIENT_ID","CLIENT_SECRET","Informações API e credenciais SWeduc","Revelar credenciais","Teste antes de gravar","Testar sem salvar","Testar conexão com API","Consultar SWeduc","Buscar aluno de","USUÁRIO","SENHA","Cofre seguro do servidor","JPI_BACKEND_SECRET","Environment Variables"])assert.match(ui,new RegExp(label));
+  for(const label of ["HOST","CLIENT_ID","CLIENT_SECRET","Informações API e credenciais SWeduc","Revelar credenciais","Teste antes de gravar","Testar sem salvar","Testar conexão com API","Consultar SWeduc","Buscar rápido nos alunos carregados","USUÁRIO","SENHA","Cofre seguro do servidor","JPI_BACKEND_SECRET","Environment Variables"])assert.match(ui,new RegExp(label));
   assert.doesNotMatch(ui,/Método de autenticação/);assert.match(ui,/grantType:"password"/);
   assert.match(ui,/copyBackendSecretName/);assert.match(ui,/Por segurança, o valor dessa chave mestra não é exibido/);
   assert.match(ui,/isMaster&&apiInfoOpen/);assert.match(ui,/\/api\/integrations\/sweduc\/master-secrets/);
@@ -44,6 +44,7 @@ test("oferece configuração, teste e consulta sem salvar lista de alunos",()=>{
   assert.match(route,/grantType,username,password/);assert.match(route,/auth_method/);assert.match(route,/usuario_configurado/);
   assert.match(route,/resolveSweducAcademicYear/);assert.match(route,/ano_letivo_id:activeYear\.id/);assert.match(route,/Nada foi salvo no banco/);
   assert.match(temporaryTestRoute,/ano_letivo_id:activeYear\.id/);assert.match(ui,/Alunos por ano letivo/);assert.match(ui,/Ano letivo considerado/);
+  assert.match(ui,/visibleStudents=useMemo/);assert.match(ui,/visibleStudents\.map/);assert.doesNotMatch(ui,/run\("sync",\{page,academicYear:year\|\|"",search\}\)/);
   assert.match(ui,/canEdit&&<>\s*<label>USUÁRIO/);assert.doesNotMatch(ui,/sweduc-test-credentials/);
 });
 
