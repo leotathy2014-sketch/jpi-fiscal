@@ -42,7 +42,7 @@ test("oferece configuração, teste e consulta sem salvar lista de alunos",()=>{
   assert.match(temporaryTestRoute,/useUsernamePassword/);assert.match(temporaryTestRoute,/username/);assert.match(temporaryTestRoute,/password/);assert.match(temporaryTestRoute,/grantType/);
   assert.match(route,/action==="test"/);assert.match(route,/action==="sync"/);assert.doesNotMatch(route,/from\("sweduc_alunos"\)\.upsert/);
   assert.match(temporaryTestRoute,/createSweducAccessToken/);assert.match(temporaryTestRoute,/listSweducStudentsWithToken/);assert.match(temporaryTestRoute,/getSweducStudentDetailsWithToken/);assert.match(temporaryTestRoute,/Nada foi salvo ou importado/);
-  assert.match(route,/mapSummaryToGridWithDetails/);assert.match(route,/detalhes_carregados/);assert.match(route,/getSweducStudentDetailsWithToken/);
+  assert.match(route,/rows=summaries\.map\(mapSummaryToGrid\)/);assert.match(route,/search:search\|\|undefined/);assert.match(route,/getSweducStudentDetailsWithToken/);
   assert.match(route,/MAX_SWEDUC_PAGES=1000/);assert.match(ui,/while\(page<=1000\)/);assert.doesNotMatch(route,/Math\.min\(Number\(body\.page\|\|1\),100\)/);
   assert.match(route,/grantType,username,password/);assert.match(route,/auth_method/);assert.match(route,/usuario_configurado/);
   assert.match(route,/resolveSweducAcademicYear/);assert.match(route,/ano_letivo_id:activeYear\.id/);assert.match(route,/Nada foi salvo no banco/);
@@ -69,15 +69,19 @@ test("mostra no painel e cadastro a atualização de alunos pela API",()=>{
   assert.match(livePages,/Manual \/ sem API/);
 });
 
-test("permite buscar aluno SWeduc em mensalidades e assistente sem abrir configurações",()=>{
+test("permite buscar aluno SWeduc no cadastro e no assistente sem abrir configurações",()=>{
   assert.match(livePages,/SweducOperationalPicker/);
   assert.match(assistant,/SweducOperationalPicker/);
   assert.match(operationalPicker,/Buscar aluno na SWeduc/);
   assert.match(operationalPicker,/Ano letivo/);
-  assert.match(operationalPicker,/Responsável financeiro/);
+  assert.match(operationalPicker,/responsável financeiro/i);
+  assert.match(operationalPicker,/Confirmar responsável financeiro/);
+  assert.match(operationalPicker,/Selecionar aluno/);
   assert.match(operationalPicker,/Carregar para a nota/);
   assert.match(operationalPicker,/action:"sync"/);
+  assert.match(operationalPicker,/action:"details"/);
   assert.match(operationalPicker,/action:"import"/);
-  assert.match(route,/payments\.create/);
+  assert.match(route,/students\.view/);
+  assert.match(route,/students\.create/);
   assert.match(route,/nfse\.prepare/);
 });
