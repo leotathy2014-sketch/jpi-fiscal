@@ -36,10 +36,8 @@ async function credentials(supabase:SupabaseClient){
   return {...parsed,host:normalizeSweducHost(String(configResult.data?.host||parsed.host))};
 }
 
-async function mapInBatches<T,R>(items:T[],size:number,mapper:(item:T)=>Promise<R>){
-  const result:R[]=[];
-  for(let index=0;index<items.length;index+=size)result.push(...await Promise.all(items.slice(index,index+size).map(mapper)));
-  return result;
+function mapSummaryToGrid(summary:SweducStudentSummary){
+  return {matricula_id:Number(summary.matricula_id),aluno_id:Number(summary.aluno_id||0)||null,nome:String(summary.nome||"Aluno sem nome"),data_nascimento:String(summary.data_nascimento||"")||null,numero_aluno:String(summary.num_aluno||"")||null,numero_matricula:String(summary.num_matricula||"")||null,status:String(summary.status||"")||null,unidade:String(summary.unidade||"")||null,curso:String(summary.curso||"")||null,serie:String(summary.serie||"")||null,turma:String(summary.turma||"")||null,ano_letivo:String(summary.ano_letivo||"")||null,responsaveis:[],financeiro:[],dados_origem:{resumo:summary},sincronizado_em:new Date().toISOString()};
 }
 
 export async function GET(request:NextRequest){
@@ -106,12 +104,7 @@ export async function POST(request:NextRequest){
       {
         const listing=await listSweducStudentsWithToken(creds.host,token.accessToken,{page,ano_letivo_id:activeYear.id});lastPage=Math.min(Math.max(1,Number(listing.last_page||page)),MAX_SWEDUC_PAGES);totalAvailable=Number(listing.total||0);
         const summaries=(listing.data||[]).filter((summary:SweducStudentSummary)=>!search||String(summary.nome||"").toLocaleLowerCase("pt-BR").includes(search));
-        rows=await mapInBatches(summaries,5,async(summary:SweducStudentSummary)=>{
-          let detail:{detalhes:Record<string,unknown>;responsaveis:Array<Record<string,unknown>>;financeiro:Array<Record<string,unknown>>}={detalhes:{},responsaveis:[],financeiro:[]};let detailError="";
-          try{detail=await getSweducStudentDetailsWithToken(creds.host,token.accessToken,Number(summary.matricula_id))}catch(error){detailError=safeSweducError(error,creds,[token.accessToken])}
-          const d=detail.detalhes;
-          return {matricula_id:Number(summary.matricula_id),aluno_id:Number(summary.aluno_id||d.aluno_id)||null,nome:String(summary.nome||d.nome||"Aluno sem nome"),data_nascimento:String(summary.data_nascimento||d.data_nascimento||"")||null,numero_aluno:String(summary.num_aluno||d.numeroaluno||"")||null,numero_matricula:String(summary.num_matricula||"")||null,status:String(summary.status||d.status||"")||null,unidade:String(summary.unidade||d.unidade||"")||null,curso:String(summary.curso||d.curso||"")||null,serie:String(summary.serie||d.serie||"")||null,turma:String(summary.turma||d.turma||"")||null,ano_letivo:String(summary.ano_letivo||d.ano_letivo||"")||null,endereco:String(d.endereco||"")||null,responsaveis:detail.responsaveis,financeiro:detail.financeiro,dados_origem:{resumo:summary,detalhes:d,detalhes_erro:detailError||undefined},sincronizado_em:new Date().toISOString()};
-        });
+        rows=summaries.map(mapSummaryToGrid);
         synced+=rows.length;
       }
       const hasNext=page<lastPage;const at=new Date().toISOString();const statusUpdate:Record<string,unknown>={ultimo_status:"conectado",ultimo_erro:null,updated_at:at,updated_by:auth.user.id};if(!hasNext){statusUpdate.sincronizada_em=at;statusUpdate.total_sincronizado=totalAvailable}await auth.supabase.from("sweduc_config").update(statusUpdate).eq("id",true);
@@ -125,7 +118,11 @@ export async function POST(request:NextRequest){
     if(!Number.isSafeInteger(matriculaId)||matriculaId<=0)return json({error:"Selecione uma matrícula SWeduc válida."},400);
     const student=body.student&&typeof body.student==="object"?body.student as Record<string,unknown>:null;
     if(!student||Number(student.matricula_id)!==matriculaId)return json({error:"Consulte a matrícula na SWeduc antes de carregar para a nota."},400);
-    const responsaveis=Array.isArray(student.responsaveis)?student.responsaveis as Array<Record<string,unknown>>:[];
+    let detail:{detalhes:Record<string,unknown>;responsaveis:Array<Record<string,unknown>>;financeiro:Array<Record<string,unknown>>};
+    let activeCredentials:SweducCredentials|undefined;let activeAccessToken="";
+    try{activeCredentials=await credentials(auth.supabase);const token=await createSweducAccessToken(activeCredentials);activeAccessToken=token.accessToken;detail=await getSweducStudentDetailsWithToken(activeCredentials.host,token.accessToken,matriculaId)}catch(error){return json({error:safeSweducError(error,activeCredentials,[activeAccessToken])},400)}
+    student.responsaveis=detail.responsaveis;student.financeiro=detail.financeiro;student.dados_origem={...((student.dados_origem as Record<string,unknown>|undefined)||{}),detalhes:detail.detalhes};
+    const responsaveis=detail.responsaveis;
     const selectedResponsible=responsaveis[Math.max(0,Math.min(responsibleIndex,responsaveis.length-1))]||null;
     const details=((student.dados_origem as {detalhes?:Record<string,unknown>}|null)?.detalhes)||{};
     const fiscalStudent=mapSweducToFiscalStudent({student:student as unknown as SweducStudentSummary&Record<string,unknown>,responsible:selectedResponsible,details});
