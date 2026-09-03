@@ -7,6 +7,7 @@ import { authenticatedFetch } from "@/lib/authenticated-fetch";
 import { buildDpsDraft, isValidCpfCnpj, NFSE_OWN_APP_SERIES } from "@/lib/nfse-dps";
 import type { AppPage } from "./app-shell";
 import { useAccess } from "./access";
+import { SweducOperationalPicker } from "./sweduc-operational-picker";
 
 type AssistantPayment={
   id:number;
@@ -733,6 +734,7 @@ export function IssuanceAssistant({onNavigate}:{onNavigate:(page:AppPage)=>void}
       </div>}
       <div className="assistant-new-start-grid">
         <div className="assistant-new-students">
+          <SweducOperationalPicker onStudentReady={student=>{setNewStudentId(student.id);setStudentQuery("");setNewDescriptionEdited(false);setMessage(`${student.nome} foi carregado da SWeduc. Confira competência e valor para iniciar a nota.`);void load(true)}}/>
           <div className="search-input"><Search/><input value={studentQuery} onChange={e=>setStudentQuery(e.target.value)} placeholder="Buscar aluno, responsável, turma ou CPF"/></div>
           {loading?<div className="assistant-loading">Carregando alunos…</div>:filteredStudents.length===0?<div className="assistant-empty">Nenhum aluno cadastrado encontrado.</div>:<div className="assistant-payment-list">
             {filteredStudents.slice(0,50).map(student=><button key={student.id} className={newStudentId===student.id?"assistant-payment selected":"assistant-payment"} onClick={()=>{setNewStudentId(student.id);setNewDescriptionEdited(false);setNewDescription(defaultServiceDescription(newCompetence,student));setError("");setMessage("")}}>

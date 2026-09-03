@@ -12,6 +12,7 @@ const fiscalLinkMigration=readFileSync(new URL("../supabase/migrations/202609031
 const assistant=readFileSync(new URL("../components/issuance-assistant.tsx",import.meta.url),"utf8");
 const agenda=readFileSync(new URL("../lib/agenda-edu.ts",import.meta.url),"utf8");
 const livePages=readFileSync(new URL("../components/live-pages.tsx",import.meta.url),"utf8");
+const operationalPicker=readFileSync(new URL("../components/sweduc-operational-picker.tsx",import.meta.url),"utf8");
 
 test("cria uma integração SWeduc separada da Agenda Edu",()=>{
   assert.match(settings,/section==="sweduc"/);assert.match(settings,/Agenda Edu/);
@@ -66,4 +67,17 @@ test("mostra no painel e cadastro a atualização de alunos pela API",()=>{
   assert.match(livePages,/sweduc_atualizado_em/);
   assert.match(livePages,/Atualização API/);
   assert.match(livePages,/Manual \/ sem API/);
+});
+
+test("permite buscar aluno SWeduc em mensalidades e assistente sem abrir configurações",()=>{
+  assert.match(livePages,/SweducOperationalPicker/);
+  assert.match(assistant,/SweducOperationalPicker/);
+  assert.match(operationalPicker,/Buscar aluno na SWeduc/);
+  assert.match(operationalPicker,/Ano letivo/);
+  assert.match(operationalPicker,/Responsável financeiro/);
+  assert.match(operationalPicker,/Carregar para a nota/);
+  assert.match(operationalPicker,/action:"sync"/);
+  assert.match(operationalPicker,/action:"import"/);
+  assert.match(route,/payments\.create/);
+  assert.match(route,/nfse\.prepare/);
 });
