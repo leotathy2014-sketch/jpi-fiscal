@@ -5,7 +5,7 @@ import {authenticatedFetch} from "@/lib/authenticated-fetch";
 import type {AppPage} from "./app-shell";
 
 type SweducGrant="client_credentials"|"password";
-type Config={host:string|null;credencial_configurada:boolean;ultimo_status:string;testada_em:string|null;sincronizada_em:string|null;ultimo_erro:string|null;total_sincronizado:number;auth_method:SweducGrant;usuario_configurado:boolean;ano_letivo_ativo:number};
+type Config={host:string|null;credencial_configurada:boolean;ultimo_status:string;testada_em:string|null;sincronizada_em:string|null;ultimo_erro:string|null;total_sincronizado:number;auth_method:SweducGrant;usuario_configurado:boolean;ano_letivo_ativo:number;cofre_configurado:boolean};
 type AcademicYear={id:number;year:number};
 type Student={matricula_id:number;nome:string;numero_matricula:string|null;status:string|null;unidade:string|null;curso:string|null;serie:string|null;turma:string|null;ano_letivo:string|null;responsaveis:Array<{nome?:string;parentesco?:string;telefones?:Array<{numero?:string}>;emails?:Array<{email?:string}>}>;financeiro:Array<{numero_titulo?:string;valor?:string;situacao?:string}>};
 type TemporaryTestResult={message:string;checks:{oauth:"confirmed";studentList:"confirmed";studentDetails:"confirmed"|"not_checked";grantType:"client_credentials"|"password";activeAcademicYear:number}};
@@ -26,6 +26,7 @@ export function SweducSettings({accessToken,canEdit,isMaster,onStatus,onNavigate
   function hideSecrets(){setSecretsVisible(false);setMasterSecrets(null);setCopied("");setSecretsError("")}
   function closeApiInfo(){setApiInfoOpen(false);hideSecrets()}
   async function copySecret(field:"clientId"|"clientSecret"|"username"|"password"){const value=masterSecrets?.[field];if(!value)return;try{await navigator.clipboard.writeText(value);setCopied(field);window.setTimeout(()=>setCopied(current=>current===field?"":current),1800)}catch{setSecretsError("Não foi possível copiar. Verifique a permissão da área de transferência do navegador.")}}
+  async function copyBackendSecretName(){try{await navigator.clipboard.writeText("JPI_BACKEND_SECRET");setCopied("backendSecretName");window.setTimeout(()=>setCopied(current=>current==="backendSecretName"?"":current),1800)}catch{setSecretsError("Não foi possível copiar. Verifique a permissão da área de transferência do navegador.")}}
   const tone=config?.ultimo_status==="conectado"?"connected":config?.ultimo_status==="erro"?"disconnected":"pending";const label=config?.ultimo_status==="conectado"?"Conectado":config?.ultimo_status==="erro"?"Erro":config?.credencial_configurada?"Pendente":"Não configurado";
   const selectedStudent=useMemo(()=>students.find(student=>student.matricula_id===selectedMatriculaId)||null,[students,selectedMatriculaId]);
   const selectedResponsible=selectedStudent?.responsaveis[selectedResponsibleIndex]||selectedStudent?.responsaveis[0]||null;
@@ -87,6 +88,17 @@ export function SweducSettings({accessToken,canEdit,isMaster,onStatus,onNavigate
                 {!secretsVisible?<button type="button" className="primary" onClick={()=>void revealSecrets()} disabled={secretsBusy||!config?.credencial_configurada}><Eye/>{secretsBusy?"Carregando…":"Revelar credenciais"}</button>:<button type="button" className="secondary" onClick={hideSecrets}><EyeOff/>Ocultar credenciais</button>}
                 <small>Os valores revelados ficam disponíveis por no máximo 60 segundos e não são salvos no navegador.</small>
                 {secretsError&&<span className="agenda-secret-error">{secretsError}</span>}
+              </div>
+            </section>
+            <section className="agenda-api-info-section credentials">
+              <div className="agenda-api-section-title"><ShieldCheck/><div><strong>Cofre seguro do servidor</strong><small>Chave técnica usada pelo servidor para abrir o cofre interno do JPI Fiscal.</small></div></div>
+              <div className="agenda-api-credential-list">
+                <div><label>STATUS DO COFRE</label><div><span className={config?.cofre_configurado?"revealed":"masked"}>{config?.cofre_configurado?"Configurado na Vercel":"Não configurado na Vercel"}</span></div></div>
+                <div><label>NOME DA VARIÁVEL</label><div><span className="revealed mono">JPI_BACKEND_SECRET</span><button type="button" onClick={()=>void copyBackendSecretName()} title="Copiar nome da variável">{copied==="backendSecretName"?<Check/>:<Copy/>}</button></div></div>
+                <div><label>ONDE FICA</label><div><span className="revealed">Vercel › jpi-fiscal › Settings › Environment Variables</span></div></div>
+              </div>
+              <div className="agenda-api-secret-actions">
+                <small>Por segurança, o valor dessa chave mestra não é exibido nem armazenado nesta tela. Ela precisa ficar somente no ambiente do servidor.</small>
               </div>
             </section>
           </div>

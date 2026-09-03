@@ -56,7 +56,7 @@ export async function GET(request:NextRequest){
     try{const saved=await credentials(auth.supabase);const resolved=await resolveSweducAcademicYear(saved.host,activeAcademicYear);academicYears=resolved.years;activeAcademicYear=resolved.selected.year}catch{}
   }
   if(!academicYears.length)academicYears=[{id:0,year:activeAcademicYear}];
-  return json({ok:true,config:{...config,auth_method:authMethod,usuario_configurado:usuarioConfigurado,ano_letivo_ativo:defaultAcademicYear},academicYears,selectedAcademicYear:activeAcademicYear,students:[],total:0});
+  return json({ok:true,config:{...config,auth_method:authMethod,usuario_configurado:usuarioConfigurado,ano_letivo_ativo:defaultAcademicYear,cofre_configurado:Boolean(process.env.JPI_BACKEND_SECRET)},academicYears,selectedAcademicYear:activeAcademicYear,students:[],total:0});
 }
 
 export async function POST(request:NextRequest){
