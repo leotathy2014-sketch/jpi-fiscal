@@ -41,10 +41,12 @@ test("oferece configuração, teste e consulta sem salvar lista de alunos",()=>{
   assert.match(temporaryTestRoute,/useUsernamePassword/);assert.match(temporaryTestRoute,/username/);assert.match(temporaryTestRoute,/password/);assert.match(temporaryTestRoute,/grantType/);
   assert.match(route,/action==="test"/);assert.match(route,/action==="sync"/);assert.doesNotMatch(route,/from\("sweduc_alunos"\)\.upsert/);
   assert.match(temporaryTestRoute,/createSweducAccessToken/);assert.match(temporaryTestRoute,/listSweducStudentsWithToken/);assert.match(temporaryTestRoute,/getSweducStudentDetailsWithToken/);assert.match(temporaryTestRoute,/Nada foi salvo ou importado/);
+  assert.match(route,/mapSummaryToGridWithDetails/);assert.match(route,/detalhes_carregados/);assert.match(route,/getSweducStudentDetailsWithToken/);
   assert.match(route,/MAX_SWEDUC_PAGES=1000/);assert.match(ui,/while\(page<=1000\)/);assert.doesNotMatch(route,/Math\.min\(Number\(body\.page\|\|1\),100\)/);
   assert.match(route,/grantType,username,password/);assert.match(route,/auth_method/);assert.match(route,/usuario_configurado/);
   assert.match(route,/resolveSweducAcademicYear/);assert.match(route,/ano_letivo_id:activeYear\.id/);assert.match(route,/Nada foi salvo no banco/);
   assert.match(temporaryTestRoute,/ano_letivo_id:activeYear\.id/);assert.match(ui,/Alunos por ano letivo/);assert.match(ui,/Ano letivo considerado/);
+  for(const label of ["Ano letivo","Aluno","Matrícula","Turma / série","Responsável financeiro","Financeiro"])assert.match(ui,new RegExp(label));
   assert.match(ui,/visibleStudents=useMemo/);assert.match(ui,/visibleStudents\.map/);assert.doesNotMatch(ui,/run\("sync",\{page,academicYear:year\|\|"",search\}\)/);
   assert.match(ui,/canEdit&&<>\s*<label>USUÁRIO/);assert.doesNotMatch(ui,/sweduc-test-credentials/);
 });

@@ -39,6 +39,13 @@ async function credentials(supabase:SupabaseClient){
 function mapSummaryToGrid(summary:SweducStudentSummary){
   return {matricula_id:Number(summary.matricula_id),aluno_id:Number(summary.aluno_id||0)||null,nome:String(summary.nome||"Aluno sem nome"),data_nascimento:String(summary.data_nascimento||"")||null,numero_aluno:String(summary.num_aluno||"")||null,numero_matricula:String(summary.num_matricula||"")||null,status:String(summary.status||"")||null,unidade:String(summary.unidade||"")||null,curso:String(summary.curso||"")||null,serie:String(summary.serie||"")||null,turma:String(summary.turma||"")||null,ano_letivo:String(summary.ano_letivo||"")||null,responsaveis:[],financeiro:[],dados_origem:{resumo:summary},sincronizado_em:new Date().toISOString()};
 }
+async function mapSummaryToGridWithDetails(host:string,accessToken:string,summary:SweducStudentSummary){
+  const row=mapSummaryToGrid(summary);
+  try{
+    const detail=await getSweducStudentDetailsWithToken(host,accessToken,Number(summary.matricula_id));
+    return {...row,responsaveis:detail.responsaveis,financeiro:detail.financeiro,dados_origem:{resumo:summary,detalhes:detail.detalhes},detalhes_carregados:true};
+  }catch{return {...row,detalhes_carregados:false}}
+}
 
 export async function GET(request:NextRequest){
   const auth=await authorize(request);if(!auth.ok)return auth.response;
@@ -104,7 +111,7 @@ export async function POST(request:NextRequest){
       {
         const listing=await listSweducStudentsWithToken(creds.host,token.accessToken,{page,ano_letivo_id:activeYear.id});lastPage=Math.min(Math.max(1,Number(listing.last_page||page)),MAX_SWEDUC_PAGES);totalAvailable=Number(listing.total||0);
         const summaries=(listing.data||[]).filter((summary:SweducStudentSummary)=>!search||String(summary.nome||"").toLocaleLowerCase("pt-BR").includes(search));
-        rows=summaries.map(mapSummaryToGrid);
+        rows=await Promise.all(summaries.map(summary=>mapSummaryToGridWithDetails(creds.host,token.accessToken,summary)));
         synced+=rows.length;
       }
       const hasNext=page<lastPage;const at=new Date().toISOString();const statusUpdate:Record<string,unknown>={ultimo_status:"conectado",ultimo_erro:null,updated_at:at,updated_by:auth.user.id};if(!hasNext){statusUpdate.sincronizada_em=at;statusUpdate.total_sincronizado=totalAvailable}await auth.supabase.from("sweduc_config").update(statusUpdate).eq("id",true);
