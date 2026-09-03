@@ -13,8 +13,11 @@ test("normaliza somente hosts HTTPS oficiais da SWeduc",()=>{
   assert.throws(()=>normalizeSweducHost("https://falsoescolarsw.com.br"),/HOST oficial/);
 });
 
-test("mantém as três credenciais juntas no segredo protegido",()=>{
-  assert.deepEqual(parseSweducCredentials(serializeSweducCredentials(credentials)),credentials);
+test("mantém as credenciais e o método de autenticação no segredo protegido",()=>{
+  assert.deepEqual(parseSweducCredentials(serializeSweducCredentials(credentials)),{...credentials,grantType:"client_credentials"});
+  const passwordCredentials={...credentials,grantType:"password" as const,username:"usuario",password:"senha"};
+  assert.deepEqual(parseSweducCredentials(serializeSweducCredentials(passwordCredentials)),passwordCredentials);
+  assert.deepEqual(parseSweducCredentials(JSON.stringify(credentials)),{...credentials,grantType:"client_credentials"});
   assert.throws(()=>parseSweducCredentials("{}"),/HOST válido|incompletas/);
 });
 
@@ -32,19 +35,29 @@ test("gera OAuth client_credentials com autenticação Basic sem credenciais na 
   assert.ok(capturedInit?.signal instanceof AbortSignal);
 });
 
-test("permite testar OAuth password sem guardar usuário ou senha na URL",async()=>{
+test("usa OAuth password com Basic e somente usuário e senha no formulário",async()=>{
   let capturedUrl="";let capturedInit:RequestInit|undefined;
   const fakeFetch:typeof fetch=async(input,init)=>{capturedUrl=String(input);capturedInit=init;return new Response(JSON.stringify({access_token:"token-password",expires_in:3600}),{status:200,headers:{"Content-Type":"application/json"}})};
   const result=await createSweducAccessToken(credentials,fakeFetch,{grantType:"password",username:"usuario-teste",password:"senha-teste"});
   assert.equal(result.accessToken,"token-password");
   assert.equal(capturedUrl,"https://joaopauloi.escolarsw.com.br/oauth/v2/token");
   assert.match(String(capturedInit?.body),/grant_type=password/);
-  assert.match(String(capturedInit?.body),/client_id=cliente/);
-  assert.match(String(capturedInit?.body),/client_secret=segredo/);
+  assert.doesNotMatch(String(capturedInit?.body),/client_id|client_secret|cliente|segredo/);
   assert.match(String(capturedInit?.body),/username=usuario-teste/);
   assert.match(String(capturedInit?.body),/password=senha-teste/);
   assert.doesNotMatch(capturedUrl,/usuario-teste|senha-teste|cliente|segredo/);
-  assert.doesNotMatch(Object.keys((capturedInit?.headers||{}) as Record<string,string>).join(","),/Authorization/);
+  assert.match(String((capturedInit?.headers as Record<string,string>).Authorization),/^Basic /);
+});
+
+test("usa automaticamente o fluxo password salvo no cofre",async()=>{
+  let capturedInit:RequestInit|undefined;
+  const fakeFetch:typeof fetch=async(_input,init)=>{capturedInit=init;return new Response(JSON.stringify({access_token:"token-salvo"}),{status:200,headers:{"Content-Type":"application/json"}})};
+  const result=await createSweducAccessToken({...credentials,grantType:"password",username:"usuario-salvo",password:"senha-salva"},fakeFetch);
+  assert.equal(result.accessToken,"token-salvo");
+  assert.match(String(capturedInit?.body),/grant_type=password/);
+  assert.match(String(capturedInit?.body),/username=usuario-salvo/);
+  assert.match(String(capturedInit?.body),/password=senha-salva/);
+  assert.match(String((capturedInit?.headers as Record<string,string>).Authorization),/^Basic /);
 });
 
 test("usa os endpoints oficiais de listagem e detalhes",async()=>{

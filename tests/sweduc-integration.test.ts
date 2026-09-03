@@ -20,7 +20,7 @@ test("cria uma integração SWeduc separada da Agenda Edu",()=>{
 test("protege credenciais e exige permissão de integração",()=>{
   assert.match(route,/JPI_BACKEND_SECRET/);assert.match(route,/store_sweduc_secret/);assert.match(route,/settings\.integrations\.edit/);
   assert.match(secretRoute,/get_my_access/);assert.match(secretRoute,/role\|\|""\)\.toLowerCase\(\)!=="master"/);assert.match(secretRoute,/get_sweduc_secret/);
-  assert.match(secretRoute,/expiresIn:60/);assert.doesNotMatch(secretRoute,/console\.(log|error)/);
+  assert.match(secretRoute,/expiresIn:60/);assert.match(secretRoute,/username/);assert.match(secretRoute,/password/);assert.doesNotMatch(secretRoute,/console\.(log|error)/);
   assert.match(temporaryTestRoute,/get_my_access/);assert.match(temporaryTestRoute,/role\|\|""\)\.toLowerCase\(\)!=="master"/);
   assert.doesNotMatch(temporaryTestRoute,/store_sweduc_secret|get_sweduc_secret|\.from\("sweduc_config"\)/);assert.doesNotMatch(temporaryTestRoute,/console\.(log|error)/);
   assert.match(migration,/vault\.create_secret/);assert.match(migration,/vault\.update_secret/);assert.match(migration,/enable row level security/);
@@ -28,14 +28,16 @@ test("protege credenciais e exige permissão de integração",()=>{
 });
 
 test("oferece configuração, teste, sincronização e consulta",()=>{
-  for(const label of ["HOST","CLIENT_ID","CLIENT_SECRET","Informações API e credenciais SWeduc","Revelar credenciais","Teste antes de gravar","Testar sem salvar","Testar credenciais salvas","Sincronizar alunos","Buscar aluno por nome","Testar com usuário e senha","USUÁRIO","SENHA"])assert.match(ui,new RegExp(label));
+  for(const label of ["HOST","CLIENT_ID","CLIENT_SECRET","Informações API e credenciais SWeduc","Revelar credenciais","Teste antes de gravar","Testar sem salvar","Testar credenciais salvas","Sincronizar alunos","Buscar aluno por nome","Usar usuário e senha","USUÁRIO","SENHA"])assert.match(ui,new RegExp(label));
   assert.match(ui,/useUsernamePassword/);assert.match(ui,/grantType===\"password\"/);
   assert.match(ui,/isMaster&&apiInfoOpen/);assert.match(ui,/\/api\/integrations\/sweduc\/master-secrets/);
   assert.match(ui,/\/api\/integrations\/sweduc\/test-credentials/);assert.match(ui,/Nenhuma credencial ou aluno será salvo/);
-  assert.match(route,/supplied===2/);assert.doesNotMatch(route,/supabase\.from\("sweduc_secrets"\)/);
+  assert.match(route,/supplied===1/);assert.match(route,/currentCredentials\.clientId/);assert.doesNotMatch(route,/supabase\.from\("sweduc_secrets"\)/);
   assert.match(temporaryTestRoute,/useUsernamePassword/);assert.match(temporaryTestRoute,/username/);assert.match(temporaryTestRoute,/password/);assert.match(temporaryTestRoute,/grantType/);
   assert.match(route,/action==="test"/);assert.match(route,/action==="sync"/);assert.match(route,/sweduc_alunos/);
   assert.match(temporaryTestRoute,/createSweducAccessToken/);assert.match(temporaryTestRoute,/listSweducStudentsWithToken/);assert.match(temporaryTestRoute,/getSweducStudentDetailsWithToken/);assert.match(temporaryTestRoute,/Nada foi salvo ou importado/);
+  assert.match(route,/MAX_SWEDUC_PAGES=1000/);assert.match(ui,/while\(page<=1000\)/);assert.doesNotMatch(route,/Math\.min\(Number\(body\.page\|\|1\),100\)/);
+  assert.match(route,/grantType,username,password/);assert.match(route,/auth_method/);assert.match(route,/usuario_configurado/);
 });
 
 test("importa dados acadêmicos, responsáveis, contatos e financeiro",()=>{

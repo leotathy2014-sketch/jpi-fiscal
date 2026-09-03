@@ -37,15 +37,17 @@ export async function POST(request:NextRequest){
   const username=String(body.username||"").trim();
   const password=String(body.password||"");
   if(!hostInput.trim()||!clientId||!clientSecret)return json({error:"Informe HOST, CLIENT_ID e CLIENT_SECRET para fazer o teste temporário."},400);
-  if(useUsernamePassword&&!username||useUsernamePassword&&!password)return json({error:"Informe USUÁRIO e SENHA para testar o fluxo alternativo."},400);
+  if(useUsernamePassword&&(!username||!password))return json({error:"Informe USUÁRIO e SENHA para testar o fluxo confirmado pela SWeduc."},400);
   if([hostInput,clientId,clientSecret,username,password].some(value=>value.length>2000))return json({error:"Um dos dados ultrapassa o tamanho permitido."},400);
 
   let credentials:SweducCredentials;
-  try{credentials={host:normalizeSweducHost(hostInput),clientId,clientSecret}}catch(error){return json({error:error instanceof Error?error.message:"Informe um HOST válido."},400)}
+  const grantType:SweducTokenGrant=useUsernamePassword?"password":"client_credentials";
+  try{credentials={host:normalizeSweducHost(hostInput),clientId,clientSecret,grantType,username:useUsernamePassword?username:undefined,password:useUsernamePassword?password:undefined}}catch(error){return json({error:error instanceof Error?error.message:"Informe um HOST válido."},400)}
 
+  let oauthAccessToken="";
   try{
-    const grantType:SweducTokenGrant=useUsernamePassword?"password":"client_credentials";
-    const oauth=await createSweducAccessToken(credentials,fetch,{grantType,username,password});
+    const oauth=await createSweducAccessToken(credentials);
+    oauthAccessToken=oauth.accessToken;
     const listing=await listSweducStudentsWithToken(credentials.host,oauth.accessToken,{page:1});
     const firstEnrollment=(listing.data||[]).find(student=>Number.isSafeInteger(Number(student.matricula_id))&&Number(student.matricula_id)>0)?.matricula_id;
     let details:"confirmed"|"not_checked"="not_checked";
@@ -57,6 +59,6 @@ export async function POST(request:NextRequest){
       checks:{oauth:"confirmed",studentList:"confirmed",studentDetails:details,grantType},
     });
   }catch(error){
-    return json({error:safeError(error,credentials,[username,password])},400);
+    return json({error:safeError(error,credentials,[username,password,oauthAccessToken])},400);
   }
 }

@@ -23,7 +23,8 @@ export async function POST(request:NextRequest){
   if(secretError||!storedSecret)return json({error:"As credenciais da SWeduc não foram encontradas no cofre seguro."},404);
   try{
     const credentials=parseSweducCredentials(String(storedSecret));
-    return json({ok:true,expiresIn:60,secrets:{clientId:credentials.clientId,clientSecret:credentials.clientSecret}});
+    const grantType=credentials.grantType||"client_credentials";
+    return json({ok:true,expiresIn:60,secrets:{grantType,clientId:credentials.clientId,clientSecret:credentials.clientSecret,username:grantType==="password"?credentials.username||"":"",password:grantType==="password"?credentials.password||"":""}});
   }catch{
     return json({error:"As credenciais protegidas da SWeduc precisam ser cadastradas novamente."},500);
   }
