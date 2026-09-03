@@ -723,6 +723,24 @@
 .sweduc-temporary-result strong{font-size:13.5px}
 .sweduc-temporary-result span,.sweduc-temporary-result small{font-size:12px;line-height:1.45}
 .sweduc-temporary-result small{color:#397561}
+.sweduc-year-toolbar{display:grid;align-items:end;grid-template-columns:minmax(150px,190px) 1fr auto}
+.sweduc-year-toolbar>label{display:grid;gap:6px;font-size:11px;font-weight:800;color:#445168;text-transform:uppercase;letter-spacing:.03em}
+.sweduc-year-toolbar select{height:42px;border:1px solid #d3dde9;border-radius:8px;background:#fff;padding:0 12px;color:#243247;font-weight:700}
+.sweduc-selection-grid{display:grid;grid-template-columns:minmax(0,1fr) 300px;gap:14px;align-items:start}
+.table-card tr.selected-row{background:#eef6ff}
+.table-card tr.selected-row td:first-child{box-shadow:inset 3px 0 0 #1466df}
+.secondary.mini{min-height:32px;padding:0 10px;font-size:12px}
+.sweduc-import-panel{display:grid;gap:13px;border:1px solid #d5e0ee;border-radius:12px;background:#fbfdff;padding:14px;position:sticky;top:12px}
+.sweduc-import-panel h3{margin:2px 0 0;font-size:17px;color:#243247}
+.sweduc-import-panel p{margin:0;color:#66758a;font-size:12.5px;line-height:1.4}
+.sweduc-import-panel small,.sweduc-import-panel label{font-size:11.5px;color:#66758a;line-height:1.4}
+.sweduc-import-panel label{display:grid;gap:6px;font-weight:800;text-transform:uppercase;letter-spacing:.03em}
+.sweduc-import-panel select{height:42px;border:1px solid #d3dde9;border-radius:8px;background:#fff;padding:0 10px;color:#243247;text-transform:none;font-weight:700;letter-spacing:0}
+.sweduc-import-panel>button{display:flex;align-items:center;justify-content:center;gap:8px;min-height:42px}
+.sweduc-import-summary{display:grid;gap:8px}
+.sweduc-import-summary span{display:grid;gap:2px;padding:9px 10px;border:1px solid #e0e7ef;border-radius:9px;background:#fff}
+.sweduc-import-summary small{font-size:10.5px;text-transform:uppercase;font-weight:800;color:#748299}
+.sweduc-import-summary strong{font-size:13px;color:#243247;word-break:break-word}
 
 @media(max-width:850px){
  .agenda-api-modal-backdrop{padding:12px}
@@ -732,6 +750,8 @@
  .agenda-api-modal-title p{display:none}
  .agenda-api-modal-body{padding:16px}
  .agenda-api-modal-grid{grid-template-columns:1fr}
+ .sweduc-year-toolbar,.sweduc-selection-grid{grid-template-columns:1fr}
+ .sweduc-import-panel{position:static}
 }
 @media(max-width:540px){
  .agenda-api-modal-title>span{width:40px;height:40px}

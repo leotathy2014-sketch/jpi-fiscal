@@ -176,6 +176,16 @@ export function IssuanceAssistant({onNavigate}:{onNavigate:(page:AppPage)=>void}
 
   useEffect(()=>{void load();const onFocus=()=>void load(true);window.addEventListener("focus",onFocus);return()=>window.removeEventListener("focus",onFocus)},[load]);
   useEffect(()=>{if(selectedId)localStorage.setItem("jpi-issuance-assistant-payment",String(selectedId))},[selectedId]);
+  useEffect(()=>{
+    const importedId=Number(sessionStorage.getItem("jpi-assistant-student-focus")||"0");
+    if(!importedId||!students.some(student=>student.id===importedId))return;
+    sessionStorage.removeItem("jpi-assistant-student-focus");
+    setNewEmissionOpen(true);
+    setNewStudentId(importedId);
+    setStudentQuery("");
+    setNewDescriptionEdited(false);
+    setMessage("Aluno importado da SWeduc selecionado. Informe competência e valor para iniciar a nota.");
+  },[students]);
 
   const filtered=useMemo(()=>{
     const q=normalize(query.trim());

@@ -1,6 +1,6 @@
 import {NextRequest,NextResponse} from "next/server";
 import {createClient} from "@supabase/supabase-js";
-import {createSweducAccessToken,getSweducStudentDetailsWithToken,listSweducStudentsWithToken,normalizeSweducHost,type SweducCredentials,type SweducTokenGrant} from "@/lib/sweduc";
+import {createSweducAccessToken,getSweducActiveAcademicYear,getSweducStudentDetailsWithToken,listSweducStudentsWithToken,normalizeSweducHost,type SweducCredentials,type SweducTokenGrant} from "@/lib/sweduc";
 
 export const runtime="nodejs";
 export const maxDuration=60;
@@ -46,17 +46,18 @@ export async function POST(request:NextRequest){
 
   let oauthAccessToken="";
   try{
+    const activeYear=await getSweducActiveAcademicYear(credentials.host);
     const oauth=await createSweducAccessToken(credentials);
     oauthAccessToken=oauth.accessToken;
-    const listing=await listSweducStudentsWithToken(credentials.host,oauth.accessToken,{page:1});
+    const listing=await listSweducStudentsWithToken(credentials.host,oauth.accessToken,{page:1,ano_letivo_id:activeYear.id});
     const firstEnrollment=(listing.data||[]).find(student=>Number.isSafeInteger(Number(student.matricula_id))&&Number(student.matricula_id)>0)?.matricula_id;
     let details:"confirmed"|"not_checked"="not_checked";
     if(firstEnrollment){await getSweducStudentDetailsWithToken(credentials.host,oauth.accessToken,Number(firstEnrollment));details="confirmed"}
     const visible=Number(listing.total||listing.data?.length||0);
     return json({
       ok:true,
-      message:`Fluxo ${grantType==="password"?"com usuário e senha":"client_credentials"} confirmado. A SWeduc permitiu consultar ${visible} matrícula(s). Nada foi salvo ou importado.`,
-      checks:{oauth:"confirmed",studentList:"confirmed",studentDetails:details,grantType},
+      message:`Fluxo ${grantType==="password"?"com usuário e senha":"client_credentials"} confirmado para o ano letivo ${activeYear.year}. A SWeduc permitiu consultar ${visible} matrícula(s). Nada foi salvo ou importado.`,
+      checks:{oauth:"confirmed",studentList:"confirmed",studentDetails:details,grantType,activeAcademicYear:activeYear.year},
     });
   }catch(error){
     return json({error:safeError(error,credentials,[username,password,oauthAccessToken])},400);

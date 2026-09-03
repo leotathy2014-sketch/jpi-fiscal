@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import {createSweducAccessToken,getSweducStudentDetailsWithToken,listSweducStudentsWithToken,normalizeSweducHost,parseSweducCredentials,serializeSweducCredentials} from "../lib/sweduc.ts";
+import {createSweducAccessToken,currentSweducAcademicYear,getSweducActiveAcademicYear,getSweducStudentDetailsWithToken,listSweducStudentsWithToken,normalizeSweducHost,parseSweducCredentials,serializeSweducCredentials} from "../lib/sweduc.ts";
 
 const credentials={host:"https://joaopauloi.escolarsw.com.br",clientId:"cliente",clientSecret:"segredo"};
 
@@ -58,6 +58,14 @@ test("usa automaticamente o fluxo password salvo no cofre",async()=>{
   assert.match(String(capturedInit?.body),/username=usuario-salvo/);
   assert.match(String(capturedInit?.body),/password=senha-salva/);
   assert.match(String((capturedInit?.headers as Record<string,string>).Authorization),/^Basic /);
+});
+
+test("seleciona o ano letivo atual e ignora anos futuros já cadastrados",async()=>{
+  let capturedUrl="";
+  const fakeFetch:typeof fetch=async(input)=>{capturedUrl=String(input);return new Response(JSON.stringify([{id:39,anoletivo:2027},{id:38,anoletivo:2026},{id:37,anoletivo:2025}]),{status:200,headers:{"Content-Type":"application/json"}})};
+  assert.equal(currentSweducAcademicYear(new Date("2026-09-03T12:00:00Z")),2026);
+  assert.deepEqual(await getSweducActiveAcademicYear(credentials.host,fakeFetch,new Date("2026-09-03T12:00:00Z")),{id:38,year:2026});
+  assert.equal(capturedUrl,"https://joaopauloi.escolarsw.com.br/api/public/v1/academico/anos-letivos");
 });
 
 test("usa os endpoints oficiais de listagem e detalhes",async()=>{

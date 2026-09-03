@@ -8,6 +8,8 @@ const temporaryTestRoute=readFileSync(new URL("../app/api/integrations/sweduc/te
 const ui=readFileSync(new URL("../components/sweduc-settings.tsx",import.meta.url),"utf8");
 const settings=readFileSync(new URL("../components/pages.tsx",import.meta.url),"utf8");
 const migration=readFileSync(new URL("../supabase/migrations/20260901120000_criar_integracao_sweduc.sql",import.meta.url),"utf8");
+const fiscalLinkMigration=readFileSync(new URL("../supabase/migrations/20260903120000_vincular_sweduc_ao_cadastro_fiscal.sql",import.meta.url),"utf8");
+const assistant=readFileSync(new URL("../components/issuance-assistant.tsx",import.meta.url),"utf8");
 const agenda=readFileSync(new URL("../lib/agenda-edu.ts",import.meta.url),"utf8");
 
 test("cria uma integração SWeduc separada da Agenda Edu",()=>{
@@ -28,7 +30,7 @@ test("protege credenciais e exige permissão de integração",()=>{
 });
 
 test("oferece configuração, teste, sincronização e consulta",()=>{
-  for(const label of ["HOST","CLIENT_ID","CLIENT_SECRET","Informações API e credenciais SWeduc","Revelar credenciais","Teste antes de gravar","Testar sem salvar","Testar credenciais salvas","Sincronizar alunos","Buscar aluno por nome","Usar usuário e senha","USUÁRIO","SENHA"])assert.match(ui,new RegExp(label));
+  for(const label of ["HOST","CLIENT_ID","CLIENT_SECRET","Informações API e credenciais SWeduc","Revelar credenciais","Teste antes de gravar","Testar sem salvar","Testar credenciais salvas","Sincronizar alunos","Buscar aluno de","Usar usuário e senha","USUÁRIO","SENHA"])assert.match(ui,new RegExp(label));
   assert.match(ui,/useUsernamePassword/);assert.match(ui,/grantType===\"password\"/);
   assert.match(ui,/isMaster&&apiInfoOpen/);assert.match(ui,/\/api\/integrations\/sweduc\/master-secrets/);
   assert.match(ui,/\/api\/integrations\/sweduc\/test-credentials/);assert.match(ui,/Nenhuma credencial ou aluno será salvo/);
@@ -38,9 +40,16 @@ test("oferece configuração, teste, sincronização e consulta",()=>{
   assert.match(temporaryTestRoute,/createSweducAccessToken/);assert.match(temporaryTestRoute,/listSweducStudentsWithToken/);assert.match(temporaryTestRoute,/getSweducStudentDetailsWithToken/);assert.match(temporaryTestRoute,/Nada foi salvo ou importado/);
   assert.match(route,/MAX_SWEDUC_PAGES=1000/);assert.match(ui,/while\(page<=1000\)/);assert.doesNotMatch(route,/Math\.min\(Number\(body\.page\|\|1\),100\)/);
   assert.match(route,/grantType,username,password/);assert.match(route,/auth_method/);assert.match(route,/usuario_configurado/);
+  assert.match(route,/resolveSweducAcademicYear/);assert.match(route,/ano_letivo_id:activeYear\.id/);assert.match(route,/\.eq\("ano_letivo",String\(activeAcademicYear\)\)/);
+  assert.match(temporaryTestRoute,/ano_letivo_id:activeYear\.id/);assert.match(ui,/Alunos por ano letivo/);assert.match(ui,/Ano letivo considerado/);
+  assert.match(ui,/canEdit&&useUsernamePassword&&<>\s*<label>USUÁRIO/);assert.doesNotMatch(ui,/sweduc-test-credentials/);
 });
 
 test("importa dados acadêmicos, responsáveis, contatos e financeiro",()=>{
   for(const field of ["matricula_id","aluno_id","unidade","curso","serie","turma","ano_letivo","responsaveis","financeiro"])assert.match(migration,new RegExp(field));
   assert.match(ui,/telefones/);assert.match(ui,/emails/);assert.match(ui,/título\(s\)/);
+  assert.match(ui,/Responsável para a nota/);assert.match(ui,/Carregar para a nota/);assert.match(ui,/selectedYear/);
+  assert.match(route,/action==="import"/);assert.match(route,/mapSweducToFiscalStudent/);assert.match(route,/sweduc_matricula_id/);
+  assert.match(fiscalLinkMigration,/sweduc_matricula_id/);assert.match(fiscalLinkMigration,/unique index/);
+  assert.match(assistant,/jpi-assistant-student-focus/);assert.match(assistant,/Aluno importado da SWeduc selecionado/);
 });

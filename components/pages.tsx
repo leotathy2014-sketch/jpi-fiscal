@@ -1,7 +1,7 @@
 "use client";
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import { AlertCircle, ArrowUpRight, BookOpenCheck, Building2, CalendarDays, Check, CircleDollarSign, Clock3, Copy, Eye, EyeOff, FileCheck2, FilePlus2, Filter, KeyRound, Link2, Mail, MessageCircle, MoreHorizontal, Palette, Plus, Search, ShieldCheck, SlidersHorizontal, Trash2, UploadCloud, UserCog, UsersRound, WalletCards, X } from "lucide-react";
-import type { Role } from "./app-shell";
+import type { AppPage, Role } from "./app-shell";
 import { createSupabaseBrowserClient } from "@/lib/supabase";
 import { authenticatedFetch } from "@/lib/authenticated-fetch";
 import { TransmissionProgress } from "./transmission-progress";
@@ -451,7 +451,7 @@ type CompanyConfig = {
   updated_at: string;
 };
 type Tab = "Empresa" | "Identidade Visual" | "Certificado A1" | "Integrações" | "Usuários e Permissões";
-export function SettingsPage({accessToken}:{accessToken:string|null}) {
+export function SettingsPage({accessToken,onNavigate}:{accessToken:string|null;onNavigate?:(page:AppPage)=>void}) {
   const {canAny}=useAccess();
   const availableTabs=useMemo(()=>[
     {name:"Empresa" as Tab,label:"Empresa",Icon:Building2,permissions:["settings.company.view","settings.company.edit"]},
@@ -469,7 +469,7 @@ export function SettingsPage({accessToken}:{accessToken:string|null}) {
       <div className="tabs">
         {availableTabs.map(({name,label,Icon})=><button key={name} className={tab===name?"active":""} onClick={()=>setTab(name)}><Icon/>{label}</button>)}
       </div>
-      {tab==="Empresa"?<CompanySettings/>:tab==="Identidade Visual"?<BrandingSettings/>:tab==="Certificado A1"?<CertificateSettings/>:tab==="Integrações"?<Integrations accessToken={accessToken}/>:<Permissions/>}
+      {tab==="Empresa"?<CompanySettings/>:tab==="Identidade Visual"?<BrandingSettings/>:tab==="Certificado A1"?<CertificateSettings/>:tab==="Integrações"?<Integrations accessToken={accessToken} onNavigate={onNavigate}/>:<Permissions/>}
     </>
   );
 }
@@ -1445,7 +1445,7 @@ function CommunicationsSettings({accessToken,onChanged,canEdit,section}:{accessT
 
 type IntegrationSection="overview"|"nfse"|"email"|"whatsapp"|"manual-whatsapp"|"agenda"|"sweduc";
 
-function Integrations({accessToken}:{accessToken:string|null}) {
+function Integrations({accessToken,onNavigate}:{accessToken:string|null;onNavigate?:(page:AppPage)=>void}) {
   const supabase=useMemo(()=>createSupabaseBrowserClient(),[]);
   const {can,isMaster}=useAccess();const canEdit=can("settings.integrations.edit");const canTestFiscal=can("nfse.test_connection");
   const [section,setSection]=useState<IntegrationSection>("overview");
@@ -1640,7 +1640,7 @@ function Integrations({accessToken}:{accessToken:string|null}) {
 
     {(section==="email"||section==="whatsapp"||section==="manual-whatsapp"||section==="agenda")&&
       <CommunicationsSettings accessToken={accessToken} onChanged={setCommunicationConfig} canEdit={canEdit} section={section}/>}
-    {section==="sweduc"&&<SweducSettings accessToken={accessToken} canEdit={canEdit} isMaster={isMaster} onStatus={setSweducConfig}/>}
+    {section==="sweduc"&&<SweducSettings accessToken={accessToken} canEdit={canEdit} isMaster={isMaster} onStatus={setSweducConfig} onNavigate={onNavigate}/>}
   </>;
 }
 
