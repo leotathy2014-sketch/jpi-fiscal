@@ -11,6 +11,7 @@ const migration=readFileSync(new URL("../supabase/migrations/20260901120000_cria
 const fiscalLinkMigration=readFileSync(new URL("../supabase/migrations/20260903120000_vincular_sweduc_ao_cadastro_fiscal.sql",import.meta.url),"utf8");
 const assistant=readFileSync(new URL("../components/issuance-assistant.tsx",import.meta.url),"utf8");
 const agenda=readFileSync(new URL("../lib/agenda-edu.ts",import.meta.url),"utf8");
+const livePages=readFileSync(new URL("../components/live-pages.tsx",import.meta.url),"utf8");
 
 test("cria uma integração SWeduc separada da Agenda Edu",()=>{
   assert.match(settings,/section==="sweduc"/);assert.match(settings,/Agenda Edu/);
@@ -55,4 +56,12 @@ test("importa dados acadêmicos, responsáveis, contatos e financeiro",()=>{
   assert.match(route,/action==="import"/);assert.match(route,/mapSweducToFiscalStudent/);assert.match(route,/sweduc_matricula_id/);
   assert.match(fiscalLinkMigration,/sweduc_matricula_id/);assert.match(fiscalLinkMigration,/unique index/);
   assert.match(assistant,/jpi-assistant-student-focus/);assert.match(assistant,/Aluno importado da SWeduc selecionado/);
+});
+
+test("mostra no painel e cadastro a atualização de alunos pela API",()=>{
+  assert.match(livePages,/Atualização API alunos/);
+  assert.match(livePages,/atualizado\(s\) pela SWeduc/);
+  assert.match(livePages,/sweduc_atualizado_em/);
+  assert.match(livePages,/Atualização API/);
+  assert.match(livePages,/Manual \/ sem API/);
 });
