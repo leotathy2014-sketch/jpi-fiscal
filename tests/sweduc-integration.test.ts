@@ -30,7 +30,7 @@ test("protege credenciais e exige permissão de integração",()=>{
 });
 
 test("oferece configuração, teste e consulta sem salvar lista de alunos",()=>{
-  for(const label of ["HOST","CLIENT_ID","CLIENT_SECRET","Informações API e credenciais SWeduc","Revelar credenciais","Teste antes de gravar","Testar sem salvar","Testar credenciais salvas","Consultar SWeduc","Buscar aluno de","USUÁRIO","SENHA"])assert.match(ui,new RegExp(label));
+  for(const label of ["HOST","CLIENT_ID","CLIENT_SECRET","Informações API e credenciais SWeduc","Revelar credenciais","Teste antes de gravar","Testar sem salvar","Testar conexão com API","Consultar SWeduc","Buscar aluno de","USUÁRIO","SENHA"])assert.match(ui,new RegExp(label));
   assert.doesNotMatch(ui,/Método de autenticação/);assert.match(ui,/grantType:"password"/);
   assert.match(ui,/isMaster&&apiInfoOpen/);assert.match(ui,/\/api\/integrations\/sweduc\/master-secrets/);
   assert.match(ui,/\/api\/integrations\/sweduc\/test-credentials/);assert.match(ui,/Nenhuma credencial ou aluno será salvo/);

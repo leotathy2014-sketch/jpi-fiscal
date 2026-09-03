@@ -29,17 +29,11 @@ async function authorize(request:NextRequest){
 }
 
 async function credentials(supabase:SupabaseClient){
-  const backendSecret=process.env.JPI_BACKEND_SECRET;if(!backendSecret)throw new Error("O cofre seguro não está disponível no servidor.");
+  const backendSecret=process.env.JPI_BACKEND_SECRET;if(!backendSecret)throw new Error("O cofre seguro não está configurado na Vercel. Configure a variável JPI_BACKEND_SECRET para salvar e usar a conexão definitiva da SWeduc.");
   const [secretResult,configResult]=await Promise.all([supabase.rpc("get_sweduc_secret",{p_backend_secret:backendSecret}),supabase.from("sweduc_config").select("host").eq("id",true).single()]);
   if(secretResult.error||!secretResult.data)throw new Error("Cadastre primeiro as credenciais da SWeduc.");
   const parsed=parseSweducCredentials(String(secretResult.data));
   return {...parsed,host:normalizeSweducHost(String(configResult.data?.host||parsed.host))};
-}
-
-async function credentialsFromRequestOrVault(body:Record<string,unknown>,supabase:SupabaseClient){
-  const hostInput=String(body.host||"").trim();const clientId=String(body.clientId||"").trim();const clientSecret=String(body.clientSecret||"").trim();const username=String(body.username||"").trim();const password=String(body.password||"");
-  if(hostInput&&clientId&&clientSecret&&username&&password)return {host:normalizeSweducHost(hostInput),clientId,clientSecret,grantType:"password" as const,username,password};
-  return credentials(supabase);
 }
 
 function mapSummaryToGrid(summary:SweducStudentSummary){
@@ -89,7 +83,7 @@ export async function POST(request:NextRequest){
       if(!username||!password)return json({error:"Informe USUÁRIO e SENHA para usar o fluxo confirmado pela SWeduc."},400);
     }else{username="";password=""}
     if([clientId,clientSecret,username,password].some(value=>value.length>2000))return json({error:"Uma credencial ultrapassa o tamanho permitido."},400);
-    const backendSecret=process.env.JPI_BACKEND_SECRET;if(!backendSecret)return json({error:"O cofre seguro não está disponível."},503);
+    const backendSecret=process.env.JPI_BACKEND_SECRET;if(!backendSecret)return json({error:"O cofre seguro não está configurado na Vercel. Configure a variável JPI_BACKEND_SECRET para salvar a conexão definitiva da SWeduc."},503);
     const protectedValue=serializeSweducCredentials({host,clientId,clientSecret,grantType,username,password});
     const saved=await auth.supabase.rpc("store_sweduc_secret",{p_secret:protectedValue,p_backend_secret:backendSecret});
     if(saved.error)return json({error:"Não foi possível guardar as credenciais no cofre seguro."},500);
@@ -104,7 +98,7 @@ export async function POST(request:NextRequest){
   if(action==="sync"){
     let synced=0;let totalAvailable=0;let activeCredentials:SweducCredentials|undefined;let activeAccessToken="";const rawPage=Number(body.page||1);const requestedPage=Number.isSafeInteger(rawPage)?Math.max(1,Math.min(rawPage,MAX_SWEDUC_PAGES)):1;const search=String(body.search||"").trim().toLocaleLowerCase("pt-BR");
     try{
-      const creds=await credentialsFromRequestOrVault(body,auth.supabase);activeCredentials=creds;const rawYear=Number(body.academicYear||0);const resolved=await resolveSweducAcademicYear(creds.host,Number.isSafeInteger(rawYear)&&rawYear>1900?rawYear:undefined);const activeYear=resolved.selected;const token=await createSweducAccessToken(creds);activeAccessToken=token.accessToken;await auth.supabase.from("sweduc_config").update({ultimo_status:"conectado",ultimo_erro:null,updated_at:new Date().toISOString(),updated_by:auth.user.id}).eq("id",true);
+      const creds=await credentials(auth.supabase);activeCredentials=creds;const rawYear=Number(body.academicYear||0);const resolved=await resolveSweducAcademicYear(creds.host,Number.isSafeInteger(rawYear)&&rawYear>1900?rawYear:undefined);const activeYear=resolved.selected;const token=await createSweducAccessToken(creds);activeAccessToken=token.accessToken;await auth.supabase.from("sweduc_config").update({ultimo_status:"conectado",ultimo_erro:null,updated_at:new Date().toISOString(),updated_by:auth.user.id}).eq("id",true);
       const page=requestedPage;let lastPage=requestedPage;
       let rows:Array<Record<string,unknown>>=[];
       {
@@ -126,7 +120,7 @@ export async function POST(request:NextRequest){
     if(!student||Number(student.matricula_id)!==matriculaId)return json({error:"Consulte a matrícula na SWeduc antes de carregar para a nota."},400);
     let detail:{detalhes:Record<string,unknown>;responsaveis:Array<Record<string,unknown>>;financeiro:Array<Record<string,unknown>>};
     let activeCredentials:SweducCredentials|undefined;let activeAccessToken="";
-    try{activeCredentials=await credentialsFromRequestOrVault(body,auth.supabase);const token=await createSweducAccessToken(activeCredentials);activeAccessToken=token.accessToken;detail=await getSweducStudentDetailsWithToken(activeCredentials.host,token.accessToken,matriculaId)}catch(error){return json({error:safeSweducError(error,activeCredentials,[activeAccessToken])},400)}
+    try{activeCredentials=await credentials(auth.supabase);const token=await createSweducAccessToken(activeCredentials);activeAccessToken=token.accessToken;detail=await getSweducStudentDetailsWithToken(activeCredentials.host,token.accessToken,matriculaId)}catch(error){return json({error:safeSweducError(error,activeCredentials,[activeAccessToken])},400)}
     student.responsaveis=detail.responsaveis;student.financeiro=detail.financeiro;student.dados_origem={...((student.dados_origem as Record<string,unknown>|undefined)||{}),detalhes:detail.detalhes};
     const responsaveis=detail.responsaveis;
     const selectedResponsible=responsaveis[Math.max(0,Math.min(responsibleIndex,responsaveis.length-1))]||null;
