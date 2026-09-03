@@ -30,8 +30,8 @@ test("protege credenciais e exige permissão de integração",()=>{
 });
 
 test("oferece configuração, teste e consulta sem salvar lista de alunos",()=>{
-  for(const label of ["HOST","CLIENT_ID","CLIENT_SECRET","Informações API e credenciais SWeduc","Revelar credenciais","Teste antes de gravar","Testar sem salvar","Testar credenciais salvas","Consultar SWeduc","Buscar aluno de","Usar usuário e senha","USUÁRIO","SENHA"])assert.match(ui,new RegExp(label));
-  assert.match(ui,/useUsernamePassword/);assert.match(ui,/grantType===\"password\"/);
+  for(const label of ["HOST","CLIENT_ID","CLIENT_SECRET","Informações API e credenciais SWeduc","Revelar credenciais","Teste antes de gravar","Testar sem salvar","Testar credenciais salvas","Consultar SWeduc","Buscar aluno de","USUÁRIO","SENHA"])assert.match(ui,new RegExp(label));
+  assert.doesNotMatch(ui,/Método de autenticação/);assert.match(ui,/grantType:"password"/);
   assert.match(ui,/isMaster&&apiInfoOpen/);assert.match(ui,/\/api\/integrations\/sweduc\/master-secrets/);
   assert.match(ui,/\/api\/integrations\/sweduc\/test-credentials/);assert.match(ui,/Nenhuma credencial ou aluno será salvo/);
   assert.match(route,/supplied===1/);assert.match(route,/currentCredentials\.clientId/);assert.doesNotMatch(route,/supabase\.from\("sweduc_secrets"\)/);
@@ -42,7 +42,7 @@ test("oferece configuração, teste e consulta sem salvar lista de alunos",()=>{
   assert.match(route,/grantType,username,password/);assert.match(route,/auth_method/);assert.match(route,/usuario_configurado/);
   assert.match(route,/resolveSweducAcademicYear/);assert.match(route,/ano_letivo_id:activeYear\.id/);assert.match(route,/Nada foi salvo no banco/);
   assert.match(temporaryTestRoute,/ano_letivo_id:activeYear\.id/);assert.match(ui,/Alunos por ano letivo/);assert.match(ui,/Ano letivo considerado/);
-  assert.match(ui,/canEdit&&useUsernamePassword&&<>\s*<label>USUÁRIO/);assert.doesNotMatch(ui,/sweduc-test-credentials/);
+  assert.match(ui,/canEdit&&<>\s*<label>USUÁRIO/);assert.doesNotMatch(ui,/sweduc-test-credentials/);
 });
 
 test("importa dados acadêmicos, responsáveis, contatos e financeiro",()=>{
