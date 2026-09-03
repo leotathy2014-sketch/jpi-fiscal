@@ -723,7 +723,7 @@
 .sweduc-temporary-result strong{font-size:13.5px}
 .sweduc-temporary-result span,.sweduc-temporary-result small{font-size:12px;line-height:1.45}
 .sweduc-temporary-result small{color:#397561}
-.sweduc-year-toolbar{display:grid;align-items:end;grid-template-columns:minmax(150px,190px) 1fr auto}
+.sweduc-year-toolbar{display:grid;align-items:end;grid-template-columns:minmax(150px,190px) 1fr auto auto}
 .sweduc-year-toolbar>label{display:grid;gap:6px;font-size:11px;font-weight:800;color:#445168;text-transform:uppercase;letter-spacing:.03em}
 .sweduc-year-toolbar select{height:42px;border:1px solid #d3dde9;border-radius:8px;background:#fff;padding:0 12px;color:#243247;font-weight:700}
 .sweduc-selection-grid{display:grid;grid-template-columns:minmax(0,1fr) 300px;gap:14px;align-items:start}
