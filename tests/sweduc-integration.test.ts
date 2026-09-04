@@ -43,7 +43,7 @@ test("oferece configuração, teste e consulta sem salvar lista de alunos",()=>{
   assert.match(ui,/\/api\/integrations\/sweduc\/test-credentials/);assert.match(ui,/Nenhuma credencial ou aluno será salvo/);
   assert.match(route,/supplied===1/);assert.match(route,/currentCredentials\.clientId/);assert.doesNotMatch(route,/supabase\.from\("sweduc_secrets"\)/);
   assert.match(temporaryTestRoute,/useUsernamePassword/);assert.match(temporaryTestRoute,/username/);assert.match(temporaryTestRoute,/password/);assert.match(temporaryTestRoute,/grantType/);
-  assert.match(route,/action==="test"/);assert.match(route,/action==="sync"/);assert.doesNotMatch(route,/from\("sweduc_alunos"\)\.upsert/);
+  assert.match(route,/action==="test"/);assert.match(route,/action==="sync"/);assert.match(route,/from\("sweduc_alunos"\)\.upsert/);
   assert.match(temporaryTestRoute,/createSweducAccessToken/);assert.match(temporaryTestRoute,/listSweducStudentsWithToken/);assert.match(temporaryTestRoute,/getSweducStudentDetailsWithToken/);assert.match(temporaryTestRoute,/Nada foi salvo ou importado/);
   assert.match(route,/rows=summaries\.map\(mapSummaryToGrid\)/);assert.match(route,/search:search\|\|undefined/);assert.match(route,/getSweducStudentDetailsWithToken/);
   assert.match(route,/MAX_SWEDUC_PAGES=1000/);assert.match(ui,/while\(page<=1000\)/);
@@ -87,6 +87,7 @@ test("permite buscar aluno SWeduc no cadastro e no assistente sem abrir configur
   assert.match(operationalPicker,/Segmento \/ curso/);
   assert.match(operationalPicker,/Série/);
   assert.match(operationalPicker,/Turma/);
+  assert.match(operationalPicker,/sortStudents/);
   assert.match(route,/action==="lookup"/);
   assert.match(operationalPicker,/course:courseFilter/);
   assert.match(operationalPicker,/serie:serieFilter/);

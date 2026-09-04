@@ -40,6 +40,12 @@ function mapSummaryToGrid(summary:SweducStudentSummary){
   return {matricula_id:Number(summary.matricula_id),aluno_id:Number(summary.aluno_id||0)||null,nome:String(summary.nome||"Aluno sem nome"),data_nascimento:String(summary.data_nascimento||"")||null,numero_aluno:String(summary.num_aluno||"")||null,numero_matricula:String(summary.num_matricula||"")||null,status:String(summary.status||"")||null,unidade:String(summary.unidade||"")||null,curso:String(summary.curso||"")||null,serie:String(summary.serie||"")||null,turma:String(summary.turma||"")||null,ano_letivo:String(summary.ano_letivo||"")||null,responsaveis:[],financeiro:[],dados_origem:{resumo:summary},sincronizado_em:new Date().toISOString()};
 }
 
+async function upsertSweducMirror(supabase:SupabaseClient,rows:Array<Record<string,unknown>>){
+  if(!rows.length)return;
+  const result=await supabase.from("sweduc_alunos").upsert(rows,{onConflict:"matricula_id"});
+  if(result.error)throw new Error("Não foi possível atualizar o espelho SWeduc no banco.");
+}
+
 export async function GET(request:NextRequest){
   const auth=await authorize(request);if(!auth.ok)return auth.response;
   if(!await hasServerPermission(auth.supabase,"settings.integrations.view")&&!await hasServerPermission(auth.supabase,"settings.integrations.edit")&&!await hasServerPermission(auth.supabase,"students.view")&&!await hasServerPermission(auth.supabase,"students.create")&&!await hasServerPermission(auth.supabase,"students.edit")&&!await hasServerPermission(auth.supabase,"payments.create")&&!await hasServerPermission(auth.supabase,"nfse.prepare"))return json({error:"Seu usuário não possui permissão para consultar esta integração."},403);
@@ -114,8 +120,9 @@ export async function POST(request:NextRequest){
       const creds=await credentials(auth.supabase);activeCredentials=creds;const resolved=await resolveSweducAcademicYear(creds.host,Number.isSafeInteger(rawYear)&&rawYear>1900?rawYear:undefined);const activeYear=resolved.selected;const token=await createSweducAccessToken(creds);activeAccessToken=token.accessToken;
       const listing=await listSweducStudentsWithToken(creds.host,token.accessToken,{page,ano_letivo_id:activeYear.id,search:search||undefined});
       const apiRows=(listing.data||[]).map(mapSummaryToGrid);
+      await upsertSweducMirror(auth.supabase,apiRows);
       const lastPage=Math.min(Math.max(1,Number(listing.last_page||page)),MAX_SWEDUC_PAGES);
-      return json({ok:true,students:apiRows,page,lastPage,nextPage:page<lastPage?page+1:null,academicYear:activeYear.year,totalAvailable:Number(listing.total||0),message:`Espelho SWeduc ainda vazio. Consulta temporária feita direto na API para ${activeYear.year}. Nada foi salvo no cadastro fiscal.`});
+      return json({ok:true,students:apiRows,page,lastPage,nextPage:page<lastPage?page+1:null,academicYear:activeYear.year,totalAvailable:Number(listing.total||0),message:`Espelho SWeduc estava vazio e foi atualizado pela API para ${activeYear.year}. Nada foi salvo no cadastro fiscal.`});
     }catch(error){return json({error:safeSweducError(error,activeCredentials,[activeAccessToken])},400)}
   }
   if(action==="sync"){
@@ -128,6 +135,7 @@ export async function POST(request:NextRequest){
         const listing=await listSweducStudentsWithToken(creds.host,token.accessToken,{page,ano_letivo_id:activeYear.id,search:search||undefined});lastPage=Math.min(Math.max(1,Number(listing.last_page||page)),MAX_SWEDUC_PAGES);totalAvailable=Number(listing.total||0);
         const summaries=(listing.data||[]).filter((summary:SweducStudentSummary)=>!search||String(summary.nome||"").toLocaleLowerCase("pt-BR").includes(search));
         rows=summaries.map(mapSummaryToGrid);
+        await upsertSweducMirror(auth.supabase,rows);
         synced+=rows.length;
       }
       const hasNext=page<lastPage;const at=new Date().toISOString();const statusUpdate:Record<string,unknown>={ultimo_status:"conectado",ultimo_erro:null,updated_at:at,updated_by:auth.user.id};if(!hasNext){statusUpdate.sincronizada_em=at;statusUpdate.total_sincronizado=totalAvailable}await auth.supabase.from("sweduc_config").update(statusUpdate).eq("id",true);
