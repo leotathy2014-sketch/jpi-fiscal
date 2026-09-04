@@ -182,6 +182,18 @@ export function IssuanceAssistant({onNavigate}:{onNavigate:(page:AppPage)=>void}
   useEffect(()=>{void load();const onFocus=()=>void load(true);window.addEventListener("focus",onFocus);return()=>window.removeEventListener("focus",onFocus)},[load]);
   useEffect(()=>{if(selectedId)localStorage.setItem("jpi-issuance-assistant-payment",String(selectedId))},[selectedId]);
   useEffect(()=>{
+    const resumeAfterEdit=Number(sessionStorage.getItem("jpi-assistant-resume-after-student-edit")||"0");
+    if(resumeAfterEdit&&payments.some(payment=>payment.id===resumeAfterEdit)){
+      sessionStorage.removeItem("jpi-assistant-resume-after-student-edit");
+      sessionStorage.removeItem("jpi-assistant-prepared-sweduc-student");
+      setPendingSweducStudent(null);
+      setNewEmissionOpen(false);
+      setSelectedId(resumeAfterEdit);
+      setResumePaymentId(resumeAfterEdit);
+      setMessage("Cadastro corrigido. Continue a emissão desta nota.");
+      window.requestAnimationFrame(()=>window.requestAnimationFrame(()=>document.getElementById("assistant-process-panel")?.scrollIntoView({behavior:"smooth",block:"start"})));
+      return;
+    }
     const prepared=sessionStorage.getItem("jpi-assistant-prepared-sweduc-student");
     if(prepared){
       try{
@@ -199,7 +211,7 @@ export function IssuanceAssistant({onNavigate}:{onNavigate:(page:AppPage)=>void}
     setStudentQuery("");
     setNewDescriptionEdited(false);
     setMessage("Aluno importado da SWeduc selecionado. Informe competência e valor para iniciar a nota.");
-  },[students]);
+  },[students,payments]);
 
   const filtered=useMemo(()=>{
     const q=normalize(query.trim());
@@ -848,7 +860,7 @@ export function IssuanceAssistant({onNavigate}:{onNavigate:(page:AppPage)=>void}
         </div>}
       </article>
 
-      <article className="panel assistant-action-panel">
+      <article id="assistant-process-panel" className="panel assistant-action-panel">
         {!selected?<div className="assistant-empty large"><Sparkles/><strong>Selecione uma nota para começar</strong><span>O assistente mostrará automaticamente a próxima ação segura.</span></div>:<>
           <div className="assistant-current-head">
             <div><span>PRÓXIMA AÇÃO</span><h2>{nextTitle}</h2><p>{selected.alunos?.nome} · {selected.competencia} · {money(selected.valor_nfse)}</p></div>
