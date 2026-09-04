@@ -5,7 +5,7 @@ import {createSupabaseBrowserClient} from "@/lib/supabase";
 import {authenticatedFetch} from "@/lib/authenticated-fetch";
 
 type AcademicYear={id:number;year:number};
-type SweducResponsible={nome?:string;cpf?:string;cpf_cnpj?:string;documento?:string;telefones?:Array<{numero?:string}>;emails?:Array<{email?:string}>};
+type SweducResponsible={nome?:string;cpf?:string;cpf_cnpj?:string;documento?:string;responsavel_pedagogico?:boolean;telefones?:Array<{numero?:string}>;emails?:Array<{email?:string}>};
 type SweducStudent={matricula_id:number;nome:string;numero_matricula:string|null;status:string|null;unidade:string|null;curso:string|null;serie:string|null;turma:string|null;ano_letivo:string|null;responsaveis:SweducResponsible[];financeiro:Array<{numero_titulo?:string;valor?:string;situacao?:string}>;detalhes_carregados?:boolean};
 
 function responsibleDocument(responsible:SweducResponsible){return responsible.cpf||responsible.cpf_cnpj||responsible.documento||"Documento não informado"}
@@ -30,7 +30,7 @@ function sortStudents(students:SweducStudent[]){
   );
 }
 
-export function SweducOperationalPicker({onStudentReady}:{onStudentReady:(student:{id:number;nome:string})=>void}){
+export function SweducOperationalPicker({onStudentReady}:{onStudentReady:(student:{id:number;nome:string;turma?:string|null;segmento?:string;responsavel?:string;cpf_cnpj?:string|null;email?:string|null;whatsapp?:string|null;cep?:string|null;logradouro?:string|null;numero?:string|null;cidade?:string|null;uf?:string|null;sweduc_matricula_id?:number|null;sweduc_aluno_id?:number|null;sweduc_ano_letivo?:string|null})=>void}){
   const supabase=useMemo(()=>createSupabaseBrowserClient(),[]);
   const [years,setYears]=useState<AcademicYear[]>([]);
   const [selectedYear,setSelectedYear]=useState<number|null>(null);
@@ -120,6 +120,8 @@ export function SweducOperationalPicker({onStudentReady}:{onStudentReady:(studen
       if(!response.ok||!data.student)throw new Error(data.error||"Não foi possível carregar os responsáveis deste aluno.");
       const fullStudent={...data.student,responsaveis:data.responsaveis||data.student.responsaveis||[]};
       setSelected(fullStudent);setStudents(current=>current.map(item=>item.matricula_id===student.matricula_id?fullStudent:item));
+      const suggestedIndex=fullStudent.responsaveis.findIndex(responsible=>responsible.responsavel_pedagogico===true);
+      setResponsibleIndex(suggestedIndex>=0?suggestedIndex:0);
       setMessage(data.message||"Confira o responsável financeiro antes de carregar para a nota.");
     }catch(e){setError(e instanceof Error?e.message:"Não foi possível carregar os responsáveis deste aluno.")}finally{setBusy("")}
   }
@@ -131,9 +133,9 @@ export function SweducOperationalPicker({onStudentReady}:{onStudentReady:(studen
       const accessToken=await token();
       const response=await authenticatedFetch("/api/integrations/sweduc",{method:"POST",headers:{Authorization:`Bearer ${accessToken}`,"Content-Type":"application/json"},body:JSON.stringify({action:"import",matriculaId:selected.matricula_id,responsibleIndex,student:selected}),cache:"no-store"});
       const data=await response.json().catch(()=>({})) as {student?:{id:number;nome:string};message?:string;error?:string};
-      if(!response.ok||!data.student)throw new Error(data.error||"Não foi possível carregar este aluno para a nota.");
+      if(!response.ok||!data.student)throw new Error(data.error||"Não foi possível preparar este aluno para a nota.");
       setMessage(data.message||"Aluno carregado para a nota.");setSelected(null);onStudentReady(data.student);
-    }catch(e){setError(e instanceof Error?e.message:"Não foi possível carregar este aluno para a nota.")}finally{setBusy("")}
+    }catch(e){setError(e instanceof Error?e.message:"Não foi possível preparar este aluno para a nota.")}finally{setBusy("")}
   }
 
   useEffect(()=>{
@@ -155,6 +157,6 @@ export function SweducOperationalPicker({onStudentReady}:{onStudentReady:(studen
     </div>
     {error&&<span className="agenda-secret-error">{error}</span>}{message&&<small>{message}</small>}
     {visible.length>0&&<div className="table-card"><div className="sweduc-grid-pagination"><span>Página {safeGridPage} de {totalGridPages} · {visible.length} aluno(s) encontrado(s) · 25 por página</span><div><button type="button" className="secondary mini" disabled={safeGridPage<=1} onClick={()=>setGridPage(page=>Math.max(1,page-1))}>Anterior</button><button type="button" className="secondary mini" disabled={safeGridPage>=totalGridPages} onClick={()=>setGridPage(page=>Math.min(totalGridPages,page+1))}>Próxima</button></div></div><table><thead><tr><th>Ano letivo</th><th>Aluno</th><th>Matrícula</th><th>Segmento / curso</th><th>Turma / série</th><th></th></tr></thead><tbody>{pagedVisible.map(student=><tr key={student.matricula_id} className={selected?.matricula_id===student.matricula_id?"selected-row":""} onClick={()=>void openResponsibleChoice(student)}><td>{student.ano_letivo||selectedYear}</td><td><strong>{student.nome}</strong><span className="subcell">{student.unidade||"Unidade não informada"}</span></td><td>{student.numero_matricula||student.matricula_id}</td><td>{student.curso||"—"}</td><td>{[student.turma,student.serie].filter(Boolean).join(" · ")||"—"}</td><td><button type="button" className="primary mini" disabled={Boolean(busy)} onClick={event=>{event.stopPropagation();void openResponsibleChoice(student)}}>{busy===`details-${student.matricula_id}`?"Carregando…":<><UserCheck size={15}/>Selecionar aluno</>}</button></td></tr>)}</tbody></table>{visible.length>pageSize&&<small>Grade em ordem alfabética. Use a paginação ou refine os filtros para localizar mais rápido.</small>}</div>}
-    {selected&&<div className="responsible-match-card sweduc-responsible-confirm" role="dialog" aria-label="Confirmar responsável financeiro SWeduc"><div><UserCheck/><span><strong>Confirmar responsável financeiro</strong><small>{selected.nome} · matrícula {selected.numero_matricula||selected.matricula_id}</small></span></div>{selected.responsaveis.length>0?<div className="sweduc-responsible-options">{selected.responsaveis.map((responsible,index)=><label key={`${responsible.nome||"responsavel"}-${index}`} className="sweduc-responsible-option"><input type="radio" name={`sweduc-responsible-${selected.matricula_id}`} checked={responsibleIndex===index} onChange={()=>setResponsibleIndex(index)}/><span><strong>{responsible.nome||`Responsável ${index+1}`}</strong><small>{responsibleDocument(responsible)} · {responsibleContact(responsible)}</small></span></label>)}</div>:<p>A SWeduc não retornou responsável para esta matrícula. Confira com o suporte antes de carregar para a nota.</p>}<div><button type="button" className="secondary" onClick={()=>setSelected(null)}>Cancelar</button><button type="button" className="primary" disabled={Boolean(busy)||selected.responsaveis.length===0} onClick={()=>void loadForNote()}>{busy===`import-${selected.matricula_id}`?"Carregando…":<><Check size={15}/>Carregar para a nota</>}</button></div></div>}
+    {selected&&<div className="responsible-match-card sweduc-responsible-confirm" role="dialog" aria-label="Confirmar responsável financeiro SWeduc"><div><UserCheck/><span><strong>Confirmar responsável da nota</strong><small>{selected.nome} · matrícula {selected.numero_matricula||selected.matricula_id}</small></span></div>{selected.responsaveis.length>0?<div className="sweduc-responsible-options">{selected.responsaveis.map((responsible,index)=><label key={`${responsible.nome||"responsavel"}-${index}`} className="sweduc-responsible-option"><input type="radio" name={`sweduc-responsible-${selected.matricula_id}`} checked={responsibleIndex===index} onChange={()=>setResponsibleIndex(index)}/><span><strong>{responsible.nome||`Responsável ${index+1}`}{responsible.responsavel_pedagogico===true&&<em className="sweduc-suggested-responsible"><Check size={13}/>Sugerido pela SWeduc</em>}</strong><small>{responsibleDocument(responsible)} · {responsibleContact(responsible)}</small></span></label>)}</div>:<p>A SWeduc não retornou responsável para esta matrícula. Confira com o suporte antes de carregar para a nota.</p>}<div><button type="button" className="secondary" onClick={()=>setSelected(null)}>Cancelar</button><button type="button" className="primary" disabled={Boolean(busy)||selected.responsaveis.length===0} onClick={()=>void loadForNote()}>{busy===`import-${selected.matricula_id}`?"Preparando…":<><Check size={15}/>Preparar para a nota</>}</button></div><small>Nada será gravado agora. O cadastro fiscal só será salvo quando a emissão for confirmada.</small></div>}
   </div></section>;
 }

@@ -41,7 +41,7 @@ type AssistantPayment={
 };
 type AssistantStudent={
   id:number;nome:string;turma:string|null;segmento:string;responsavel:string;cpf_cnpj:string|null;email:string|null;whatsapp:string|null;
-  cep:string|null;logradouro:string|null;numero:string|null;cidade:string|null;uf:string|null
+  cep:string|null;logradouro:string|null;numero:string|null;cidade:string|null;uf:string|null;sweduc_matricula_id?:number|null;sweduc_aluno_id?:number|null;sweduc_ano_letivo?:string|null
 };
 type DeliveryState={mensalidade_id:number;status:string;canal:string;created_at:string};
 type StepState="done"|"current"|"pending"|"warning";
@@ -114,6 +114,7 @@ export function IssuanceAssistant({onNavigate}:{onNavigate:(page:AppPage)=>void}
   const canSendWhatsapp=can("deliveries.send_whatsapp");
   const canSendAgenda=can("deliveries.send_agenda");
   const [students,setStudents]=useState<AssistantStudent[]>([]);
+  const [pendingSweducStudent,setPendingSweducStudent]=useState<AssistantStudent|null>(null);
   const [newEmissionOpen,setNewEmissionOpen]=useState(true);
   const [resumePaymentId,setResumePaymentId]=useState<number|null>(null);
   const [newStudentId,setNewStudentId]=useState<number|null>(null);
@@ -198,7 +199,7 @@ export function IssuanceAssistant({onNavigate}:{onNavigate:(page:AppPage)=>void}
     if(!q)return students;
     return students.filter(student=>normalize([student.nome,student.responsavel,student.turma,student.segmento,student.cpf_cnpj].filter(Boolean).join(" ")).includes(q));
   },[studentQuery,students]);
-  const selectedStudent=useMemo(()=>students.find(student=>student.id===newStudentId)||null,[newStudentId,students]);
+  const selectedStudent=useMemo(()=>pendingSweducStudent?.id===newStudentId?pendingSweducStudent:students.find(student=>student.id===newStudentId)||null,[newStudentId,students,pendingSweducStudent]);
   const resumePayment=useMemo(()=>payments.find(item=>item.id===resumePaymentId)||null,[payments,resumePaymentId]);
   const selected=useMemo(()=>payments.find(item=>item.id===selectedId)||null,[payments,selectedId]);
   useEffect(()=>{
@@ -297,7 +298,23 @@ export function IssuanceAssistant({onNavigate}:{onNavigate:(page:AppPage)=>void}
       const description=upper(newDescription||defaultServiceDescription(newCompetence,selectedStudent)).trim();
       if(!description||description.length>1000)throw new Error("A descrição do serviço deve ter entre 1 e 1000 caracteres.");
       const competence=formatCompetence(newCompetence);
-      const existing=await supabase.from("mensalidades").select("id").eq("aluno_id",selectedStudent.id).eq("competencia",competence).order("id",{ascending:false}).limit(1).maybeSingle();
+      let studentId=selectedStudent.id;
+      if(studentId<0){
+        const canSaveStudent=can("students.create")||can("students.edit");
+        if(!canSaveStudent)throw new Error("Seu usuário não possui permissão para confirmar o cadastro fiscal deste aluno.");
+        if(!selectedStudent.responsavel||!selectedStudent.cpf_cnpj)throw new Error("Confira o responsável e CPF/CNPJ antes de confirmar a emissão.");
+        const existingStudent=selectedStudent.sweduc_matricula_id?await supabase.from("alunos").select("id").eq("sweduc_matricula_id",selectedStudent.sweduc_matricula_id).maybeSingle():{data:null,error:null};
+        if(existingStudent.error)throw new Error(existingStudent.error.message||"Não foi possível verificar o cadastro fiscal do aluno.");
+        const studentPayload={nome:selectedStudent.nome,turma:selectedStudent.turma,segmento:selectedStudent.segmento,responsavel:selectedStudent.responsavel,cpf_cnpj:selectedStudent.cpf_cnpj,email:selectedStudent.email,whatsapp:selectedStudent.whatsapp,cep:selectedStudent.cep,logradouro:selectedStudent.logradouro,numero:selectedStudent.numero,cidade:selectedStudent.cidade,uf:selectedStudent.uf,sweduc_matricula_id:selectedStudent.sweduc_matricula_id||null,sweduc_aluno_id:selectedStudent.sweduc_aluno_id||null,sweduc_ano_letivo:selectedStudent.sweduc_ano_letivo||null,sweduc_atualizado_em:new Date().toISOString()};
+        const saved=existingStudent.data?.id?await supabase.from("alunos").update(studentPayload).eq("id",existingStudent.data.id).select("id,nome,turma,segmento,responsavel,cpf_cnpj,email,whatsapp,cep,logradouro,numero,cidade,uf").single():await supabase.from("alunos").insert(studentPayload).select("id,nome,turma,segmento,responsavel,cpf_cnpj,email,whatsapp,cep,logradouro,numero,cidade,uf").single();
+        if(saved.error||!saved.data)throw new Error(saved.error?.message||"Não foi possível confirmar o aluno no cadastro fiscal.");
+        const savedStudent=saved.data as AssistantStudent;
+        studentId=savedStudent.id;
+        setPendingSweducStudent(null);
+        setStudents(current=>[savedStudent,...current.filter(item=>item.id!==savedStudent.id)]);
+        setNewStudentId(studentId);
+      }
+      const existing=await supabase.from("mensalidades").select("id").eq("aluno_id",studentId).eq("competencia",competence).order("id",{ascending:false}).limit(1).maybeSingle();
       if(existing.error)throw new Error(existing.error.message);
       if(existing.data?.id){
         const existingId=Number(existing.data.id);
@@ -310,7 +327,7 @@ export function IssuanceAssistant({onNavigate}:{onNavigate:(page:AppPage)=>void}
         return;
       }
       const insert=await supabase.from("mensalidades").insert({
-        aluno_id:selectedStudent.id,
+        aluno_id:studentId,
         competencia:competence,
         valor_mensalidade:amount,
         valor_nfse:amount,
@@ -734,7 +751,7 @@ export function IssuanceAssistant({onNavigate}:{onNavigate:(page:AppPage)=>void}
       </div>}
       <div className="assistant-new-start-grid">
         <div className="assistant-new-students">
-          <SweducOperationalPicker onStudentReady={student=>{setNewStudentId(student.id);setStudentQuery("");setNewDescriptionEdited(false);setMessage(`${student.nome} foi carregado da SWeduc. Confira competência e valor para iniciar a nota.`);void load(true)}}/>
+          <SweducOperationalPicker onStudentReady={student=>{const prepared=student as AssistantStudent;setPendingSweducStudent(prepared);setNewStudentId(prepared.id);setStudentQuery("");setNewDescriptionEdited(false);setNewDescription(defaultServiceDescription(newCompetence,prepared));setMessage(`${prepared.nome} foi preparado pela SWeduc. Confira responsável, competência e valor; o cadastro só será gravado ao iniciar a emissão.`)}}/>
           <div className="search-input"><Search/><input value={studentQuery} onChange={e=>setStudentQuery(e.target.value)} placeholder="Buscar aluno, responsável, turma ou CPF"/></div>
           {loading?<div className="assistant-loading">Carregando alunos…</div>:filteredStudents.length===0?<div className="assistant-empty">Nenhum aluno cadastrado encontrado.</div>:<div className="assistant-payment-list">
             {filteredStudents.slice(0,50).map(student=><button key={student.id} className={newStudentId===student.id?"assistant-payment selected":"assistant-payment"} onClick={()=>{setNewStudentId(student.id);setNewDescriptionEdited(false);setNewDescription(defaultServiceDescription(newCompetence,student));setError("");setMessage("")}}>

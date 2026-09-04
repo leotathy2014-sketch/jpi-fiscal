@@ -190,8 +190,6 @@ export async function POST(request:NextRequest){
     }catch(error){return json({error:safeSweducError(error,activeCredentials,[activeAccessToken])},400)}
   }
   if(action==="import"){
-    const canCreate=await hasServerPermission(auth.supabase,"students.create");const canEdit=await hasServerPermission(auth.supabase,"students.edit");
-    if(!canCreate&&!canEdit)return json({error:"Seu usuário não possui permissão para importar alunos para a emissão."},403);
     const matriculaId=Number(body.matriculaId||0);const responsibleIndex=Number(body.responsibleIndex||0);
     if(!Number.isSafeInteger(matriculaId)||matriculaId<=0)return json({error:"Selecione uma matrícula SWeduc válida."},400);
     const student=body.student&&typeof body.student==="object"?body.student as Record<string,unknown>:null;
@@ -206,19 +204,7 @@ export async function POST(request:NextRequest){
     const fiscalStudent=mapSweducToFiscalStudent({student:student as unknown as SweducStudentSummary&Record<string,unknown>,responsible:selectedResponsible,details});
     if(!fiscalStudent.nome)return json({error:"A matrícula selecionada não trouxe nome do aluno."},400);
     if(!fiscalStudent.responsavel||fiscalStudent.responsavel==="RESPONSÁVEL NÃO INFORMADO")return json({error:"Selecione um responsável válido para carregar os dados da nota."},400);
-    const existing=await auth.supabase.from("alunos").select("id").eq("sweduc_matricula_id",matriculaId).maybeSingle();
-    if(existing.error)return json({error:"Não foi possível verificar se esta matrícula já existe no cadastro fiscal."},500);
-    let result;
-    const payload={...fiscalStudent,sweduc_matricula_id:matriculaId,sweduc_aluno_id:Number(student.aluno_id||0)||null,sweduc_ano_letivo:String(student.ano_letivo||"")||null,sweduc_atualizado_em:new Date().toISOString()};
-    if(existing.data?.id){
-      if(!canEdit)return json({error:"Esta matrícula já existe. Seu usuário precisa de permissão para atualizar alunos."},403);
-      result=await auth.supabase.from("alunos").update(payload).eq("id",existing.data.id).select("id,nome").single();
-    }else{
-      if(!canCreate)return json({error:"Seu usuário precisa de permissão para cadastrar alunos."},403);
-      result=await auth.supabase.from("alunos").insert(payload).select("id,nome").single();
-    }
-      if(result.error||!result.data)return json({error:"Não foi possível carregar este aluno para a nota."},500);
-    return json({ok:true,student:result.data,message:`${result.data.nome} foi carregado no cadastro fiscal e já pode ser usado na emissão.`});
+    return json({ok:true,student:{id:-matriculaId,...fiscalStudent,sweduc_matricula_id:matriculaId,sweduc_aluno_id:Number(student.aluno_id||0)||null,sweduc_ano_letivo:String(student.ano_letivo||"")||null},message:`${fiscalStudent.nome} foi preparado para a nota. Confira os dados; nada foi gravado ainda.`});
   }
   return json({error:"Ação SWeduc inválida."},400);
 }
