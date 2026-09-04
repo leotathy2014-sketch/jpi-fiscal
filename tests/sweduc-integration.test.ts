@@ -10,6 +10,7 @@ const settings=readFileSync(new URL("../components/pages.tsx",import.meta.url),"
 const migration=readFileSync(new URL("../supabase/migrations/20260901120000_criar_integracao_sweduc.sql",import.meta.url),"utf8");
 const fiscalLinkMigration=readFileSync(new URL("../supabase/migrations/20260903120000_vincular_sweduc_ao_cadastro_fiscal.sql",import.meta.url),"utf8");
 const automaticSyncMigration=readFileSync(new URL("../supabase/migrations/20260903213000_habilitar_sincronizacao_automatica_sweduc.sql",import.meta.url),"utf8");
+const syncYearsMigration=readFileSync(new URL("../supabase/migrations/20260904103000_configurar_anos_sweduc.sql",import.meta.url),"utf8");
 const cronRoute=readFileSync(new URL("../app/api/cron/sweduc-sync/route.ts",import.meta.url),"utf8");
 const vercelConfig=readFileSync(new URL("../vercel.json",import.meta.url),"utf8");
 const assistant=readFileSync(new URL("../components/issuance-assistant.tsx",import.meta.url),"utf8");
@@ -103,7 +104,8 @@ test("sincroniza automaticamente o espelho SWeduc sem alterar Agenda Edu nem cad
   assert.match(cronRoute,/CRON_SECRET/);
   assert.match(cronRoute,/SUPABASE_SERVICE_ROLE_KEY/);
   assert.match(cronRoute,/get_sweduc_secret_service/);
-  assert.match(cronRoute,/getSweducActiveAcademicYear/);
+  assert.match(cronRoute,/anos_sincronizacao/);
+  assert.match(cronRoute,/resolveSweducAcademicYear/);
   assert.match(cronRoute,/listSweducStudentsWithToken/);
   assert.match(cronRoute,/from\("sweduc_alunos"\)\.upsert/);
   assert.doesNotMatch(cronRoute,/from\("alunos"\)\.(insert|update|upsert|delete)/);
@@ -117,4 +119,10 @@ test("sincroniza automaticamente o espelho SWeduc sem alterar Agenda Edu nem cad
   assert.match(route,/\.eq\("curso",course\)/);
   assert.match(route,/\.eq\("serie",serie\)/);
   assert.match(route,/\.eq\("turma",turma\)/);
+  assert.match(route,/action==="save_years"/);
+  assert.match(route,/anos_sincronizacao/);
+  assert.match(ui,/Anos sincronizados no espelho/);
+  assert.match(ui,/Salvar anos do espelho/);
+  assert.match(ui,/Sincronizar anos escolhidos/);
+  assert.match(syncYearsMigration,/add column if not exists anos_sincronizacao/);
 });

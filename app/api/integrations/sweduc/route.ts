@@ -46,10 +46,21 @@ async function upsertSweducMirror(supabase:SupabaseClient,rows:Array<Record<stri
   if(result.error)throw new Error("Não foi possível atualizar o espelho SWeduc no banco.");
 }
 
+function sanitizeSyncYears(value:unknown,fallback:number[]=[]){
+  const years=(Array.isArray(value)?value:fallback).map(year=>Number(year)).filter(year=>Number.isSafeInteger(year)&&year>=2020&&year<=2100);
+  return Array.from(new Set(years)).sort((a,b)=>a-b);
+}
+
+function defaultRecentYears(academicYears:{year:number}[],currentYear:number){
+  const available=academicYears.map(item=>Number(item.year)).filter(year=>Number.isSafeInteger(year));
+  const recent=available.filter(year=>year>=currentYear-1);
+  return sanitizeSyncYears(recent.length?recent:[currentYear-1,currentYear]);
+}
+
 export async function GET(request:NextRequest){
   const auth=await authorize(request);if(!auth.ok)return auth.response;
   if(!await hasServerPermission(auth.supabase,"settings.integrations.view")&&!await hasServerPermission(auth.supabase,"settings.integrations.edit")&&!await hasServerPermission(auth.supabase,"students.view")&&!await hasServerPermission(auth.supabase,"students.create")&&!await hasServerPermission(auth.supabase,"students.edit")&&!await hasServerPermission(auth.supabase,"payments.create")&&!await hasServerPermission(auth.supabase,"nfse.prepare"))return json({error:"Seu usuário não possui permissão para consultar esta integração."},403);
-  const {data:config,error}=await auth.supabase.from("sweduc_config").select("host,credencial_configurada,ultimo_status,testada_em,sincronizada_em,ultimo_erro,total_sincronizado").eq("id",true).maybeSingle();
+  const {data:config,error}=await auth.supabase.from("sweduc_config").select("host,credencial_configurada,ultimo_status,testada_em,sincronizada_em,ultimo_erro,total_sincronizado,anos_sincronizacao").eq("id",true).maybeSingle();
   if(error||!config)return json({error:"A estrutura da integração SWeduc ainda não foi aplicada ao banco."},503);
   let authMethod:SweducTokenGrant="client_credentials";let usuarioConfigurado=false;
   if(config.credencial_configurada){
@@ -62,14 +73,16 @@ export async function GET(request:NextRequest){
     try{const saved=await credentials(auth.supabase);const resolved=await resolveSweducAcademicYear(saved.host,activeAcademicYear);academicYears=resolved.years;activeAcademicYear=resolved.selected.year}catch{}
   }
   if(!academicYears.length)academicYears=[{id:0,year:activeAcademicYear}];
-  return json({ok:true,config:{...config,auth_method:authMethod,usuario_configurado:usuarioConfigurado,ano_letivo_ativo:defaultAcademicYear,cofre_configurado:Boolean(process.env.JPI_BACKEND_SECRET)},academicYears,selectedAcademicYear:activeAcademicYear,students:[],total:0});
+  const suggestedSyncYears=defaultRecentYears(academicYears,defaultAcademicYear);
+  const syncYears=sanitizeSyncYears(config.anos_sincronizacao,suggestedSyncYears);
+  return json({ok:true,config:{...config,anos_sincronizacao:syncYears,auth_method:authMethod,usuario_configurado:usuarioConfigurado,ano_letivo_ativo:defaultAcademicYear,cofre_configurado:Boolean(process.env.JPI_BACKEND_SECRET)},academicYears,syncYears,suggestedSyncYears,selectedAcademicYear:activeAcademicYear,students:[],total:0});
 }
 
 export async function POST(request:NextRequest){
   const auth=await authorize(request);if(!auth.ok)return auth.response;
   let body:Record<string,unknown>;try{body=await request.json()}catch{return json({error:"Dados da solicitação inválidos."},400)}
   const action=String(body.action||"");
-  if(["save","test"].includes(action)&&!await hasServerPermission(auth.supabase,"settings.integrations.edit"))return json({error:"Seu usuário não possui permissão para configurar a SWeduc."},403);
+  if(["save","test","save_years"].includes(action)&&!await hasServerPermission(auth.supabase,"settings.integrations.edit"))return json({error:"Seu usuário não possui permissão para configurar a SWeduc."},403);
   if(["lookup","sync","details"].includes(action)&&!await hasServerPermission(auth.supabase,"settings.integrations.view")&&!await hasServerPermission(auth.supabase,"settings.integrations.edit")&&!await hasServerPermission(auth.supabase,"students.view")&&!await hasServerPermission(auth.supabase,"students.create")&&!await hasServerPermission(auth.supabase,"students.edit")&&!await hasServerPermission(auth.supabase,"payments.create")&&!await hasServerPermission(auth.supabase,"nfse.prepare"))return json({error:"Seu usuário não possui permissão para consultar alunos da SWeduc."},403);
   if(action==="save"){
     let host:string;try{host=normalizeSweducHost(String(body.host||""))}catch(error){return json({error:error instanceof Error?error.message:"Informe um HOST válido."},400)}
@@ -102,6 +115,14 @@ export async function POST(request:NextRequest){
     let activeCredentials:SweducCredentials|undefined;
     try{activeCredentials=await credentials(auth.supabase);const activeYear=await getSweducActiveAcademicYear(activeCredentials.host);const sample=await listSweducStudents(activeCredentials,{page:1,ano_letivo_id:activeYear.id});const at=new Date().toISOString();await auth.supabase.from("sweduc_config").update({host:activeCredentials.host,ultimo_status:"conectado",testada_em:at,ultimo_erro:null,updated_at:at,updated_by:auth.user.id}).eq("id",true);return json({ok:true,academicYear:activeYear.year,message:`Conexão confirmada para o ano letivo ${activeYear.year}. A SWeduc retornou ${Number(sample.total||sample.data?.length||0)} matrícula(s). Nenhum dado foi importado neste teste.`});}catch(error){const message=safeSweducError(error,activeCredentials);await auth.supabase.from("sweduc_config").update({ultimo_status:"erro",ultimo_erro:message,updated_at:new Date().toISOString(),updated_by:auth.user.id}).eq("id",true);return json({error:message},400)}
   }
+  if(action==="save_years"){
+    const syncYears=sanitizeSyncYears(body.syncYears);
+    if(!syncYears.length)return json({error:"Escolha pelo menos um ano letivo para o espelho SWeduc."},400);
+    const at=new Date().toISOString();
+    const {error:updateError}=await auth.supabase.from("sweduc_config").update({anos_sincronizacao:syncYears,updated_at:at,updated_by:auth.user.id}).eq("id",true);
+    if(updateError)return json({error:"Não foi possível salvar os anos do espelho SWeduc."},500);
+    return json({ok:true,syncYears,message:`Anos do espelho SWeduc salvos: ${syncYears.join(", ")}.`});
+  }
   if(action==="lookup"){
     const rawYear=Number(body.academicYear||0);const search=String(body.search||"").trim();const course=String(body.course||"").trim();const serie=String(body.serie||"").trim();const turma=String(body.turma||"").trim();const page=Math.max(1,Math.min(Number(body.page||1),100));const pageSize=80;const from=(page-1)*pageSize;const to=from+pageSize-1;
     let query=auth.supabase.from("sweduc_alunos").select("matricula_id,aluno_id,nome,data_nascimento,numero_aluno,numero_matricula,status,unidade,curso,serie,turma,ano_letivo,responsaveis,financeiro,dados_origem,sincronizado_em",{count:"exact"});
@@ -114,7 +135,7 @@ export async function POST(request:NextRequest){
     if(result.error)return json({error:"Não foi possível consultar o espelho SWeduc no banco."},500);
     const rows=(result.data||[]) as Array<Record<string,unknown>>;
     const totalLocal=Number(result.count||0);const mirrorTotal=Number(mirrorCount.count||0);
-    if(rows.length||mirrorTotal>0||course||serie||turma)return json({ok:true,students:rows,page,lastPage:Math.max(1,Math.ceil(totalLocal/pageSize)),nextPage:to+1<totalLocal?page+1:null,totalAvailable:totalLocal,message:rows.length?`Consulta local concluída com ${totalLocal} matrícula(s) encontrada(s). Nada foi salvo no cadastro fiscal.`:"Nenhum aluno encontrado no espelho SWeduc para estes filtros."});
+    if(rows.length||(!search&&mirrorTotal>0)||course||serie||turma)return json({ok:true,students:rows,page,lastPage:Math.max(1,Math.ceil(totalLocal/pageSize)),nextPage:to+1<totalLocal?page+1:null,totalAvailable:totalLocal,message:rows.length?`Consulta local concluída com ${totalLocal} matrícula(s) encontrada(s). Nada foi salvo no cadastro fiscal.`:"Nenhum aluno encontrado no espelho SWeduc para estes filtros."});
     let activeCredentials:SweducCredentials|undefined;let activeAccessToken="";
     try{
       const creds=await credentials(auth.supabase);activeCredentials=creds;const resolved=await resolveSweducAcademicYear(creds.host,Number.isSafeInteger(rawYear)&&rawYear>1900?rawYear:undefined);const activeYear=resolved.selected;const token=await createSweducAccessToken(creds);activeAccessToken=token.accessToken;
