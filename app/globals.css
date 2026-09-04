@@ -814,6 +814,24 @@
 .sweduc-import-summary strong{font-size:13px;color:#243247;word-break:break-word}
 .sweduc-suggested-responsible{display:inline-flex;align-items:center;gap:4px;margin-left:8px;padding:3px 7px;border-radius:999px;background:#e8f8ef;color:#087044;font-style:normal;font-size:10.5px;font-weight:900;vertical-align:middle}
 .sweduc-suggested-responsible svg{width:13px;height:13px;stroke-width:3}
+.sweduc-duplicate-review{margin:14px 0;border-color:#d7e5f6;background:linear-gradient(135deg,#fbfdff,#f3f8ff)}
+.sweduc-review-summary{display:flex;flex-wrap:wrap;gap:8px;margin:10px 0 12px}
+.sweduc-review-summary span{display:inline-flex;align-items:center;gap:6px;padding:7px 10px;border:1px solid #d9e4f1;border-radius:999px;background:#fff;color:#526176;font-size:12px;font-weight:800}
+.sweduc-review-summary b{color:#1466df;font-size:14px}
+.sweduc-review-list{display:grid;gap:8px;max-height:360px;overflow:auto;padding-right:3px}
+.sweduc-review-item{display:grid;grid-template-columns:34px minmax(0,1fr) auto;gap:10px;align-items:center;padding:10px 12px;border:1px solid #e2e9f2;border-radius:12px;background:#fff}
+.sweduc-review-item.link{border-color:#b7d6f8;background:#f7fbff}
+.sweduc-review-item.keep{border-color:#f2d6a6;background:#fffaf0}
+.sweduc-review-item.can_delete{border-color:#d7e5dd;background:#f7fcf9}
+.sweduc-review-icon{width:30px;height:30px;border-radius:10px;display:grid;place-items:center;background:#eef4fb;color:#1466df}
+.sweduc-review-item.keep .sweduc-review-icon{background:#fff2d6;color:#a05d00}
+.sweduc-review-item.can_delete .sweduc-review-icon{background:#e9f8ef;color:#087044}
+.sweduc-review-icon svg{width:16px;height:16px}
+.sweduc-review-item strong{display:block;color:#203049;font-size:13px}
+.sweduc-review-item small{display:block;color:#66758a;font-size:11.5px;margin-top:2px}
+.sweduc-review-item p{margin:5px 0 0;color:#506176;font-size:12px;line-height:1.35}
+.sweduc-review-action{display:flex;justify-content:flex-end;align-items:center;min-width:120px}
+.sweduc-review-action span{font-size:11px;font-weight:900;color:#637388;text-align:right}
 
 @media(max-width:850px){
  .sweduc-grid-pagination{flex-wrap:wrap!important;gap:5px!important;padding:6px 8px!important;white-space:normal;font-size:10.8px;line-height:1.15}
@@ -830,6 +848,8 @@
  .agenda-api-modal-grid{grid-template-columns:1fr}
  .sweduc-year-toolbar,.sweduc-selection-grid,.sweduc-filter-row,.sweduc-search-row{grid-template-columns:1fr}
  .sweduc-import-panel{position:static}
+ .sweduc-review-item{grid-template-columns:30px minmax(0,1fr);align-items:start}
+ .sweduc-review-action{grid-column:2;justify-content:flex-start;min-width:0}
 }
 @media(max-width:540px){
  .agenda-api-modal-title>span{width:40px;height:40px}
