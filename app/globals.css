@@ -113,6 +113,11 @@
 @keyframes splashLogoRing{0%{opacity:.75;transform:scale(.88)}70%,100%{opacity:0;transform:scale(1.28)}}
 @keyframes splashLogoFloat{0%,100%{transform:translateY(0)}50%{transform:translateY(-2px)}}
 
+.splash{justify-items:center}
+.splash .brand-seal{width:154px;height:154px;border-radius:36px}
+.splash .brand-seal img{padding:10px}
+.splash .brand-seal:after{inset:-9px;border-radius:42px}
+
 
 /* Painel Master e permissões granulares */
 .permission-admin-header{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:16px 18px;margin-bottom:14px;border:1px solid var(--line);border-radius:12px;background:white}
