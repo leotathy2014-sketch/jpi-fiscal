@@ -478,6 +478,7 @@
 .assistant-sweduc-prepared span{font-size:10px;font-weight:900;letter-spacing:.07em;color:#1466df}
 .assistant-sweduc-prepared strong{font-size:17px;color:#13233a;line-height:1.2}
 .assistant-sweduc-prepared small{font-size:12px;line-height:1.4;color:#66758a}
+.assistant-sweduc-prepared small b,.assistant-new-payment header p b{color:#1466df;font-weight:800}
 .assistant-sweduc-prepared button{justify-self:start;margin-top:2px}
 @media(max-width:980px){
  .assistant-new-start-grid{grid-template-columns:1fr}
