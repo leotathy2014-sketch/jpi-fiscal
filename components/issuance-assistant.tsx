@@ -761,7 +761,7 @@ export function IssuanceAssistant({onNavigate}:{onNavigate:(page:AppPage)=>void}
       </div>}
       <div className="assistant-new-start-grid">
         <div className="assistant-new-students">
-          <SweducOperationalPicker onStudentReady={student=>{const prepared=student as AssistantStudent;setPendingSweducStudent(prepared);setNewStudentId(prepared.id);setStudentQuery("");setNewDescriptionEdited(false);setNewDescription(defaultServiceDescription(newCompetence,prepared));setMessage(`${prepared.nome} foi preparado pela SWeduc. Confira responsável, competência e valor; o cadastro só será gravado ao iniciar a emissão.`)}}/>
+          {pendingSweducStudent?<div className="assistant-sweduc-prepared"><span>ALUNO PREPARADO PELA SWEDUC</span><strong>{pendingSweducStudent.nome}</strong><small>{pendingSweducStudent.responsavel||"Responsável não informado"} · {pendingSweducStudent.turma||"Sem turma"} · {pendingSweducStudent.segmento}</small><button type="button" className="secondary" onClick={()=>{setPendingSweducStudent(null);setNewStudentId(null);setMessage("Escolha outro aluno para preparar a emissão.")}}>Trocar aluno</button></div>:<><SweducOperationalPicker onStudentReady={student=>{const prepared=student as AssistantStudent;setPendingSweducStudent(prepared);setNewStudentId(prepared.id);setStudentQuery("");setNewDescriptionEdited(false);setNewDescription(defaultServiceDescription(newCompetence,prepared));setMessage(`${prepared.nome} foi preparado pela SWeduc. Confira responsável, competência e valor; o cadastro só será gravado ao iniciar a emissão.`)}}/>
           <div className="search-input"><Search/><input value={studentQuery} onChange={e=>setStudentQuery(e.target.value)} placeholder="Buscar aluno, responsável, turma ou CPF"/></div>
           {loading?<div className="assistant-loading">Carregando alunos…</div>:filteredStudents.length===0?<div className="assistant-empty">Nenhum aluno cadastrado encontrado.</div>:<div className="assistant-payment-list">
             {filteredStudents.slice(0,50).map(student=><button key={student.id} className={newStudentId===student.id?"assistant-payment selected":"assistant-payment"} onClick={()=>{setNewStudentId(student.id);setNewDescriptionEdited(false);setNewDescription(defaultServiceDescription(newCompetence,student));setError("");setMessage("")}}>
@@ -769,7 +769,7 @@ export function IssuanceAssistant({onNavigate}:{onNavigate:(page:AppPage)=>void}
               <span><strong>{student.nome}</strong><small>{student.turma||"Sem turma"} · {student.segmento}</small></span>
               <em className="pending">{newStudentId===student.id?"Selecionado":"Selecionar"}</em>
             </button>)}
-          </div>}
+          </div>}</>}
         </div>
         <div className="assistant-new-form">
           {!selectedStudent?<div className="assistant-empty large"><UsersRound/><strong>Selecione um aluno</strong><span>Depois informe competência, valor e status do pagamento.</span></div>:<>
