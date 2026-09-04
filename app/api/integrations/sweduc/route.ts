@@ -61,6 +61,14 @@ function normalizeSearchText(value:unknown){return String(value||"").normalize("
 function matchesSearch(row:Record<string,unknown>,term:string){const normalized=normalizeSearchText(term);if(!normalized)return true;return [row.nome,row.numero_matricula,row.matricula_id,row.turma,row.serie,row.curso].some(value=>normalizeSearchText(value).includes(normalized))}
 function financialText(item:Record<string,unknown>,keys:string[]){for(const key of keys){const value=item[key];if(value!==undefined&&value!==null&&String(value).trim())return String(value)}return ""}
 function financialAmount(item:Record<string,unknown>){return financialText(item,["valor","Valor","VALOR","valor_titulo","valor_mensalidade","valor_original","vl_titulo","vlr_titulo","total"])}
+function financialDescription(item:Record<string,unknown>){
+  const direct=financialText(item,["descricao","descrição","descricao_titulo","descricaoTitulo","historico","histórico","categoria","tipo","nome","produto","servico","serviço","plano_conta"]);
+  const itens=Array.isArray(item.itens)?item.itens:[];
+  const itemTexts=itens.flatMap(entry=>entry&&typeof entry==="object"?[
+    financialText(entry as Record<string,unknown>,["descricao","descrição","nome","produto","servico","serviço","categoria","tipo"]),
+  ]:[]).filter(Boolean);
+  return [direct,...itemTexts].filter(Boolean).join(" ");
+}
 function formatSuggestedMoney(value:string){
   const clean=value.replace(/[^\d.,-]/g,"").trim();
   if(!clean)return "";
@@ -69,9 +77,17 @@ function formatSuggestedMoney(value:string){
   return number.toLocaleString("pt-BR",{minimumFractionDigits:2,maximumFractionDigits:2});
 }
 function suggestedFinancialAmount(financeiro:Array<Record<string,unknown>>){
-  const opened=financeiro.find(item=>normalizeSearchText(financialText(item,["situacao","status","Situacao","STATUS"])).includes("aberto")&&financialAmount(item));
-  const fallback=financeiro.find(item=>financialAmount(item));
-  return formatSuggestedMoney(financialAmount(opened||fallback||{}));
+  const isOpen=(item:Record<string,unknown>)=>{const status=normalizeSearchText(financialText(item,["situacao","status","Situacao","STATUS"]));return !status||status.includes("aberto")||status.includes("pendente")||status.includes("em aberto")};
+  const isMonthly=(item:Record<string,unknown>)=>{
+    const text=normalizeSearchText(financialDescription(item));
+    if(!text)return false;
+    const blocked=["multidisciplinar","material","apostila","uniforme","taxa","rematricula","matricula","evento","passeio","lanche","cantina"];
+    if(blocked.some(word=>text.includes(word)))return false;
+    return text.includes("mensalidade")||text.includes("mensal")||text.includes("parcela escolar")||text.includes("servico educacional")||text.includes("servico escolar");
+  };
+  const monthlyOpen=financeiro.find(item=>isOpen(item)&&isMonthly(item)&&financialAmount(item));
+  const monthlyAny=financeiro.find(item=>isMonthly(item)&&financialAmount(item));
+  return formatSuggestedMoney(financialAmount(monthlyOpen||monthlyAny||{}));
 }
 
 export async function GET(request:NextRequest){
