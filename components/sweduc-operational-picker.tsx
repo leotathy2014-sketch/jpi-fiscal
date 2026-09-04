@@ -12,7 +12,17 @@ type SweducStudent={matricula_id:number;nome:string;numero_matricula:string|null
 function responsibleDocument(responsible:SweducResponsible){return responsible.cpf||responsible.cpf_cnpj||responsible.documento||"Documento não informado"}
 function responsibleContact(responsible:SweducResponsible){return responsible.telefones?.[0]?.numero||responsible.emails?.[0]?.email||"Contato não informado"}
 function financialText(item:SweducFinancial,keys:string[]){for(const key of keys){const value=item[key];if(value!==undefined&&value!==null&&String(value).trim())return String(value)}return ""}
-function financialValue(item:SweducFinancial){const value=financialText(item,["valor","Valor","VALOR","valor_titulo","valor_mensalidade","valor_original","vl_titulo","vlr_titulo","total"]);return value||"Valor não informado"}
+function parseFinancialNumber(value:string){const clean=value.replace(/[^\d.,-]/g,"").trim();if(!clean)return NaN;const number=clean.includes(",")?Number(clean.replace(/\./g,"").replace(",",".")):Number(clean);return Number.isFinite(number)?number:NaN}
+function findFinancialAmount(item:SweducFinancial,keys:string[]){for(const key of keys){const amount=parseFinancialNumber(financialText(item,[key]));if(Number.isFinite(amount))return amount}return NaN}
+function formatFinancialValue(value:number){return Math.abs(value).toLocaleString("pt-BR",{style:"currency",currency:"BRL"})}
+function financialValue(item:SweducFinancial){
+  const net=findFinancialAmount(item,["valor_liquido","valorLiquido","valor_com_desconto","valorComDesconto","valor_final","valorFinal","saldo","saldo_devedor","valor_a_pagar","valorAPagar","valor_pago"]);
+  if(Number.isFinite(net)&&net!==0)return formatFinancialValue(net);
+  const gross=findFinancialAmount(item,["valor","Valor","VALOR","valor_titulo","valor_mensalidade","valor_original","vl_titulo","vlr_titulo","total"]);
+  const discount=findFinancialAmount(item,["desconto","valor_desconto","valorDesconto","descontos","bolsa","valor_bolsa","valorBolsa"]);
+  if(Number.isFinite(gross)&&Number.isFinite(discount)&&discount>0)return `${formatFinancialValue(Math.max(0,gross-Math.abs(discount)))} com desconto`;
+  return Number.isFinite(gross)?formatFinancialValue(gross):"Valor não informado";
+}
 function financialDescription(item:SweducFinancial){
   const direct=financialText(item,["descricao","descrição","descricao_titulo","descricaoTitulo","historico","histórico","categoria","tipo","nome","produto","servico","serviço","plano_conta"]);
   const itens=Array.isArray(item.itens)?item.itens:[];

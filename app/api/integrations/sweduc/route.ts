@@ -60,7 +60,28 @@ function defaultRecentYears(academicYears:{year:number}[],currentYear:number){
 function normalizeSearchText(value:unknown){return String(value||"").normalize("NFD").replace(/[\u0300-\u036f]/g,"").replace(/[^\p{L}\p{N}\s]/gu," ").replace(/\s+/g," ").trim().toLocaleLowerCase("pt-BR")}
 function matchesSearch(row:Record<string,unknown>,term:string){const normalized=normalizeSearchText(term);if(!normalized)return true;return [row.nome,row.numero_matricula,row.matricula_id,row.turma,row.serie,row.curso].some(value=>normalizeSearchText(value).includes(normalized))}
 function financialText(item:Record<string,unknown>,keys:string[]){for(const key of keys){const value=item[key];if(value!==undefined&&value!==null&&String(value).trim())return String(value)}return ""}
-function financialAmount(item:Record<string,unknown>){return financialText(item,["valor","Valor","VALOR","valor_titulo","valor_mensalidade","valor_original","vl_titulo","vlr_titulo","total"])}
+function parseFinancialNumber(value:string){
+  const clean=value.replace(/[^\d.,-]/g,"").trim();
+  if(!clean)return NaN;
+  const number=clean.includes(",")?Number(clean.replace(/\./g,"").replace(",",".")):Number(clean);
+  return Number.isFinite(number)?number:NaN;
+}
+function findFinancialAmount(item:Record<string,unknown>,keys:string[]){
+  for(const key of keys){
+    const raw=financialText(item,[key]);
+    const amount=parseFinancialNumber(raw);
+    if(Number.isFinite(amount))return amount;
+  }
+  return NaN;
+}
+function financialAmount(item:Record<string,unknown>){
+  const net=findFinancialAmount(item,["valor_liquido","valorLiquido","valor_com_desconto","valorComDesconto","valor_final","valorFinal","saldo","saldo_devedor","valor_a_pagar","valorAPagar","valor_pago"]);
+  if(Number.isFinite(net)&&net!==0)return Math.abs(net).toFixed(2);
+  const gross=findFinancialAmount(item,["valor","Valor","VALOR","valor_titulo","valor_mensalidade","valor_original","vl_titulo","vlr_titulo","total"]);
+  const discount=findFinancialAmount(item,["desconto","valor_desconto","valorDesconto","descontos","bolsa","valor_bolsa","valorBolsa"]);
+  if(Number.isFinite(gross)&&Number.isFinite(discount)&&discount>0)return Math.max(0,gross-Math.abs(discount)).toFixed(2);
+  return Number.isFinite(gross)?Math.abs(gross).toFixed(2):"";
+}
 function financialDescription(item:Record<string,unknown>){
   const direct=financialText(item,["descricao","descrição","descricao_titulo","descricaoTitulo","historico","histórico","categoria","tipo","nome","produto","servico","serviço","plano_conta"]);
   const itens=Array.isArray(item.itens)?item.itens:[];
@@ -70,9 +91,7 @@ function financialDescription(item:Record<string,unknown>){
   return [direct,...itemTexts].filter(Boolean).join(" ");
 }
 function formatSuggestedMoney(value:string){
-  const clean=value.replace(/[^\d.,-]/g,"").trim();
-  if(!clean)return "";
-  const number=clean.includes(",")?Number(clean.replace(/\./g,"").replace(",",".")):Number(clean);
+  const number=parseFinancialNumber(value);
   if(!Number.isFinite(number)||number<0)return "";
   return number.toLocaleString("pt-BR",{minimumFractionDigits:2,maximumFractionDigits:2});
 }
