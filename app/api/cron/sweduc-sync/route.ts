@@ -45,6 +45,49 @@ function mapSummaryToMirror(summary:SweducStudentSummary,at:string){
   };
 }
 
+function normalizeSearchText(value:unknown){return String(value||"").normalize("NFD").replace(/[\u0300-\u036f]/g,"").replace(/[^\p{L}\p{N}\s]/gu," ").replace(/\s+/g," ").trim().toLocaleLowerCase("pt-BR")}
+function referenceSourceId(row:Record<string,unknown>,keys:string[]){
+  const origin=row.dados_origem&&typeof row.dados_origem==="object"?row.dados_origem as Record<string,unknown>:{};
+  const summary=origin.resumo&&typeof origin.resumo==="object"?origin.resumo as Record<string,unknown>:{};
+  for(const source of [row,summary]){
+    for(const key of keys){
+      const value=source[key];
+      if(value!==undefined&&value!==null&&String(value).trim())return String(value).trim();
+    }
+  }
+  return null;
+}
+function academicReferenceRows(rows:Array<Record<string,unknown>>,fallbackYear?:number,at=new Date().toISOString()){
+  const references=new Map<string,Record<string,unknown>>();
+  for(const row of rows){
+    const year=Number(row.ano_letivo||fallbackYear||0);
+    const curso=String(row.curso||"").replace(/\s+/g," ").trim();
+    if(!Number.isSafeInteger(year)||year<2020||year>2100||!curso)continue;
+    const serie=String(row.serie||"").replace(/\s+/g," ").trim();
+    const turma=String(row.turma||"").replace(/\s+/g," ").trim();
+    const cursoNormalizado=normalizeSearchText(curso);
+    const serieNormalizada=normalizeSearchText(serie);
+    const turmaNormalizada=normalizeSearchText(turma);
+    const key=[year,cursoNormalizado,serieNormalizada,turmaNormalizada].join("|");
+    if(!references.has(key))references.set(key,{
+      ano_letivo:year,
+      curso_id:referenceSourceId(row,["curso_id","cursoId","id_curso","idCurso"]),
+      curso,
+      curso_normalizado:cursoNormalizado,
+      serie_id:referenceSourceId(row,["serie_id","serieId","id_serie","idSerie"]),
+      serie:serie||null,
+      serie_normalizada:serieNormalizada,
+      turma_id:referenceSourceId(row,["turma_id","turmaId","id_turma","idTurma"]),
+      turma:turma||null,
+      turma_normalizada:turmaNormalizada,
+      ativo:true,
+      ultima_sincronizacao_em:at,
+      updated_at:at,
+    });
+  }
+  return Array.from(references.values());
+}
+
 export async function GET(request:NextRequest){
   const cronSecret=process.env.CRON_SECRET;
   if(!cronSecret||request.headers.get("authorization")!==`Bearer ${cronSecret}`)return json({error:"Sincronização automática não autorizada."},401);
@@ -77,6 +120,11 @@ export async function GET(request:NextRequest){
         if(rows.length){
           const result=await supabase.from("sweduc_alunos").upsert(rows,{onConflict:"matricula_id"});
           if(result.error)throw new Error("Não foi possível atualizar o espelho SWeduc.");
+          const references=academicReferenceRows(rows,academicYear.year,at);
+          if(references.length){
+            const referenceResult=await supabase.from("sweduc_referencias_academicas").upsert(references,{onConflict:"ano_letivo,curso_normalizado,serie_normalizada,turma_normalizada"});
+            if(referenceResult.error)throw new Error("Não foi possível atualizar as referências acadêmicas da SWeduc.");
+          }
         }
         synced+=rows.length;syncedThisYear+=rows.length;page++;
       }

@@ -11,6 +11,7 @@ const migration=readFileSync(new URL("../supabase/migrations/20260901120000_cria
 const fiscalLinkMigration=readFileSync(new URL("../supabase/migrations/20260903120000_vincular_sweduc_ao_cadastro_fiscal.sql",import.meta.url),"utf8");
 const automaticSyncMigration=readFileSync(new URL("../supabase/migrations/20260903213000_habilitar_sincronizacao_automatica_sweduc.sql",import.meta.url),"utf8");
 const syncYearsMigration=readFileSync(new URL("../supabase/migrations/20260904103000_configurar_anos_sweduc.sql",import.meta.url),"utf8");
+const academicReferencesMigration=readFileSync(new URL("../supabase/migrations/20260904152000_criar_referencias_academicas_sweduc.sql",import.meta.url),"utf8");
 const cronRoute=readFileSync(new URL("../app/api/cron/sweduc-sync/route.ts",import.meta.url),"utf8");
 const vercelConfig=readFileSync(new URL("../vercel.json",import.meta.url),"utf8");
 const assistant=readFileSync(new URL("../components/issuance-assistant.tsx",import.meta.url),"utf8");
@@ -127,8 +128,28 @@ test("sincroniza automaticamente o espelho SWeduc sem alterar Agenda Edu nem cad
   assert.match(route,/\.eq\("turma",turma\)/);
   assert.match(route,/action==="save_years"/);
   assert.match(route,/anos_sincronizacao/);
+  assert.match(route,/sweduc_referencias_academicas/);
+  assert.match(route,/upsertSweducAcademicReferences/);
+  assert.match(cronRoute,/sweduc_referencias_academicas/);
   assert.match(ui,/Anos sincronizados no espelho/);
   assert.match(ui,/Salvar anos do espelho/);
   assert.match(ui,/Sincronizar anos escolhidos/);
   assert.match(syncYearsMigration,/add column if not exists anos_sincronizacao/);
+});
+
+test("mantém referências acadêmicas SWeduc para filtros sem duplicidade",()=>{
+  assert.match(academicReferencesMigration,/create table if not exists public\.sweduc_referencias_academicas/);
+  assert.match(academicReferencesMigration,/ano_letivo integer not null/);
+  assert.match(academicReferencesMigration,/curso_normalizado text not null/);
+  assert.match(academicReferencesMigration,/serie_normalizada text not null default ''/);
+  assert.match(academicReferencesMigration,/turma_normalizada text not null default ''/);
+  assert.match(academicReferencesMigration,/unique \(ano_letivo,curso_normalizado,serie_normalizada,turma_normalizada\)/);
+  assert.match(academicReferencesMigration,/enable row level security/);
+  assert.match(academicReferencesMigration,/students\.view/);
+  assert.match(academicReferencesMigration,/nfse\.prepare/);
+  assert.match(academicReferencesMigration,/from public\.sweduc_alunos/);
+  assert.match(operationalPicker,/type AcademicReference/);
+  assert.match(operationalPicker,/academicReferences/);
+  assert.match(operationalPicker,/yearReferences/);
+  assert.match(operationalPicker,/uniqueSortedOptions\(\[\.\.\.students\.map\(student=>student\.curso\),\.\.\.yearReferences\.map\(reference=>reference\.curso\)\]\)/);
 });

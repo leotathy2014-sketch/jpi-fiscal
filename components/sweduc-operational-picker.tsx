@@ -5,6 +5,7 @@ import {createSupabaseBrowserClient} from "@/lib/supabase";
 import {authenticatedFetch} from "@/lib/authenticated-fetch";
 
 type AcademicYear={id:number;year:number};
+type AcademicReference={ano_letivo:number;curso:string|null;serie:string|null;turma:string|null};
 type SweducResponsible={nome?:string;cpf?:string;cpf_cnpj?:string;documento?:string;responsavel_pedagogico?:boolean;telefones?:Array<{numero?:string}>;emails?:Array<{email?:string}>};
 type SweducFinancial=Record<string,unknown>&{titulo_id?:number|string;numero_titulo?:string;valor?:string|number;situacao?:string;vencimento?:string;descricao?:string};
 type SweducStudent={matricula_id:number;nome:string;numero_matricula:string|null;status:string|null;unidade:string|null;curso:string|null;serie:string|null;turma:string|null;ano_letivo:string|null;responsaveis:SweducResponsible[];financeiro:SweducFinancial[];detalhes_carregados?:boolean};
@@ -61,6 +62,7 @@ function sortStudents(students:SweducStudent[]){
 export function SweducOperationalPicker({onStudentReady}:{onStudentReady:(student:{id:number;nome:string;turma?:string|null;segmento?:string;responsavel?:string;cpf_cnpj?:string|null;email?:string|null;whatsapp?:string|null;cep?:string|null;logradouro?:string|null;numero?:string|null;cidade?:string|null;uf?:string|null;sweduc_matricula_id?:number|null;sweduc_aluno_id?:number|null;sweduc_ano_letivo?:string|null;valor_mensalidade_sugerido?:string|null})=>void}){
   const supabase=useMemo(()=>createSupabaseBrowserClient(),[]);
   const [years,setYears]=useState<AcademicYear[]>([]);
+  const [academicReferences,setAcademicReferences]=useState<AcademicReference[]>([]);
   const [selectedYear,setSelectedYear]=useState<number|null>(null);
   const [students,setStudents]=useState<SweducStudent[]>([]);
   const [query,setQuery]=useState("");
@@ -86,21 +88,29 @@ export function SweducOperationalPicker({onStudentReady}:{onStudentReady:(studen
     try{
       const accessToken=await token();
       const response=await authenticatedFetch("/api/integrations/sweduc",{headers:{Authorization:`Bearer ${accessToken}`},cache:"no-store"});
-      const data=await response.json().catch(()=>({})) as {academicYears?:AcademicYear[];syncYears?:number[];selectedAcademicYear?:number;config?:{credencial_configurada:boolean};error?:string};
+      const data=await response.json().catch(()=>({})) as {academicYears?:AcademicYear[];syncYears?:number[];selectedAcademicYear?:number;academicReferences?:AcademicReference[];config?:{credencial_configurada:boolean};error?:string};
       if(!response.ok)throw new Error(data.error||"Não foi possível carregar os anos letivos da SWeduc.");
       const allowedYears=(data.syncYears?.length?data.syncYears:[]).sort((a,b)=>b-a);
       const available=data.academicYears||[];
       const filteredYears=allowedYears.map(year=>available.find(item=>item.year===year)||{id:0,year});
       setYears(filteredYears);
+      setAcademicReferences(data.academicReferences||[]);
       setSelectedYear(filteredYears[0]?.year||data.selectedAcademicYear||available[0]?.year||null);
       if(!data.config?.credencial_configurada)setMessage("A conexão SWeduc ainda precisa ser configurada pelo Master.");
     }catch(e){setError(e instanceof Error?e.message:"Não foi possível carregar a SWeduc.")}
   },[token]);
 
   useEffect(()=>{void loadYears()},[loadYears]);
-  const courseOptions=useMemo(()=>uniqueSortedOptions(students.map(student=>student.curso)),[students]);
-  const serieOptions=useMemo(()=>uniqueSortedOptions(students.filter(student=>!courseFilter||sameOption(student.curso,courseFilter)).map(student=>student.serie)),[students,courseFilter]);
-  const turmaOptions=useMemo(()=>uniqueSortedOptions(students.filter(student=>(!courseFilter||sameOption(student.curso,courseFilter))&&(!serieFilter||sameOption(student.serie,serieFilter))).map(student=>student.turma)),[students,courseFilter,serieFilter]);
+  const yearReferences=useMemo(()=>academicReferences.filter(reference=>Number(reference.ano_letivo)===Number(selectedYear)),[academicReferences,selectedYear]);
+  const courseOptions=useMemo(()=>uniqueSortedOptions([...students.map(student=>student.curso),...yearReferences.map(reference=>reference.curso)]),[students,yearReferences]);
+  const serieOptions=useMemo(()=>uniqueSortedOptions([
+    ...students.filter(student=>!courseFilter||sameOption(student.curso,courseFilter)).map(student=>student.serie),
+    ...yearReferences.filter(reference=>!courseFilter||sameOption(reference.curso,courseFilter)).map(reference=>reference.serie),
+  ]),[students,yearReferences,courseFilter]);
+  const turmaOptions=useMemo(()=>uniqueSortedOptions([
+    ...students.filter(student=>(!courseFilter||sameOption(student.curso,courseFilter))&&(!serieFilter||sameOption(student.serie,serieFilter))).map(student=>student.turma),
+    ...yearReferences.filter(reference=>(!courseFilter||sameOption(reference.curso,courseFilter))&&(!serieFilter||sameOption(reference.serie,serieFilter))).map(reference=>reference.turma),
+  ]),[students,yearReferences,courseFilter,serieFilter]);
   const visible=useMemo(()=>{
     const term=normalizeSearchText(query);
     const source=students.filter(student=>(!courseFilter||sameOption(student.curso,courseFilter))&&(!serieFilter||sameOption(student.serie,serieFilter))&&(!turmaFilter||sameOption(student.turma,turmaFilter)));

@@ -36,14 +36,91 @@ async function credentials(supabase:SupabaseClient){
   return {...parsed,host:normalizeSweducHost(String(configResult.data?.host||parsed.host))};
 }
 
+function serviceSupabaseClient(){
+  const url=process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const key=process.env.SUPABASE_SERVICE_ROLE_KEY;
+  return url&&key?createClient(url,key,{auth:{persistSession:false,autoRefreshToken:false}}):null;
+}
+
 function mapSummaryToGrid(summary:SweducStudentSummary){
   return {matricula_id:Number(summary.matricula_id),aluno_id:Number(summary.aluno_id||0)||null,nome:String(summary.nome||"Aluno sem nome"),data_nascimento:String(summary.data_nascimento||"")||null,numero_aluno:String(summary.num_aluno||"")||null,numero_matricula:String(summary.num_matricula||"")||null,status:String(summary.status||"")||null,unidade:String(summary.unidade||"")||null,curso:String(summary.curso||"")||null,serie:String(summary.serie||"")||null,turma:String(summary.turma||"")||null,ano_letivo:String(summary.ano_letivo||"")||null,responsaveis:[],financeiro:[],dados_origem:{resumo:summary},sincronizado_em:new Date().toISOString()};
 }
 
 async function upsertSweducMirror(supabase:SupabaseClient,rows:Array<Record<string,unknown>>){
   if(!rows.length)return;
-  const result=await supabase.from("sweduc_alunos").upsert(rows,{onConflict:"matricula_id"});
+  const writer=serviceSupabaseClient()||supabase;
+  const result=await writer.from("sweduc_alunos").upsert(rows,{onConflict:"matricula_id"});
   if(result.error)throw new Error("Não foi possível atualizar o espelho SWeduc no banco.");
+}
+
+function normalizeAcademicReference(value:unknown){
+  return normalizeSearchText(value).replace(/\s+/g," ").trim();
+}
+
+function referenceSourceId(row:Record<string,unknown>,keys:string[]){
+  const origin=row.dados_origem&&typeof row.dados_origem==="object"?row.dados_origem as Record<string,unknown>:{};
+  const summary=origin.resumo&&typeof origin.resumo==="object"?origin.resumo as Record<string,unknown>:{};
+  for(const source of [row,summary]){
+    for(const key of keys){
+      const value=source[key];
+      if(value!==undefined&&value!==null&&String(value).trim())return String(value).trim();
+    }
+  }
+  return null;
+}
+
+function academicReferenceRows(rows:Array<Record<string,unknown>>,fallbackYear?:number){
+  const references=new Map<string,Record<string,unknown>>();
+  for(const row of rows){
+    const year=Number(row.ano_letivo||fallbackYear||0);
+    const curso=String(row.curso||"").replace(/\s+/g," ").trim();
+    if(!Number.isSafeInteger(year)||year<2020||year>2100||!curso)continue;
+    const serie=String(row.serie||"").replace(/\s+/g," ").trim();
+    const turma=String(row.turma||"").replace(/\s+/g," ").trim();
+    const cursoNormalizado=normalizeAcademicReference(curso);
+    const serieNormalizada=normalizeAcademicReference(serie);
+    const turmaNormalizada=normalizeAcademicReference(turma);
+    const key=[year,cursoNormalizado,serieNormalizada,turmaNormalizada].join("|");
+    if(!references.has(key))references.set(key,{
+      ano_letivo:year,
+      curso_id:referenceSourceId(row,["curso_id","cursoId","id_curso","idCurso"]),
+      curso,
+      curso_normalizado:cursoNormalizado,
+      serie_id:referenceSourceId(row,["serie_id","serieId","id_serie","idSerie"]),
+      serie:serie||null,
+      serie_normalizada:serieNormalizada,
+      turma_id:referenceSourceId(row,["turma_id","turmaId","id_turma","idTurma"]),
+      turma:turma||null,
+      turma_normalizada:turmaNormalizada,
+      ativo:true,
+      ultima_sincronizacao_em:new Date().toISOString(),
+      updated_at:new Date().toISOString(),
+    });
+  }
+  return Array.from(references.values());
+}
+
+async function upsertSweducAcademicReferences(supabase:SupabaseClient,rows:Array<Record<string,unknown>>,fallbackYear?:number){
+  const references=academicReferenceRows(rows,fallbackYear);
+  if(!references.length)return;
+  const writer=serviceSupabaseClient()||supabase;
+  const result=await writer.from("sweduc_referencias_academicas").upsert(references,{onConflict:"ano_letivo,curso_normalizado,serie_normalizada,turma_normalizada"});
+  if(result.error)throw new Error("Não foi possível atualizar as referências acadêmicas da SWeduc.");
+}
+
+async function listSweducAcademicReferences(supabase:SupabaseClient,years:number[]){
+  if(!years.length)return [];
+  const {data,error}=await supabase
+    .from("sweduc_referencias_academicas")
+    .select("ano_letivo,curso,serie,turma,ultima_sincronizacao_em")
+    .in("ano_letivo",years)
+    .eq("ativo",true)
+    .order("ano_letivo",{ascending:false})
+    .order("curso",{ascending:true})
+    .order("serie",{ascending:true})
+    .order("turma",{ascending:true});
+  if(error)return [];
+  return data||[];
 }
 
 function sanitizeSyncYears(value:unknown,fallback:number[]=[]){
@@ -127,7 +204,8 @@ export async function GET(request:NextRequest){
   if(!academicYears.length)academicYears=[{id:0,year:activeAcademicYear}];
   const suggestedSyncYears=defaultRecentYears(academicYears,defaultAcademicYear);
   const syncYears=sanitizeSyncYears(config.anos_sincronizacao,suggestedSyncYears);
-  return json({ok:true,config:{...config,anos_sincronizacao:syncYears,auth_method:authMethod,usuario_configurado:usuarioConfigurado,ano_letivo_ativo:defaultAcademicYear,cofre_configurado:Boolean(process.env.JPI_BACKEND_SECRET)},academicYears,syncYears,suggestedSyncYears,selectedAcademicYear:activeAcademicYear,students:[],total:0});
+  const academicReferences=await listSweducAcademicReferences(auth.supabase,syncYears.length?syncYears:academicYears.map(item=>item.year));
+  return json({ok:true,config:{...config,anos_sincronizacao:syncYears,auth_method:authMethod,usuario_configurado:usuarioConfigurado,ano_letivo_ativo:defaultAcademicYear,cofre_configurado:Boolean(process.env.JPI_BACKEND_SECRET)},academicYears,syncYears,suggestedSyncYears,selectedAcademicYear:activeAcademicYear,students:[],total:0,academicReferences});
 }
 
 export async function POST(request:NextRequest){
@@ -205,6 +283,7 @@ export async function POST(request:NextRequest){
       const listing=await listSweducStudentsWithToken(creds.host,token.accessToken,{page,ano_letivo_id:activeYear.id,search:search||undefined});
       const apiRows=(listing.data||[]).map(mapSummaryToGrid);
       await upsertSweducMirror(auth.supabase,apiRows);
+      await upsertSweducAcademicReferences(auth.supabase,apiRows,activeYear.year);
       const lastPage=Math.min(Math.max(1,Number(listing.last_page||page)),MAX_SWEDUC_PAGES);
       return json({ok:true,students:apiRows,page,lastPage,nextPage:page<lastPage?page+1:null,academicYear:activeYear.year,totalAvailable:Number(listing.total||0),message:`Espelho SWeduc estava vazio e foi atualizado pela API para ${activeYear.year}. Nada foi salvo no cadastro fiscal.`});
     }catch(error){return json({error:safeSweducError(error,activeCredentials,[activeAccessToken])},400)}
@@ -220,6 +299,7 @@ export async function POST(request:NextRequest){
         const summaries=(listing.data||[]).filter((summary:SweducStudentSummary)=>!search||String(summary.nome||"").toLocaleLowerCase("pt-BR").includes(search));
         rows=summaries.map(mapSummaryToGrid);
         await upsertSweducMirror(auth.supabase,rows);
+        await upsertSweducAcademicReferences(auth.supabase,rows,activeYear.year);
         synced+=rows.length;
       }
       const hasNext=page<lastPage;const at=new Date().toISOString();const statusUpdate:Record<string,unknown>={ultimo_status:"conectado",ultimo_erro:null,updated_at:at,updated_by:auth.user.id};if(!hasNext){statusUpdate.sincronizada_em=at;statusUpdate.total_sincronizado=totalAvailable}await auth.supabase.from("sweduc_config").update(statusUpdate).eq("id",true);
