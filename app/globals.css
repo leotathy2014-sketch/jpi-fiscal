@@ -118,19 +118,19 @@
 .splash .brand-seal img{padding:10px}
 .splash .brand-seal:after{inset:-9px;border-radius:42px}
 
-.sweduc-operational-picker .table-card{overflow-x:auto}
-.sweduc-operational-picker .table-card table{min-width:1100px;table-layout:fixed}
-.sweduc-operational-picker .table-card th{padding:11px 12px;white-space:nowrap}
-.sweduc-operational-picker .table-card td{padding:10px 12px;vertical-align:middle;white-space:nowrap}
-.sweduc-operational-picker .table-card th:nth-child(1),.sweduc-operational-picker .table-card td:nth-child(1){width:86px}
-.sweduc-operational-picker .table-card th:nth-child(2),.sweduc-operational-picker .table-card td:nth-child(2){width:120px}
-.sweduc-operational-picker .table-card th:nth-child(3),.sweduc-operational-picker .table-card td:nth-child(3){width:360px}
-.sweduc-operational-picker .table-card th:nth-child(4),.sweduc-operational-picker .table-card td:nth-child(4){width:220px}
-.sweduc-operational-picker .table-card th:nth-child(5),.sweduc-operational-picker .table-card td:nth-child(5){width:220px}
-.sweduc-operational-picker .table-card th:nth-child(6),.sweduc-operational-picker .table-card td:nth-child(6){width:120px;text-align:right}
+.sweduc-operational-picker .table-card{overflow-x:hidden}
+.sweduc-operational-picker .table-card table{min-width:0;table-layout:fixed}
+.sweduc-operational-picker .table-card th{padding:10px 9px;white-space:nowrap}
+.sweduc-operational-picker .table-card td{padding:9px;vertical-align:middle;white-space:nowrap}
+.sweduc-operational-picker .table-card th:nth-child(1),.sweduc-operational-picker .table-card td:nth-child(1){width:64px}
+.sweduc-operational-picker .table-card th:nth-child(2),.sweduc-operational-picker .table-card td:nth-child(2){width:84px}
+.sweduc-operational-picker .table-card th:nth-child(3),.sweduc-operational-picker .table-card td:nth-child(3){width:auto}
+.sweduc-operational-picker .table-card th:nth-child(4),.sweduc-operational-picker .table-card td:nth-child(4){width:180px}
+.sweduc-operational-picker .table-card th:nth-child(5),.sweduc-operational-picker .table-card td:nth-child(5){width:218px}
+.sweduc-operational-picker .table-card th:nth-child(6),.sweduc-operational-picker .table-card td:nth-child(6){width:104px;text-align:right}
 .sweduc-operational-picker .table-card td strong{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .sweduc-operational-picker .table-card .subcell{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.sweduc-select-student-button{min-height:32px;padding:0 13px;border-radius:8px;font-size:12px;white-space:nowrap}
+.sweduc-select-student-button{min-height:32px;padding:0 11px;border-radius:8px;font-size:11px;white-space:nowrap;min-width:86px}
 
 .assistant-process-message{display:flex;align-items:flex-start;gap:10px;margin-top:10px;padding:12px 13px;border:1px solid #bfe6d4;border-radius:12px;background:#ecfbf4;color:#17633f;box-shadow:0 8px 20px rgba(22,135,95,.08)}
 .assistant-process-message svg{flex:none;margin-top:1px;stroke-width:3}

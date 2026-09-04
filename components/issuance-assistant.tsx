@@ -139,7 +139,6 @@ export function IssuanceAssistant({onNavigate}:{onNavigate:(page:AppPage)=>void}
   const [manualNewEmission,setManualNewEmission]=useState(false);
   const [resumePaymentId,setResumePaymentId]=useState<number|null>(null);
   const [newStudentId,setNewStudentId]=useState<number|null>(null);
-  const [studentQuery,setStudentQuery]=useState("");
   const [newCompetence,setNewCompetence]=useState(()=>currentCompetenceInput());
   const [newValue,setNewValue]=useState("");
   const [newPaymentStatus,setNewPaymentStatus]=useState("Aberto");
@@ -217,7 +216,7 @@ export function IssuanceAssistant({onNavigate}:{onNavigate:(page:AppPage)=>void}
     if(prepared){
       try{
         const student=JSON.parse(prepared) as AssistantStudent;
-        setPendingSweducStudent(student);setManualNewEmission(true);setNewStudentId(student.id);setNewEmissionOpen(true);setStudentQuery("");if(student.valor_mensalidade_sugerido)setNewValue(currencyInput(student.valor_mensalidade_sugerido));setNewDescriptionEdited(false);setNewDescription(defaultServiceDescription(newCompetence,student));setMessage(student.valor_mensalidade_sugerido?`${student.nome} foi preparado pela SWeduc com valor sugerido. Confira competência, responsável e valor antes de iniciar a nota.`:`${student.nome} foi preparado pela SWeduc. Confira competência e valor para iniciar a nota.`);
+        setPendingSweducStudent(student);setManualNewEmission(true);setNewStudentId(student.id);setNewEmissionOpen(true);if(student.valor_mensalidade_sugerido)setNewValue(currencyInput(student.valor_mensalidade_sugerido));setNewDescriptionEdited(false);setNewDescription(defaultServiceDescription(newCompetence,student));setMessage(student.valor_mensalidade_sugerido?`${student.nome} foi preparado pela SWeduc com valor sugerido. Confira competência, responsável e valor antes de iniciar a nota.`:`${student.nome} foi preparado pela SWeduc. Confira competência e valor para iniciar a nota.`);
         window.requestAnimationFrame(()=>window.requestAnimationFrame(()=>document.getElementById("assistant-new-emission")?.scrollIntoView({behavior:"smooth",block:"start"})));
       }catch{setError("Não foi possível abrir os dados preparados pela SWeduc. Selecione o aluno novamente.")}
       return;
@@ -228,7 +227,6 @@ export function IssuanceAssistant({onNavigate}:{onNavigate:(page:AppPage)=>void}
     setManualNewEmission(true);
     setNewEmissionOpen(true);
     setNewStudentId(importedId);
-    setStudentQuery("");
     setNewDescriptionEdited(false);
     setMessage("Aluno importado da SWeduc selecionado. Informe competência e valor para iniciar a nota.");
   },[students,payments]);
@@ -238,11 +236,6 @@ export function IssuanceAssistant({onNavigate}:{onNavigate:(page:AppPage)=>void}
     if(!q)return payments;
     return payments.filter(payment=>normalize([payment.alunos?.nome,payment.alunos?.responsavel,payment.competencia,payment.status_nfse,String(payment.id)].filter(Boolean).join(" ")).includes(q));
   },[payments,query]);
-  const filteredStudents=useMemo(()=>{
-    const q=normalize(studentQuery.trim());
-    if(!q)return students;
-    return students.filter(student=>normalize([student.nome,student.responsavel,student.turma,student.segmento,student.cpf_cnpj].filter(Boolean).join(" ")).includes(q));
-  },[studentQuery,students]);
   const selectedStudent=useMemo(()=>pendingSweducStudent?.id===newStudentId?pendingSweducStudent:students.find(student=>student.id===newStudentId)||null,[newStudentId,students,pendingSweducStudent]);
   function changePreparedResponsible(index:number){
     if(!pendingSweducStudent?.sweduc_responsaveis?.[index])return;
@@ -781,7 +774,6 @@ export function IssuanceAssistant({onNavigate}:{onNavigate:(page:AppPage)=>void}
     sessionStorage.removeItem("jpi-assistant-student-focus");
     setPendingSweducStudent(null);
     setNewStudentId(null);
-    setStudentQuery("");
     setNewValue("");
     setNewDescription("");
     setNewDescriptionEdited(false);
@@ -827,15 +819,7 @@ export function IssuanceAssistant({onNavigate}:{onNavigate:(page:AppPage)=>void}
       </div>}
       {showNewEmissionForm&&<div className={`assistant-new-start-grid ${selectedStudent?"":"search-mode"}`}>
         <div className="assistant-new-students">
-          {pendingSweducStudent?<><div className="assistant-sweduc-prepared"><span>ALUNO PREPARADO PELA SWEDUC</span><strong>{pendingSweducStudent.nome}</strong><small>{pendingSweducStudent.responsavel||"Responsável não informado"} · {pendingSweducStudent.turma||"Sem turma"} · {pendingSweducStudent.segmento}{pendingSweducStudent.valor_mensalidade_sugerido?` · Valor sugerido: ${currencyInput(pendingSweducStudent.valor_mensalidade_sugerido)}`:""}</small><button type="button" className="secondary" onClick={resetPreparedStudent}>Trocar aluno</button></div>{(error||message)&&<div className={error?"assistant-process-message error":"assistant-process-message"} role="status">{error?<CircleAlert size={18}/>:<Check size={18}/>}<div><strong>{error?"Atenção ao processo":"Processo em andamento"}</strong><span>{error||message}</span></div></div>}</>:<><SweducOperationalPicker onStudentReady={student=>{const prepared=student as AssistantStudent;sessionStorage.setItem("jpi-assistant-prepared-sweduc-student",JSON.stringify(prepared));setPendingSweducStudent(prepared);setNewStudentId(prepared.id);setStudentQuery("");if(prepared.valor_mensalidade_sugerido)setNewValue(currencyInput(prepared.valor_mensalidade_sugerido));setNewDescriptionEdited(false);setNewDescription(defaultServiceDescription(newCompetence,prepared));setMessage(prepared.valor_mensalidade_sugerido?`${prepared.nome} foi preparado pela SWeduc com valor sugerido. Confira responsável, competência e valor; o cadastro só será gravado ao iniciar a emissão.`:`${prepared.nome} foi preparado pela SWeduc. Confira responsável, competência e valor; o cadastro só será gravado ao iniciar a emissão.`)}}/>
-          <div className="search-input"><Search/><input value={studentQuery} onChange={e=>setStudentQuery(e.target.value)} placeholder="Buscar aluno, responsável, turma ou CPF"/></div>
-          {loading?<div className="assistant-loading">Carregando alunos…</div>:filteredStudents.length===0?<div className="assistant-empty">Nenhum aluno cadastrado encontrado.</div>:<div className="assistant-payment-list">
-            {filteredStudents.slice(0,50).map(student=><button key={student.id} className={newStudentId===student.id?"assistant-payment selected":"assistant-payment"} onClick={()=>{setNewStudentId(student.id);setNewDescriptionEdited(false);setNewDescription(defaultServiceDescription(newCompetence,student));setError("");setMessage("")}}>
-              <span className="assistant-payment-icon"><GraduationCap size={17}/></span>
-              <span><strong>{student.nome}</strong><small>{student.turma||"Sem turma"} · {student.segmento}</small></span>
-              <em className="pending">{newStudentId===student.id?"Selecionado":"Selecionar"}</em>
-            </button>)}
-          </div>}</>}
+          {pendingSweducStudent?<><div className="assistant-sweduc-prepared"><span>ALUNO PREPARADO PELA SWEDUC</span><strong>{pendingSweducStudent.nome}</strong><small>{pendingSweducStudent.responsavel||"Responsável não informado"} · {pendingSweducStudent.turma||"Sem turma"} · {pendingSweducStudent.segmento}{pendingSweducStudent.valor_mensalidade_sugerido?` · Valor sugerido: ${currencyInput(pendingSweducStudent.valor_mensalidade_sugerido)}`:""}</small><button type="button" className="secondary" onClick={resetPreparedStudent}>Trocar aluno</button></div>{(error||message)&&<div className={error?"assistant-process-message error":"assistant-process-message"} role="status">{error?<CircleAlert size={18}/>:<Check size={18}/>}<div><strong>{error?"Atenção ao processo":"Processo em andamento"}</strong><span>{error||message}</span></div></div>}</>:<SweducOperationalPicker onStudentReady={student=>{const prepared=student as AssistantStudent;sessionStorage.setItem("jpi-assistant-prepared-sweduc-student",JSON.stringify(prepared));setPendingSweducStudent(prepared);setNewStudentId(prepared.id);if(prepared.valor_mensalidade_sugerido)setNewValue(currencyInput(prepared.valor_mensalidade_sugerido));setNewDescriptionEdited(false);setNewDescription(defaultServiceDescription(newCompetence,prepared));setMessage(prepared.valor_mensalidade_sugerido?`${prepared.nome} foi preparado pela SWeduc com valor sugerido. Confira responsável, competência e valor; o cadastro só será gravado ao iniciar a emissão.`:`${prepared.nome} foi preparado pela SWeduc. Confira responsável, competência e valor; o cadastro só será gravado ao iniciar a emissão.`)}}/>}
         </div>
         {selectedStudent&&<div className="assistant-new-form">
           <>
