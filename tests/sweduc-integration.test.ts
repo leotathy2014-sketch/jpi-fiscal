@@ -70,7 +70,9 @@ test("importa dados acadêmicos, responsáveis, contatos e financeiro",()=>{
   assert.match(ui,/Responsável para a nota/);assert.match(ui,/Carregar para a nota/);assert.match(ui,/selectedYear/);
   assert.match(route,/action==="import"/);assert.match(route,/mapSweducToFiscalStudent/);assert.match(route,/sweduc_matricula_id/);
   assert.match(route,/valor_real/);assert.match(route,/valor_com_desconto/);assert.match(route,/multidisciplinar/);assert.match(route,/collectFinancialStrings/);
+  assert.match(route,/descricao_item/);
   assert.match(operationalPicker,/valor_real/);assert.match(operationalPicker,/valor_com_desconto/);assert.match(operationalPicker,/com desconto/);
+  assert.match(operationalPicker,/descricao_item/);
   assert.match(fiscalLinkMigration,/sweduc_matricula_id/);assert.match(fiscalLinkMigration,/unique index/);
   assert.match(assistant,/jpi-assistant-student-focus/);assert.match(assistant,/Aluno importado da SWeduc selecionado/);
 });

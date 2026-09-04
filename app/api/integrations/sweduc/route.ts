@@ -167,10 +167,10 @@ function collectFinancialStrings(value:unknown,depth=0):string[]{
   return [];
 }
 function financialDescription(item:Record<string,unknown>){
-  const direct=financialText(item,["descricao","descrição","descricao_titulo","descricaoTitulo","historico","histórico","categoria","categoria_titulo","tipo","tipo_titulo","titulo","nome_titulo","nome","produto","servico","serviço","plano_conta","plano_contas","grupo_receita","receita","classe"]);
+  const direct=financialText(item,["descricao","descrição","descricao_item","descricaoItem","descrição_item","descricao_titulo","descricaoTitulo","historico","histórico","categoria","categoria_titulo","tipo","tipo_titulo","titulo","nome_titulo","nome","produto","servico","serviço","plano_conta","plano_contas","grupo_receita","receita","classe"]);
   const itens=Array.isArray(item.itens)?item.itens:[];
   const itemTexts=itens.flatMap(entry=>entry&&typeof entry==="object"?[
-    financialText(entry as Record<string,unknown>,["descricao","descrição","nome","produto","servico","serviço","categoria","tipo"]),
+    financialText(entry as Record<string,unknown>,["descricao","descrição","descricao_item","descricaoItem","descrição_item","nome","produto","servico","serviço","categoria","tipo"]),
   ]:[]).filter(Boolean);
   return [direct,...itemTexts,...collectFinancialStrings(item)].filter(Boolean).join(" ");
 }
