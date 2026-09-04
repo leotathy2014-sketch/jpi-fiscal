@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { createSupabaseBrowserClient, hasSupabaseConfig } from "@/lib/supabase";
 import { AppShell, type AppPage, type Role } from "@/components/app-shell";
 import { InviteConfirm, Login, RecoveryConfirm, SetPassword } from "@/components/login";
@@ -27,6 +27,7 @@ export default function Home() {
   const [inviteTokenHash,setInviteTokenHash]=useState("");
   const [authError, setAuthError] = useState("");
   const [authMessage, setAuthMessage] = useState("");
+  const openingStartedRef=useRef(false);
 
   useEffect(() => {
     if (!supabase) { setLoading(false); return; }
@@ -115,7 +116,7 @@ export default function Home() {
         if(!active)return;
         setPermissions([]);setEmail(null);setAccessToken(null);setAuthError("Seu acesso está bloqueado ou ainda não foi autorizado.");return;
       }
-      setAuthError("");setRole(roles[payload.role]);setPermissions(Array.isArray(payload.permissions)?payload.permissions:[]);setOpeningReady(false);setAccessReady(true);
+      setAuthError("");setRole(roles[payload.role]);setPermissions(Array.isArray(payload.permissions)?payload.permissions:[]);if(!openingStartedRef.current)setOpeningReady(false);setAccessReady(true);
     };
     const refresh=()=>void loadAccess();
     void loadAccess();
@@ -132,6 +133,7 @@ export default function Home() {
     let cancelled=false;const started=Date.now();const key="jpi-sweduc-login-preload";
     const finish=(message:string)=>{if(cancelled)return;setOpeningStatus(message);setOpeningProgress(100);window.setTimeout(()=>{if(!cancelled)setOpeningReady(true)},350)};
     const run=async()=>{
+      openingStartedRef.current=true;
       const last=Number(localStorage.getItem(key)||"0");
       if(last&&Date.now()-last<2*60*60*1000){finish("Dados recentes já preparados.");return}
       try{
@@ -173,7 +175,7 @@ export default function Home() {
     if (error) throw error;
   }
 
-  async function signOut() { if (supabase) await supabase.auth.signOut({ scope: "local" }); localStorage.removeItem("jpi-demo-session"); setAccessReady(false);setPermissions([]);setAccessToken(null);setEmail(null); }
+  async function signOut() { openingStartedRef.current=false; if (supabase) await supabase.auth.signOut({ scope: "local" }); localStorage.removeItem("jpi-demo-session"); setAccessReady(false);setOpeningReady(false);setPermissions([]);setAccessToken(null);setEmail(null); }
   useEffect(() => {
     if (!supabase || !email) return;
     let active = true;

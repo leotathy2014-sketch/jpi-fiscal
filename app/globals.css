@@ -105,7 +105,8 @@
 @media(max-width:900px){.branding-control-grid{grid-template-columns:1fr}.branding-live-preview{min-height:220px}}
 @media(max-width:540px){.branding-control-panel{padding:13px}.branding-live-preview{grid-template-columns:96px 1fr}.branding-preview-content{padding:17px}.branding-preview-sidebar .brand-seal.preview{width:52px;height:52px}}
 
-.splash .brand-seal{animation:splashLogoPulse 1.65s ease-in-out infinite;isolation:isolate}
+.splash .brand-seal{width:118px;height:118px;border-radius:28px;animation:splashLogoPulse 1.65s ease-in-out infinite;isolation:isolate}
+.splash .brand-seal img{padding:8px}
 .splash .brand-seal:after{content:"";position:absolute;inset:-7px;border-radius:22px;border:2px solid color-mix(in srgb,var(--blue) 42%,transparent);animation:splashLogoRing 1.65s ease-out infinite;pointer-events:none}
 .splash .brand-seal.has-logo img{animation:splashLogoFloat 2.4s ease-in-out infinite}
 @keyframes splashLogoPulse{0%,100%{transform:scale(1);box-shadow:0 10px 30px #0c4d9833}50%{transform:scale(1.055);box-shadow:0 16px 38px #1466df36}}
