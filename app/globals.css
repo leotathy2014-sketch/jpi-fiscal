@@ -118,6 +118,10 @@
 .splash .brand-seal img{padding:10px}
 .splash .brand-seal:after{inset:-9px;border-radius:42px}
 
+.sweduc-operational-picker .table-card th{padding:11px 14px}
+.sweduc-operational-picker .table-card td{padding:10px 14px;vertical-align:middle}
+.sweduc-select-student-button{min-height:32px;padding:0 13px;border-radius:8px;font-size:12px;white-space:nowrap}
+
 
 /* Painel Master e permissões granulares */
 .permission-admin-header{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:16px 18px;margin-bottom:14px;border:1px solid var(--line);border-radius:12px;background:white}
