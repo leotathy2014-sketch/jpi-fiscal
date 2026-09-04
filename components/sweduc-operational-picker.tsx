@@ -46,6 +46,7 @@ export function SweducOperationalPicker({onStudentReady}:{onStudentReady:(studen
   const [error,setError]=useState("");
   const [message,setMessage]=useState("");
   const [syncProgress,setSyncProgress]=useState(0);
+  const [totalExpected,setTotalExpected]=useState(0);
   const loadedYearRef=useRef<number|null>(null);
 
   const token=useCallback(async()=>{
@@ -85,6 +86,7 @@ export function SweducOperationalPicker({onStudentReady}:{onStudentReady:(studen
   const safeGridPage=Math.min(gridPage,totalGridPages);
   const pagedVisible=visible.slice((safeGridPage-1)*pageSize,safeGridPage*pageSize);
   const syncingInitial=busy==="consult"&&students.length===0;
+  const gridProgress=busy==="consult"?syncProgress:students.length>0?100:0;
   useEffect(()=>{setGridPage(1)},[query,courseFilter,serieFilter,turmaFilter,selectedYear]);
 
   async function consult(yearOverride?:number){
@@ -93,16 +95,19 @@ export function SweducOperationalPicker({onStudentReady}:{onStudentReady:(studen
     const term=query.trim();
     setBusy("consult");setError("");setMessage(term?`Buscando "${term}" em ${activeYear} na SWeduc…`:`Consultando alunos de ${activeYear} no espelho SWeduc…`);
     setSyncProgress(8);
+    setTotalExpected(0);
     setStudents([]);setSelected(null);setResponsibleIndex(0);setGridPage(1);
     let page=1;let total=0;
     try{
       const accessToken=await token();
       while(page<=1000){
         const response=await authenticatedFetch("/api/integrations/sweduc",{method:"POST",headers:{Authorization:`Bearer ${accessToken}`,"Content-Type":"application/json"},body:JSON.stringify({action:"lookup",page,academicYear:activeYear,search:term,course:yearOverride?"":courseFilter,serie:yearOverride?"":serieFilter,turma:yearOverride?"":turmaFilter}),cache:"no-store"});
-        const data=await response.json().catch(()=>({})) as {students?:SweducStudent[];nextPage?:number|null;lastPage?:number;academicYear?:number;error?:string;message?:string};
+        const data=await response.json().catch(()=>({})) as {students?:SweducStudent[];nextPage?:number|null;lastPage?:number;academicYear?:number;totalAvailable?:number;error?:string;message?:string};
         if(!response.ok)throw new Error(data.error||"Não foi possível consultar a SWeduc.");
         const loaded=data.students||[];total+=loaded.length;setStudents(current=>sortStudents([...current,...loaded]));
-        setSyncProgress(Math.min(96,data.lastPage?Math.round((page/Math.max(1,data.lastPage))*100):Math.min(90,15+(page*8))));
+        const expected=Number(data.totalAvailable||0);
+        if(expected)setTotalExpected(expected);
+        setSyncProgress(Math.min(96,expected?Math.round((total/Math.max(1,expected))*100):data.lastPage?Math.round((page/Math.max(1,data.lastPage))*100):Math.min(90,15+(page*8))));
         setMessage(data.nextPage?`Organizando página ${page} de ${data.lastPage||"…"} · ${total} matrícula(s) na tela.`:data.message||`Consulta concluída: ${total} matrícula(s) na tela. Nada foi salvo ainda.`);
         if(!data.nextPage)break;
         page=data.nextPage;
@@ -155,8 +160,8 @@ export function SweducOperationalPicker({onStudentReady}:{onStudentReady:(studen
       </div>
       <label className="sweduc-search-row sweduc-search-label">Pesquisar aluno<div className="search-input sweduc-student-name-search"><Search/><input value={query} disabled={syncingInitial} onChange={event=>setQuery(event.target.value.toLocaleUpperCase("pt-BR"))} onKeyDown={event=>{if(event.key==="Enter"){event.preventDefault();void consult()}}} placeholder="BUSCAR ALUNO PELO NOME, MESMO COM ACENTO OU CARACTERES ESPECIAIS"/><button type="button" aria-label="Pesquisar aluno" disabled={Boolean(busy)||!selectedYear} onClick={()=>void consult()}>{busy==="consult"?<RefreshCw size={15}/>:<Search size={16}/>}</button></div></label>
     </div>
-    {error&&<span className="agenda-secret-error">{error}</span>}{message&&<small className={!busy&&!error&&students.length>0?"sweduc-message-complete":""}>{message}{!busy&&!error&&students.length>0&&<span className="sweduc-sync-complete" role="status"><i><b/></i><Check size={13}/>Pronto</span>}</small>}
-    {visible.length>0&&<div className="table-card"><div className="sweduc-grid-pagination"><span>Página {safeGridPage} de {totalGridPages} · {visible.length} aluno(s) encontrado(s) · 25 por página</span><button type="button" className="secondary mini" disabled={safeGridPage<=1} onClick={()=>setGridPage(page=>Math.max(1,page-1))}>Anterior</button><button type="button" className="secondary mini" disabled={safeGridPage>=totalGridPages} onClick={()=>setGridPage(page=>Math.min(totalGridPages,page+1))}>Próxima</button></div><table><thead><tr><th>Ano letivo</th><th>Aluno</th><th>Matrícula</th><th>Segmento / curso</th><th>Turma / série</th><th></th></tr></thead><tbody>{pagedVisible.map(student=><tr key={student.matricula_id} className={selected?.matricula_id===student.matricula_id?"selected-row":""} onClick={()=>void openResponsibleChoice(student)}><td>{student.ano_letivo||selectedYear}</td><td><strong>{student.nome}</strong><span className="subcell">{student.unidade||"Unidade não informada"}</span></td><td>{student.numero_matricula||student.matricula_id}</td><td>{student.curso||"—"}</td><td>{[student.turma,student.serie].filter(Boolean).join(" · ")||"—"}</td><td><button type="button" className="primary mini" disabled={Boolean(busy)} onClick={event=>{event.stopPropagation();void openResponsibleChoice(student)}}>{busy===`details-${student.matricula_id}`?"Carregando…":<><UserCheck size={15}/>Selecionar aluno</>}</button></td></tr>)}</tbody></table>{visible.length>pageSize&&<small>Grade em ordem alfabética. Use a paginação ou refine os filtros para localizar mais rápido.</small>}</div>}
+    {error&&<span className="agenda-secret-error">{error}</span>}{message&&<small>{message}</small>}
+    {visible.length>0&&<div className="table-card"><div className="sweduc-grid-pagination"><span>Página {safeGridPage} de {totalGridPages} · {visible.length} aluno(s) encontrado(s) · 25 por página</span><button type="button" className="secondary mini" disabled={safeGridPage<=1} onClick={()=>setGridPage(page=>Math.max(1,page-1))}>Anterior</button><button type="button" className="secondary mini" disabled={safeGridPage>=totalGridPages} onClick={()=>setGridPage(page=>Math.min(totalGridPages,page+1))}>Próxima</button><span className="sweduc-sync-complete" role="status" title={totalExpected?`${students.length} de ${totalExpected} matrícula(s) carregada(s)`:undefined}><i><b style={{width:`${gridProgress}%`}}/></i>{busy==="consult"?`${gridProgress}%`:<><Check size={13}/>Pronto</>}</span></div><table><thead><tr><th>Ano letivo</th><th>Aluno</th><th>Matrícula</th><th>Segmento / curso</th><th>Turma / série</th><th></th></tr></thead><tbody>{pagedVisible.map(student=><tr key={student.matricula_id} className={selected?.matricula_id===student.matricula_id?"selected-row":""} onClick={()=>void openResponsibleChoice(student)}><td>{student.ano_letivo||selectedYear}</td><td><strong>{student.nome}</strong><span className="subcell">{student.unidade||"Unidade não informada"}</span></td><td>{student.numero_matricula||student.matricula_id}</td><td>{student.curso||"—"}</td><td>{[student.turma,student.serie].filter(Boolean).join(" · ")||"—"}</td><td><button type="button" className="primary mini" disabled={Boolean(busy)} onClick={event=>{event.stopPropagation();void openResponsibleChoice(student)}}>{busy===`details-${student.matricula_id}`?"Carregando…":<><UserCheck size={15}/>Selecionar aluno</>}</button></td></tr>)}</tbody></table>{visible.length>pageSize&&<small>Grade em ordem alfabética. Use a paginação ou refine os filtros para localizar mais rápido.</small>}</div>}
     {selected&&<div className="responsible-match-card sweduc-responsible-confirm" role="dialog" aria-label="Confirmar responsável financeiro SWeduc"><div><UserCheck/><span><strong>Confirmar responsável da nota</strong><small>{selected.nome} · matrícula {selected.numero_matricula||selected.matricula_id}</small></span></div>{selected.responsaveis.length>0?<div className="sweduc-responsible-options">{selected.responsaveis.map((responsible,index)=><label key={`${responsible.nome||"responsavel"}-${index}`} className="sweduc-responsible-option"><input type="radio" name={`sweduc-responsible-${selected.matricula_id}`} checked={responsibleIndex===index} onChange={()=>setResponsibleIndex(index)}/><span><strong>{responsible.nome||`Responsável ${index+1}`}{responsible.responsavel_pedagogico===true&&<em className="sweduc-suggested-responsible"><Check size={13}/>Sugerido pela SWeduc</em>}</strong><small>{responsibleDocument(responsible)} · {responsibleContact(responsible)}</small></span></label>)}</div>:<p>A SWeduc não retornou responsável para esta matrícula. Confira com o suporte antes de carregar para a nota.</p>}<div><button type="button" className="secondary" onClick={()=>setSelected(null)}>Cancelar</button><button type="button" className="primary" disabled={Boolean(busy)||selected.responsaveis.length===0} onClick={()=>void loadForNote()}>{busy===`import-${selected.matricula_id}`?"Preparando…":<><Check size={15}/>Preparar para a nota</>}</button></div><small>Nada será gravado agora. O cadastro fiscal só será salvo quando a emissão for confirmada.</small></div>}
   </div></section>;
 }
