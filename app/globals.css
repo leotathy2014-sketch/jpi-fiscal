@@ -734,10 +734,10 @@
 .sweduc-sync-loading>span{font-size:13px;font-weight:900;color:#1466df}
 .sweduc-sync-loading>i{grid-column:1/-1;display:block;height:9px;border-radius:999px;background:#d9e9fb;overflow:hidden}
 .sweduc-sync-loading>i>b{display:block;height:100%;min-width:8%;border-radius:inherit;background:linear-gradient(90deg,#1466df,#35a3ff);transition:width .25s ease}
-.sweduc-sync-complete{display:grid;gap:7px;margin-top:9px;padding:10px 12px;border:1px solid #bce5cf;border-radius:12px;background:#ecfbf3;color:#087044}
-.sweduc-sync-complete span{display:flex;align-items:center;gap:7px;font-size:12.5px;font-weight:900}
-.sweduc-sync-complete svg{stroke-width:3}
-.sweduc-sync-complete i{display:block;height:8px;border-radius:999px;background:#d8f3e4;overflow:hidden}
+.sweduc-message-complete{display:flex!important;align-items:center;gap:10px;flex-wrap:wrap}
+.sweduc-sync-complete{display:inline-flex;align-items:center;gap:5px;color:#087044;font-size:11px;font-weight:900;white-space:nowrap}
+.sweduc-sync-complete svg{width:13px;height:13px;stroke-width:3}
+.sweduc-sync-complete i{display:inline-block;width:74px;height:3px;border-radius:999px;background:#d8f3e4;overflow:hidden}
 .sweduc-sync-complete i>b{display:block;width:100%;height:100%;border-radius:inherit;background:linear-gradient(90deg,#0b8a4b,#39c779)}
 .sweduc-student-search-panel{display:grid;gap:12px;margin-top:14px}
 .sweduc-filter-row{display:grid;grid-template-columns:minmax(130px,170px) minmax(240px,1fr) minmax(110px,140px) minmax(110px,140px);gap:10px;align-items:end}
