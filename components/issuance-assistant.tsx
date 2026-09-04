@@ -135,7 +135,7 @@ export function IssuanceAssistant({onNavigate}:{onNavigate:(page:AppPage)=>void}
   const canSendAgenda=can("deliveries.send_agenda");
   const [students,setStudents]=useState<AssistantStudent[]>([]);
   const [pendingSweducStudent,setPendingSweducStudent]=useState<AssistantStudent|null>(null);
-  const [newEmissionOpen,setNewEmissionOpen]=useState(true);
+  const [newEmissionOpen,setNewEmissionOpen]=useState(false);
   const [manualNewEmission,setManualNewEmission]=useState(false);
   const [resumePaymentId,setResumePaymentId]=useState<number|null>(null);
   const [newStudentId,setNewStudentId]=useState<number|null>(null);
@@ -192,6 +192,8 @@ export function IssuanceAssistant({onNavigate}:{onNavigate:(page:AppPage)=>void}
         if(remembered&&nextPayments.some(item=>item.id===remembered))return remembered;
         return nextPayments[0]?.id||null;
       });
+      if(nextPayments.length>0&&!sessionStorage.getItem("jpi-assistant-prepared-sweduc-student")&&!sessionStorage.getItem("jpi-assistant-student-focus"))setNewEmissionOpen(false);
+      if(nextPayments.length===0&&!sessionStorage.getItem("jpi-assistant-prepared-sweduc-student"))setNewEmissionOpen(true);
     }
     setLoading(false);setRefreshing(false);
   },[supabase]);
@@ -758,7 +760,7 @@ export function IssuanceAssistant({onNavigate}:{onNavigate:(page:AppPage)=>void}
     setNewDescription("");
     setNewDescriptionEdited(false);
     setError("");
-    setMessage("Nova emissão iniciada. Selecione um aluno cadastrado abaixo.");
+    setMessage("Nova emissão iniciada. Busque o aluno na SWeduc para preparar a nota.");
     window.requestAnimationFrame(()=>{
       window.requestAnimationFrame(()=>{
         const section=document.getElementById("assistant-new-emission");
