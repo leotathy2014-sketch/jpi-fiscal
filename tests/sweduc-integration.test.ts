@@ -82,6 +82,8 @@ test("permite buscar aluno SWeduc no cadastro e no assistente sem abrir configur
   assert.match(operationalPicker,/Confirmar responsável financeiro/);
   assert.match(operationalPicker,/Selecionar aluno/);
   assert.match(operationalPicker,/Carregar para a nota/);
+  assert.match(operationalPicker,/syncYears/);
+  assert.match(operationalPicker,/filteredYears/);
   assert.match(operationalPicker,/action:"lookup"/);
   assert.match(operationalPicker,/action:"details"/);
   assert.match(operationalPicker,/action:"import"/);
