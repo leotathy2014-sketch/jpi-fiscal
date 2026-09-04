@@ -22,16 +22,115 @@ function sortStudents(students:SweducStudent[]){
 
 export function SweducOperationalPicker({onStudentReady}:{onStudentReady:(student:{id:number;nome:string})=>void}){
   const supabase=useMemo(()=>createSupabaseBrowserClient(),[]);
-  const [years,setYears]=useState<AcademicYear[]>([]);const [selectedYear,setSelectedYear]=useState<number|null>(null);const [students,setStudents]=useState<SweducStudent[]>([]);const [query,setQuery]=useState("");const [courseFilter,setCourseFilter]=useState("");const [serieFilter,setSerieFilter]=useState("");const [turmaFilter,setTurmaFilter]=useState("");const [selected,setSelected]=useState<SweducStudent|null>(null);const [responsibleIndex,setResponsibleIndex]=useState(0);const [busy,setBusy]=useState("");const [error,setError]=useState("");const [message,setMessage]=useState("");
-  const token=useCallback(async()=>{if(!supabase)throw new Error("Sessão indisponível. Entre novamente.");const {data:{session}}=await supabase.auth.getSession();if(!session)throw new Error("Sua sessão expirou. Entre novamente.");return session.access_token},[supabase]);
-  const loadYears=useCallback(async()=>{try{const accessToken=await token();const response=await authenticatedFetch("/api/integrations/sweduc",{headers:{Authorization:`Bearer ${accessToken}`},cache:"no-store"});const data=await response.json().catch(()=>({})) as {academicYears?:AcademicYear[];syncYears?:number[];selectedAcademicYear?:number;config?:{credencial_configurada:boolean};error?:string};if(!response.ok)throw new Error(data.error||"Não foi possível carregar os anos letivos da SWeduc.");const allowedYears=(data.syncYears?.length?data.syncYears:[]).sort((a,b)=>b-a);const available=data.academicYears||[];const filteredYears=allowedYears.map(year=>available.find(item=>item.year===year)||{id:0,year});setYears(filteredYears);setSelectedYear(filteredYears[0]?.year||data.selectedAcademicYear||available[0]?.year||null);if(!data.config?.credencial_configurada)setMessage("A conexão SWeduc ainda precisa ser configurada pelo Master.")}catch(e){setError(e instanceof Error?e.message:"Não foi possível carregar a SWeduc.")}},[token]);
+  const [years,setYears]=useState<AcademicYear[]>([]);
+  const [selectedYear,setSelectedYear]=useState<number|null>(null);
+  const [students,setStudents]=useState<SweducStudent[]>([]);
+  const [query,setQuery]=useState("");
+  const [courseFilter,setCourseFilter]=useState("");
+  const [serieFilter,setSerieFilter]=useState("");
+  const [turmaFilter,setTurmaFilter]=useState("");
+  const [gridPage,setGridPage]=useState(1);
+  const [selected,setSelected]=useState<SweducStudent|null>(null);
+  const [responsibleIndex,setResponsibleIndex]=useState(0);
+  const [busy,setBusy]=useState("");
+  const [error,setError]=useState("");
+  const [message,setMessage]=useState("");
+
+  const token=useCallback(async()=>{
+    if(!supabase)throw new Error("Sessão indisponível. Entre novamente.");
+    const {data:{session}}=await supabase.auth.getSession();
+    if(!session)throw new Error("Sua sessão expirou. Entre novamente.");
+    return session.access_token;
+  },[supabase]);
+
+  const loadYears=useCallback(async()=>{
+    try{
+      const accessToken=await token();
+      const response=await authenticatedFetch("/api/integrations/sweduc",{headers:{Authorization:`Bearer ${accessToken}`},cache:"no-store"});
+      const data=await response.json().catch(()=>({})) as {academicYears?:AcademicYear[];syncYears?:number[];selectedAcademicYear?:number;config?:{credencial_configurada:boolean};error?:string};
+      if(!response.ok)throw new Error(data.error||"Não foi possível carregar os anos letivos da SWeduc.");
+      const allowedYears=(data.syncYears?.length?data.syncYears:[]).sort((a,b)=>b-a);
+      const available=data.academicYears||[];
+      const filteredYears=allowedYears.map(year=>available.find(item=>item.year===year)||{id:0,year});
+      setYears(filteredYears);
+      setSelectedYear(filteredYears[0]?.year||data.selectedAcademicYear||available[0]?.year||null);
+      if(!data.config?.credencial_configurada)setMessage("A conexão SWeduc ainda precisa ser configurada pelo Master.");
+    }catch(e){setError(e instanceof Error?e.message:"Não foi possível carregar a SWeduc.")}
+  },[token]);
+
   useEffect(()=>{void loadYears()},[loadYears]);
   const courseOptions=useMemo(()=>Array.from(new Set(students.map(student=>student.curso).filter(Boolean) as string[])).sort((a,b)=>a.localeCompare(b,"pt-BR")),[students]);
   const serieOptions=useMemo(()=>Array.from(new Set(students.filter(student=>!courseFilter||student.curso===courseFilter).map(student=>student.serie).filter(Boolean) as string[])).sort((a,b)=>a.localeCompare(b,"pt-BR")),[students,courseFilter]);
   const turmaOptions=useMemo(()=>Array.from(new Set(students.filter(student=>(!courseFilter||student.curso===courseFilter)&&(!serieFilter||student.serie===serieFilter)).map(student=>student.turma).filter(Boolean) as string[])).sort((a,b)=>a.localeCompare(b,"pt-BR")),[students,courseFilter,serieFilter]);
-  const visible=useMemo(()=>{const term=normalizeSearchText(query);const source=students.filter(student=>(!courseFilter||student.curso===courseFilter)&&(!serieFilter||student.serie===serieFilter)&&(!turmaFilter||student.turma===turmaFilter));const filtered=!term?source:source.filter(student=>[student.nome,student.numero_matricula,String(student.matricula_id),student.turma,student.serie,student.curso].filter(Boolean).some(value=>normalizeSearchText(value).includes(term)));return sortStudents(filtered)},[students,query,courseFilter,serieFilter,turmaFilter]);
-  async function consult(){if(!selectedYear)return;const term=query.trim();setBusy("consult");setError("");setMessage(term?`Buscando "${term}" em ${selectedYear} na SWeduc…`:`Consultando alunos de ${selectedYear} no espelho SWeduc…`);setStudents([]);setSelected(null);setResponsibleIndex(0);let page=1;let total=0;try{const accessToken=await token();while(page<=1000){const response=await authenticatedFetch("/api/integrations/sweduc",{method:"POST",headers:{Authorization:`Bearer ${accessToken}`,"Content-Type":"application/json"},body:JSON.stringify({action:"lookup",page,academicYear:selectedYear,search:term,course:courseFilter,serie:serieFilter,turma:turmaFilter}),cache:"no-store"});const data=await response.json().catch(()=>({})) as {students?:SweducStudent[];nextPage?:number|null;lastPage?:number;academicYear?:number;error?:string;message?:string};if(!response.ok)throw new Error(data.error||"Não foi possível consultar a SWeduc.");const loaded=data.students||[];total+=loaded.length;setStudents(current=>sortStudents([...current,...loaded]));setMessage(data.nextPage?`Organizando página ${page} de ${data.lastPage||"…"} · ${total} matrícula(s) na tela.`:data.message||`Consulta concluída: ${total} matrícula(s) na tela. Nada foi salvo ainda.`);if(!data.nextPage)break;page=data.nextPage}}catch(e){setError(e instanceof Error?e.message:"Não foi possível consultar a SWeduc.")}finally{setBusy("")}}
-  async function openResponsibleChoice(student:SweducStudent){setBusy(`details-${student.matricula_id}`);setError("");setMessage("");setResponsibleIndex(0);try{const accessToken=await token();const response=await authenticatedFetch("/api/integrations/sweduc",{method:"POST",headers:{Authorization:`Bearer ${accessToken}`,"Content-Type":"application/json"},body:JSON.stringify({action:"details",matriculaId:student.matricula_id,student}),cache:"no-store"});const data=await response.json().catch(()=>({})) as {student?:SweducStudent;responsaveis?:SweducResponsible[];message?:string;error?:string};if(!response.ok||!data.student)throw new Error(data.error||"Não foi possível carregar os responsáveis deste aluno.");const fullStudent={...data.student,responsaveis:data.responsaveis||data.student.responsaveis||[]};setSelected(fullStudent);setStudents(current=>current.map(item=>item.matricula_id===student.matricula_id?fullStudent:item));setMessage(data.message||"Confira o responsável financeiro antes de carregar para a nota.")}catch(e){setError(e instanceof Error?e.message:"Não foi possível carregar os responsáveis deste aluno.")}finally{setBusy("")}}
-  async function loadForNote(){if(!selected)return;setBusy(`import-${selected.matricula_id}`);setError("");setMessage("");try{const accessToken=await token();const response=await authenticatedFetch("/api/integrations/sweduc",{method:"POST",headers:{Authorization:`Bearer ${accessToken}`,"Content-Type":"application/json"},body:JSON.stringify({action:"import",matriculaId:selected.matricula_id,responsibleIndex,student:selected}),cache:"no-store"});const data=await response.json().catch(()=>({})) as {student?:{id:number;nome:string};message?:string;error?:string};if(!response.ok||!data.student)throw new Error(data.error||"Não foi possível carregar este aluno para a nota.");setMessage(data.message||"Aluno carregado para a nota.");setSelected(null);onStudentReady(data.student)}catch(e){setError(e instanceof Error?e.message:"Não foi possível carregar este aluno para a nota.")}finally{setBusy("")}}
-  return <section className="notice compact sweduc-operational-picker"><UsersRound/><div><strong>Buscar aluno na SWeduc</strong><span>Primeiro escolha ano letivo, segmento/curso, série e turma. Depois pesquise o aluno pelo nome; a busca ignora acentos e caracteres especiais. Nada é salvo até confirmar em Carregar para a nota.</span><div className="sweduc-student-search-panel"><div className="sweduc-filter-row"><label>Ano letivo<select value={selectedYear||""} onChange={event=>{setSelectedYear(Number(event.target.value));setStudents([]);setSelected(null);setResponsibleIndex(0);setQuery("");setCourseFilter("");setSerieFilter("");setTurmaFilter("")}}>{years.map(year=><option key={year.year} value={year.year}>{year.year}</option>)}</select></label><label>Segmento / curso<select value={courseFilter} onChange={event=>{setCourseFilter(event.target.value);setSerieFilter("");setTurmaFilter("")}}><option value="">Todos</option>{courseOptions.map(option=><option key={option} value={option}>{option}</option>)}</select></label><label>Série<select value={serieFilter} onChange={event=>{setSerieFilter(event.target.value);setTurmaFilter("")}}><option value="">Todas</option>{serieOptions.map(option=><option key={option} value={option}>{option}</option>)}</select></label><label>Turma<select value={turmaFilter} onChange={event=>setTurmaFilter(event.target.value)}><option value="">Todas</option>{turmaOptions.map(option=><option key={option} value={option}>{option}</option>)}</select></label></div><div className="sweduc-search-row"><div className="search-input sweduc-student-name-search"><Search/><input value={query} onChange={event=>setQuery(event.target.value)} onKeyDown={event=>{if(event.key==="Enter"){event.preventDefault();void consult()}}} placeholder="Buscar aluno pelo nome, mesmo com acento ou caracteres especiais"/><button type="button" aria-label="Pesquisar aluno" disabled={Boolean(busy)||!selectedYear} onClick={()=>void consult()}>{busy==="consult"?<RefreshCw size={17}/>:<Search size={18}/>}</button></div></div></div>{error&&<span className="agenda-secret-error">{error}</span>}{message&&<small>{message}</small>}{visible.length>0&&<div className="table-card"><table><thead><tr><th>Ano letivo</th><th>Aluno</th><th>Matrícula</th><th>Segmento / curso</th><th>Turma / série</th><th></th></tr></thead><tbody>{visible.slice(0,80).map(student=><tr key={student.matricula_id} className={selected?.matricula_id===student.matricula_id?"selected-row":""} onClick={()=>void openResponsibleChoice(student)}><td>{student.ano_letivo||selectedYear}</td><td><strong>{student.nome}</strong><span className="subcell">{student.unidade||"Unidade não informada"}</span></td><td>{student.numero_matricula||student.matricula_id}</td><td>{student.curso||"—"}</td><td>{[student.turma,student.serie].filter(Boolean).join(" · ")||"—"}</td><td><button type="button" className="primary mini" disabled={Boolean(busy)} onClick={event=>{event.stopPropagation();void openResponsibleChoice(student)}}>{busy===`details-${student.matricula_id}`?"Carregando…":<><UserCheck size={15}/>Selecionar aluno</>}</button></td></tr>)}</tbody></table>{visible.length>80&&<small>Mostrando os 80 primeiros alunos em ordem alfabética. Use filtros ou busca para localizar mais rápido.</small>}</div>}{selected&&<div className="responsible-match-card sweduc-responsible-confirm" role="dialog" aria-label="Confirmar responsável financeiro SWeduc"><div><UserCheck/><span><strong>Confirmar responsável financeiro</strong><small>{selected.nome} · matrícula {selected.numero_matricula||selected.matricula_id}</small></span></div>{selected.responsaveis.length>0?<div className="sweduc-responsible-options">{selected.responsaveis.map((responsible,index)=><label key={`${responsible.nome||"responsavel"}-${index}`} className="sweduc-responsible-option"><input type="radio" name={`sweduc-responsible-${selected.matricula_id}`} checked={responsibleIndex===index} onChange={()=>setResponsibleIndex(index)}/><span><strong>{responsible.nome||`Responsável ${index+1}`}</strong><small>{responsibleDocument(responsible)} · {responsibleContact(responsible)}</small></span></label>)}</div>:<p>A SWeduc não retornou responsável para esta matrícula. Confira com o suporte antes de carregar para a nota.</p>}<div><button type="button" className="secondary" onClick={()=>setSelected(null)}>Cancelar</button><button type="button" className="primary" disabled={Boolean(busy)||selected.responsaveis.length===0} onClick={()=>void loadForNote()}>{busy===`import-${selected.matricula_id}`?"Carregando…":<><Check size={15}/>Carregar para a nota</>}</button></div></div>}</div></section>;
+  const visible=useMemo(()=>{
+    const term=normalizeSearchText(query);
+    const source=students.filter(student=>(!courseFilter||student.curso===courseFilter)&&(!serieFilter||student.serie===serieFilter)&&(!turmaFilter||student.turma===turmaFilter));
+    const filtered=!term?source:source.filter(student=>[student.nome,student.numero_matricula,String(student.matricula_id),student.turma,student.serie,student.curso].filter(Boolean).some(value=>normalizeSearchText(value).includes(term)));
+    return sortStudents(filtered);
+  },[students,query,courseFilter,serieFilter,turmaFilter]);
+  const pageSize=25;
+  const totalGridPages=Math.max(1,Math.ceil(visible.length/pageSize));
+  const safeGridPage=Math.min(gridPage,totalGridPages);
+  const pagedVisible=visible.slice((safeGridPage-1)*pageSize,safeGridPage*pageSize);
+  useEffect(()=>{setGridPage(1)},[query,courseFilter,serieFilter,turmaFilter,selectedYear]);
+
+  async function consult(){
+    if(!selectedYear)return;
+    const term=query.trim();
+    setBusy("consult");setError("");setMessage(term?`Buscando "${term}" em ${selectedYear} na SWeduc…`:`Consultando alunos de ${selectedYear} no espelho SWeduc…`);
+    setStudents([]);setSelected(null);setResponsibleIndex(0);setGridPage(1);
+    let page=1;let total=0;
+    try{
+      const accessToken=await token();
+      while(page<=1000){
+        const response=await authenticatedFetch("/api/integrations/sweduc",{method:"POST",headers:{Authorization:`Bearer ${accessToken}`,"Content-Type":"application/json"},body:JSON.stringify({action:"lookup",page,academicYear:selectedYear,search:term,course:courseFilter,serie:serieFilter,turma:turmaFilter}),cache:"no-store"});
+        const data=await response.json().catch(()=>({})) as {students?:SweducStudent[];nextPage?:number|null;lastPage?:number;academicYear?:number;error?:string;message?:string};
+        if(!response.ok)throw new Error(data.error||"Não foi possível consultar a SWeduc.");
+        const loaded=data.students||[];total+=loaded.length;setStudents(current=>sortStudents([...current,...loaded]));
+        setMessage(data.nextPage?`Organizando página ${page} de ${data.lastPage||"…"} · ${total} matrícula(s) na tela.`:data.message||`Consulta concluída: ${total} matrícula(s) na tela. Nada foi salvo ainda.`);
+        if(!data.nextPage)break;
+        page=data.nextPage;
+      }
+    }catch(e){setError(e instanceof Error?e.message:"Não foi possível consultar a SWeduc.")}finally{setBusy("")}
+  }
+
+  async function openResponsibleChoice(student:SweducStudent){
+    setBusy(`details-${student.matricula_id}`);setError("");setMessage("");setResponsibleIndex(0);
+    try{
+      const accessToken=await token();
+      const response=await authenticatedFetch("/api/integrations/sweduc",{method:"POST",headers:{Authorization:`Bearer ${accessToken}`,"Content-Type":"application/json"},body:JSON.stringify({action:"details",matriculaId:student.matricula_id,student}),cache:"no-store"});
+      const data=await response.json().catch(()=>({})) as {student?:SweducStudent;responsaveis?:SweducResponsible[];message?:string;error?:string};
+      if(!response.ok||!data.student)throw new Error(data.error||"Não foi possível carregar os responsáveis deste aluno.");
+      const fullStudent={...data.student,responsaveis:data.responsaveis||data.student.responsaveis||[]};
+      setSelected(fullStudent);setStudents(current=>current.map(item=>item.matricula_id===student.matricula_id?fullStudent:item));
+      setMessage(data.message||"Confira o responsável financeiro antes de carregar para a nota.");
+    }catch(e){setError(e instanceof Error?e.message:"Não foi possível carregar os responsáveis deste aluno.")}finally{setBusy("")}
+  }
+
+  async function loadForNote(){
+    if(!selected)return;
+    setBusy(`import-${selected.matricula_id}`);setError("");setMessage("");
+    try{
+      const accessToken=await token();
+      const response=await authenticatedFetch("/api/integrations/sweduc",{method:"POST",headers:{Authorization:`Bearer ${accessToken}`,"Content-Type":"application/json"},body:JSON.stringify({action:"import",matriculaId:selected.matricula_id,responsibleIndex,student:selected}),cache:"no-store"});
+      const data=await response.json().catch(()=>({})) as {student?:{id:number;nome:string};message?:string;error?:string};
+      if(!response.ok||!data.student)throw new Error(data.error||"Não foi possível carregar este aluno para a nota.");
+      setMessage(data.message||"Aluno carregado para a nota.");setSelected(null);onStudentReady(data.student);
+    }catch(e){setError(e instanceof Error?e.message:"Não foi possível carregar este aluno para a nota.")}finally{setBusy("")}
+  }
+
+  return <section className="notice compact sweduc-operational-picker"><UsersRound/><div><strong>Buscar aluno na SWeduc</strong><span>Primeiro escolha ano letivo, segmento/curso, série e turma. Depois pesquise o aluno pelo nome; a busca ignora acentos e caracteres especiais. Nada é salvo até confirmar em Carregar para a nota.</span>
+    <div className="sweduc-student-search-panel">
+      <div className="sweduc-filter-row">
+        <label>Ano letivo<select value={selectedYear||""} onChange={event=>{setSelectedYear(Number(event.target.value));setStudents([]);setSelected(null);setResponsibleIndex(0);setQuery("");setCourseFilter("");setSerieFilter("");setTurmaFilter("")}}>{years.map(year=><option key={year.year} value={year.year}>{year.year}</option>)}</select></label>
+        <label>Segmento / curso<select value={courseFilter} disabled={!students.length} onChange={event=>{setCourseFilter(event.target.value);setSerieFilter("");setTurmaFilter("")}}><option value="">Todos</option>{courseOptions.map(option=><option key={option} value={option}>{option}</option>)}</select></label>
+        <label>Série<select value={serieFilter} disabled={!courseFilter} onChange={event=>{setSerieFilter(event.target.value);setTurmaFilter("")}}><option value="">Todas</option>{serieOptions.map(option=><option key={option} value={option}>{option}</option>)}</select></label>
+        <label>Turma<select value={turmaFilter} disabled={!serieFilter} onChange={event=>setTurmaFilter(event.target.value)}><option value="">Todas</option>{turmaOptions.map(option=><option key={option} value={option}>{option}</option>)}</select></label>
+      </div>
+      <div className="sweduc-search-row"><div className="search-input sweduc-student-name-search"><Search/><input value={query} onChange={event=>setQuery(event.target.value.toLocaleUpperCase("pt-BR"))} onKeyDown={event=>{if(event.key==="Enter"){event.preventDefault();void consult()}}} placeholder="BUSCAR ALUNO PELO NOME, MESMO COM ACENTO OU CARACTERES ESPECIAIS"/><button type="button" aria-label="Pesquisar aluno" disabled={Boolean(busy)||!selectedYear} onClick={()=>void consult()}>{busy==="consult"?<RefreshCw size={15}/>:<Search size={16}/>}</button></div></div>
+    </div>
+    {error&&<span className="agenda-secret-error">{error}</span>}{message&&<small>{message}</small>}
+    {visible.length>0&&<div className="table-card"><div className="sweduc-grid-pagination"><span>Página {safeGridPage} de {totalGridPages} · {visible.length} aluno(s) encontrado(s) · 25 por página</span><div><button type="button" className="secondary mini" disabled={safeGridPage<=1} onClick={()=>setGridPage(page=>Math.max(1,page-1))}>Anterior</button><button type="button" className="secondary mini" disabled={safeGridPage>=totalGridPages} onClick={()=>setGridPage(page=>Math.min(totalGridPages,page+1))}>Próxima</button></div></div><table><thead><tr><th>Ano letivo</th><th>Aluno</th><th>Matrícula</th><th>Segmento / curso</th><th>Turma / série</th><th></th></tr></thead><tbody>{pagedVisible.map(student=><tr key={student.matricula_id} className={selected?.matricula_id===student.matricula_id?"selected-row":""} onClick={()=>void openResponsibleChoice(student)}><td>{student.ano_letivo||selectedYear}</td><td><strong>{student.nome}</strong><span className="subcell">{student.unidade||"Unidade não informada"}</span></td><td>{student.numero_matricula||student.matricula_id}</td><td>{student.curso||"—"}</td><td>{[student.turma,student.serie].filter(Boolean).join(" · ")||"—"}</td><td><button type="button" className="primary mini" disabled={Boolean(busy)} onClick={event=>{event.stopPropagation();void openResponsibleChoice(student)}}>{busy===`details-${student.matricula_id}`?"Carregando…":<><UserCheck size={15}/>Selecionar aluno</>}</button></td></tr>)}</tbody></table>{visible.length>pageSize&&<small>Grade em ordem alfabética. Use a paginação ou refine os filtros para localizar mais rápido.</small>}</div>}
+    {selected&&<div className="responsible-match-card sweduc-responsible-confirm" role="dialog" aria-label="Confirmar responsável financeiro SWeduc"><div><UserCheck/><span><strong>Confirmar responsável financeiro</strong><small>{selected.nome} · matrícula {selected.numero_matricula||selected.matricula_id}</small></span></div>{selected.responsaveis.length>0?<div className="sweduc-responsible-options">{selected.responsaveis.map((responsible,index)=><label key={`${responsible.nome||"responsavel"}-${index}`} className="sweduc-responsible-option"><input type="radio" name={`sweduc-responsible-${selected.matricula_id}`} checked={responsibleIndex===index} onChange={()=>setResponsibleIndex(index)}/><span><strong>{responsible.nome||`Responsável ${index+1}`}</strong><small>{responsibleDocument(responsible)} · {responsibleContact(responsible)}</small></span></label>)}</div>:<p>A SWeduc não retornou responsável para esta matrícula. Confira com o suporte antes de carregar para a nota.</p>}<div><button type="button" className="secondary" onClick={()=>setSelected(null)}>Cancelar</button><button type="button" className="primary" disabled={Boolean(busy)||selected.responsaveis.length===0} onClick={()=>void loadForNote()}>{busy===`import-${selected.matricula_id}`?"Carregando…":<><Check size={15}/>Carregar para a nota</>}</button></div></div>}
+  </div></section>;
 }

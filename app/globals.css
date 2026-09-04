@@ -728,17 +728,21 @@
 .sweduc-sync-years-list label{display:inline-flex;align-items:center;gap:8px;border:1px solid #cbd8e7;border-radius:999px;background:#fff;padding:9px 13px;color:#344155;font-weight:800;font-size:12.5px;cursor:pointer}
 .sweduc-sync-years-list label.selected{border-color:#1466df;background:#edf6ff;color:#174f9a}
 .sweduc-sync-years-list input{width:15px;height:15px;accent-color:#1466df}
-.sweduc-student-search-panel{display:grid;gap:10px;margin-top:12px}
-.sweduc-filter-row{display:grid;grid-template-columns:minmax(130px,170px) minmax(220px,1fr) minmax(95px,120px) minmax(95px,120px);gap:8px;align-items:end}
+.sweduc-student-search-panel{display:grid;gap:12px;margin-top:14px}
+.sweduc-filter-row{display:grid;grid-template-columns:minmax(130px,170px) minmax(240px,1fr) minmax(110px,140px) minmax(110px,140px);gap:10px;align-items:end}
 .sweduc-filter-row label{display:grid;gap:6px;font-size:11px;font-weight:800;color:#445168;text-transform:uppercase;letter-spacing:.03em}
 .sweduc-filter-row select{height:42px;border:1px solid #d3dde9;border-radius:8px;background:#fff;padding:0 12px;color:#243247;font-weight:700}
+.sweduc-filter-row select:disabled{background:#f2f5f9;color:#9aa7b7;cursor:not-allowed}
 .sweduc-search-row{display:grid;grid-template-columns:1fr;gap:8px;align-items:center}
 .sweduc-search-row .search-input{min-width:0}
-.sweduc-student-name-search{height:46px;border:1px solid #d3dde9;border-radius:10px;background:#fff;padding:0 6px 0 12px}
-.sweduc-student-name-search input{height:44px;font-size:14px}
-.sweduc-student-name-search button{display:inline-flex;align-items:center;justify-content:center;width:38px;height:34px;border:0;border-radius:8px;background:#6b3717;color:#fff;cursor:pointer;flex:none}
+.sweduc-student-name-search{height:56px;border:2px solid #9fc2ee;border-radius:13px;background:#fff;padding:0 8px 0 14px;box-shadow:0 8px 22px rgba(20,102,223,.09)}
+.sweduc-student-name-search input{height:52px;font-size:15px;font-weight:800;text-transform:uppercase;letter-spacing:.02em;color:#17233a}
+.sweduc-student-name-search input::placeholder{text-transform:uppercase;color:#8c9aac;font-weight:700}
+.sweduc-student-name-search button{display:inline-flex;align-items:center;justify-content:center;width:34px;height:30px;border:0;border-radius:9px;background:#6b3717;color:#fff;cursor:pointer;flex:none}
 .sweduc-student-name-search button:disabled{opacity:.55;cursor:not-allowed}
-.sweduc-student-name-search button svg{width:18px;height:18px}
+.sweduc-student-name-search button svg{width:16px;height:16px}
+.sweduc-grid-pagination{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 13px;border-bottom:1px solid #e3e9f1;color:#516179;font-size:12px;font-weight:700}
+.sweduc-grid-pagination>div{display:flex;gap:8px}
 .sweduc-year-toolbar{display:grid;align-items:end;grid-template-columns:minmax(150px,190px) 1fr auto auto}
 .sweduc-year-toolbar>label{display:grid;gap:6px;font-size:11px;font-weight:800;color:#445168;text-transform:uppercase;letter-spacing:.03em}
 .sweduc-year-toolbar select{height:42px;border:1px solid #d3dde9;border-radius:8px;background:#fff;padding:0 12px;color:#243247;font-weight:700}
