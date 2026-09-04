@@ -218,17 +218,18 @@ function responsibleContact(item:Record<string,unknown>){
   const email=Array.isArray(item.emails)?item.emails.map(entry=>entry&&typeof entry==="object"?financialText(entry as Record<string,unknown>,["email","endereco","valor"]):"").find(Boolean):"";
   return phone||email||financialText(item,["telefone","celular","email"]);
 }
+function isTrueFlag(value:unknown){return value===true||value===1||String(value).trim().toLowerCase()==="1"||String(value).trim().toLowerCase()==="true"||String(value).trim().toLowerCase()==="sim"}
 function financialResponsibleCandidates(responsaveis:Array<Record<string,unknown>>){
   return responsaveis.map((responsible,index)=>{
     const text=normalizeSearchText(responsibleText(responsible));
     const signals=[
-      responsible.responsavel_financeiro===true||responsible.financeiro===true||responsible.eh_financeiro===true?"campo financeiro=true":"",
+      isTrueFlag(responsible.responsavel_financeiro)||isTrueFlag(responsible.financeiro)||isTrueFlag(responsible.eh_financeiro)?"responsável financeiro=true":"",
       text.includes("financeiro")?"texto contém financeiro":"",
-      responsible.responsavel_pedagogico===true?"responsável pedagógico=true":"",
+      isTrueFlag(responsible.responsavel_pedagogico)?"responsável pedagógico=true":"",
       responsibleDocument(responsible)?"tem documento":"",
       responsibleContact(responsible)?"tem contato":"",
     ].filter(Boolean) as string[];
-    return {index,nome:financialText(responsible,["nome","responsavel","name"])||`Responsável ${index+1}`,documento:responsibleDocument(responsible)||null,contato:responsibleContact(responsible)||null,responsavel_pedagogico:responsible.responsavel_pedagogico===true,provavel_financeiro:signals.some(signal=>signal.includes("financeiro")),pistas:signals,raw:responsible};
+    return {index,nome:financialText(responsible,["nome","responsavel","name"])||`Responsável ${index+1}`,documento:responsibleDocument(responsible)||null,contato:responsibleContact(responsible)||null,responsavel_pedagogico:isTrueFlag(responsible.responsavel_pedagogico),provavel_financeiro:signals.some(signal=>signal.includes("financeiro")),pistas:signals,raw:responsible};
   }).sort((a,b)=>Number(b.provavel_financeiro)-Number(a.provavel_financeiro)||Number(b.responsavel_pedagogico)-Number(a.responsavel_pedagogico)||b.pistas.length-a.pistas.length);
 }
 
@@ -385,13 +386,16 @@ export async function POST(request:NextRequest){
     try{activeCredentials=await credentials(auth.supabase);const token=await createSweducAccessToken(activeCredentials);activeAccessToken=token.accessToken;detail=await getSweducStudentDetailsWithToken(activeCredentials.host,token.accessToken,matriculaId)}catch(error){return json({error:safeSweducError(error,activeCredentials,[activeAccessToken])},400)}
     student.responsaveis=detail.responsaveis;student.financeiro=detail.financeiro;student.dados_origem={...((student.dados_origem as Record<string,unknown>|undefined)||{}),detalhes:detail.detalhes};
     const responsaveis=detail.responsaveis;
-    const selectedResponsible=responsaveis[Math.max(0,Math.min(responsibleIndex,responsaveis.length-1))]||null;
+    const automaticResponsibleIndex=responsaveis.findIndex(responsible=>isTrueFlag(responsible.responsavel_financeiro)||isTrueFlag(responsible.financeiro)||isTrueFlag(responsible.eh_financeiro));
+    const pedagogicalResponsibleIndex=responsaveis.findIndex(responsible=>isTrueFlag(responsible.responsavel_pedagogico));
+    const resolvedResponsibleIndex=responsibleIndex>0?responsibleIndex:automaticResponsibleIndex>=0?automaticResponsibleIndex:pedagogicalResponsibleIndex>=0?pedagogicalResponsibleIndex:0;
+    const selectedResponsible=responsaveis[Math.max(0,Math.min(resolvedResponsibleIndex,responsaveis.length-1))]||null;
     const details=((student.dados_origem as {detalhes?:Record<string,unknown>}|null)?.detalhes)||{};
     const fiscalStudent=mapSweducToFiscalStudent({student:student as unknown as SweducStudentSummary&Record<string,unknown>,responsible:selectedResponsible,details});
     if(!fiscalStudent.nome)return json({error:"A matrícula selecionada não trouxe nome do aluno."},400);
     if(!fiscalStudent.responsavel||fiscalStudent.responsavel==="RESPONSÁVEL NÃO INFORMADO")return json({error:"Selecione um responsável válido para carregar os dados da nota."},400);
     const valorMensalidadeSugerido=suggestedFinancialAmount(detail.financeiro);
-    return json({ok:true,student:{id:-matriculaId,...fiscalStudent,sweduc_matricula_id:matriculaId,sweduc_aluno_id:Number(student.aluno_id||0)||null,sweduc_ano_letivo:String(student.ano_letivo||"")||null,valor_mensalidade_sugerido:valorMensalidadeSugerido||null,sweduc_financeiro:detail.financeiro,sweduc_responsaveis:responsaveis,sweduc_responsavel_index:Math.max(0,Math.min(responsibleIndex,responsaveis.length-1))},message:valorMensalidadeSugerido?`${fiscalStudent.nome} foi preparado para a nota com valor sugerido pela SWeduc. Confira os dados; nada foi gravado ainda.`:`${fiscalStudent.nome} foi preparado para a nota. Confira os dados; nada foi gravado ainda.`});
+    return json({ok:true,student:{id:-matriculaId,...fiscalStudent,sweduc_matricula_id:matriculaId,sweduc_aluno_id:Number(student.aluno_id||0)||null,sweduc_ano_letivo:String(student.ano_letivo||"")||null,valor_mensalidade_sugerido:valorMensalidadeSugerido||null,sweduc_financeiro:detail.financeiro,sweduc_responsaveis:responsaveis,sweduc_responsavel_index:Math.max(0,Math.min(resolvedResponsibleIndex,responsaveis.length-1))},message:valorMensalidadeSugerido?`${fiscalStudent.nome} foi preparado para a nota com valor sugerido pela SWeduc. Confira os dados; nada foi gravado ainda.`:`${fiscalStudent.nome} foi preparado para a nota. Confira os dados; nada foi gravado ainda.`});
   }
   return json({error:"Ação SWeduc inválida."},400);
 }

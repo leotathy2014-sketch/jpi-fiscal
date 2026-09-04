@@ -46,7 +46,7 @@ test("oferece configuração, teste e consulta sem salvar lista de alunos",()=>{
   assert.match(route,/supplied===1/);assert.match(route,/currentCredentials\.clientId/);assert.doesNotMatch(route,/supabase\.from\("sweduc_secrets"\)/);
   assert.match(temporaryTestRoute,/useUsernamePassword/);assert.match(temporaryTestRoute,/username/);assert.match(temporaryTestRoute,/password/);assert.match(temporaryTestRoute,/grantType/);
   assert.match(route,/action==="test"/);assert.match(route,/action==="sync"/);assert.match(route,/from\("sweduc_alunos"\)\.upsert/);
-  assert.match(route,/action==="financial_test"/);assert.match(route,/valorMensalidadeSugerido/);assert.match(route,/financialResponsibleCandidates/);assert.match(route,/responsavel_financeiro/);assert.match(ui,/Teste financeiro por matrícula/);assert.match(ui,/Testar financeiro/);assert.match(ui,/Possíveis responsáveis financeiros/);
+  assert.match(route,/action==="financial_test"/);assert.match(route,/valorMensalidadeSugerido/);assert.match(route,/financialResponsibleCandidates/);assert.match(route,/responsavel_financeiro/);assert.match(route,/isTrueFlag/);assert.match(route,/automaticResponsibleIndex/);assert.match(ui,/Teste financeiro por matrícula/);assert.match(ui,/Testar financeiro/);assert.match(ui,/Possíveis responsáveis financeiros/);
   assert.match(temporaryTestRoute,/createSweducAccessToken/);assert.match(temporaryTestRoute,/listSweducStudentsWithToken/);assert.match(temporaryTestRoute,/getSweducStudentDetailsWithToken/);assert.match(temporaryTestRoute,/Nada foi salvo ou importado/);
   const sweducLib=readFileSync(new URL("../lib/sweduc.ts",import.meta.url),"utf8");
   assert.match(sweducLib,/alunos\/detalhes\?\$\{query\}/);
@@ -94,6 +94,8 @@ test("permite buscar aluno SWeduc no cadastro e no assistente sem abrir configur
   assert.match(operationalPicker,/Ano letivo/);
   assert.match(operationalPicker,/responsável financeiro/i);
   assert.match(operationalPicker,/Confirmar responsável financeiro/);
+  assert.match(operationalPicker,/isFinancialResponsible/);
+  assert.match(assistant,/isSweducFinancialResponsible/);
   assert.match(operationalPicker,/Selecionar aluno/);
   assert.match(operationalPicker,/preparar a nota/);
   assert.match(operationalPicker,/syncYears/);

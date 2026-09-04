@@ -48,7 +48,7 @@ type AssistantStudent={
   id:number;nome:string;turma:string|null;segmento:string;responsavel:string;cpf_cnpj:string|null;email:string|null;whatsapp:string|null;
   cep:string|null;logradouro:string|null;numero:string|null;complemento?:string|null;bairro?:string|null;cidade:string|null;uf:string|null;sweduc_matricula_id?:number|null;sweduc_aluno_id?:number|null;sweduc_ano_letivo?:string|null;valor_mensalidade_sugerido?:string|null;sweduc_financeiro?:Array<Record<string,unknown>>;sweduc_responsaveis?:SweducResponsible[];sweduc_responsavel_index?:number|null
 };
-type SweducResponsible={nome?:string;cpf?:string;cpf_cnpj?:string;documento?:string;responsavel_pedagogico?:boolean;telefones?:Array<{numero?:string}>;emails?:Array<{email?:string}>;logradouro?:string;endereco?:string;rua?:string;numero?:string;numero_endereco?:string;complemento?:string;bairro?:string;cidade?:string;municipio?:string;uf?:string;estado?:string;cep?:string};
+type SweducResponsible={nome?:string;cpf?:string;cpf_cnpj?:string;documento?:string;responsavel_pedagogico?:boolean|number|string;responsavel_financeiro?:boolean|number|string;financeiro?:boolean|number|string;eh_financeiro?:boolean|number|string;telefones?:Array<{numero?:string;telefone?:string}>;emails?:Array<{email?:string}>;logradouro?:string;endereco?:string;rua?:string;numero?:string;numero_endereco?:string;complemento?:string;bairro?:string;cidade?:string;municipio?:string;uf?:string;estado?:string;cep?:string};
 type DeliveryState={mensalidade_id:number;status:string;canal:string;created_at:string};
 type StepState="done"|"current"|"pending"|"warning";
 type AssistantStep={key:string;label:string;short:string;description:string;state:StepState};
@@ -69,7 +69,9 @@ const upper=(value:string)=>value.toLocaleUpperCase("pt-BR");
 const digits=(value:string,limit:number)=>value.replace(/\D/g,"").slice(0,limit);
 const firstNestedText=(source:SweducResponsible|undefined,keys:Array<keyof SweducResponsible>,nestedKeys:string[])=>{if(!source)return "";for(const key of keys){const value=source[key];if(Array.isArray(value)){for(const entry of value){if(entry&&typeof entry==="object"){for(const nestedKey of nestedKeys){const nestedValue=(entry as Record<string,unknown>)[nestedKey];if(typeof nestedValue==="string"&&nestedValue.trim())return nestedValue.trim()}}}}else if(typeof value==="string"&&value.trim())return value.trim()}return ""};
 const sweducResponsibleDocument=(responsible:SweducResponsible)=>responsible.cpf||responsible.cpf_cnpj||responsible.documento||"Documento não informado";
-const sweducResponsibleContact=(responsible:SweducResponsible)=>responsible.telefones?.[0]?.numero||responsible.emails?.[0]?.email||"Contato não informado";
+const sweducResponsibleContact=(responsible:SweducResponsible)=>responsible.telefones?.[0]?.numero||responsible.telefones?.[0]?.telefone||responsible.emails?.[0]?.email||"Contato não informado";
+const isSweducTrueFlag=(value:unknown)=>value===true||value===1||String(value).trim().toLowerCase()==="1"||String(value).trim().toLowerCase()==="true"||String(value).trim().toLowerCase()==="sim";
+const isSweducFinancialResponsible=(responsible:SweducResponsible)=>isSweducTrueFlag(responsible.responsavel_financeiro)||isSweducTrueFlag(responsible.financeiro)||isSweducTrueFlag(responsible.eh_financeiro);
 const applySweducResponsible=(student:AssistantStudent,responsible:SweducResponsible,index:number):AssistantStudent=>{
   const responsavel=responsible.nome||"RESPONSÁVEL NÃO INFORMADO";
   const cpf=digits(responsible.cpf_cnpj||responsible.cpf||responsible.documento||"",14)||null;
@@ -906,7 +908,7 @@ export function IssuanceAssistant({onNavigate}:{onNavigate:(page:AppPage)=>void}
               <span className="assistant-current-badge active">Etapa 2 de 9</span>
             </div>
             {pendingSweducStudent?.sweduc_responsaveis?.length&&pendingSweducStudent.sweduc_responsaveis.length>1?<div className="assistant-responsible-switch">
-              <label><span>Responsável da nota</span><select value={pendingSweducStudent.sweduc_responsavel_index??0} onChange={event=>changePreparedResponsible(Number(event.target.value))}>{pendingSweducStudent.sweduc_responsaveis.map((responsible,index)=><option key={`${responsible.nome||"responsavel"}-${index}`} value={index}>{responsible.nome||`Responsável ${index+1}`}{responsible.responsavel_pedagogico?" · sugerido":""}</option>)}</select></label>
+              <label><span>Responsável da nota</span><select value={pendingSweducStudent.sweduc_responsavel_index??0} onChange={event=>changePreparedResponsible(Number(event.target.value))}>{pendingSweducStudent.sweduc_responsaveis.map((responsible,index)=><option key={`${responsible.nome||"responsavel"}-${index}`} value={index}>{responsible.nome||`Responsável ${index+1}`}{isSweducFinancialResponsible(responsible)?" · financeiro":isSweducTrueFlag(responsible.responsavel_pedagogico)?" · sugerido":""}</option>)}</select></label>
               <small>{sweducResponsibleDocument(pendingSweducStudent.sweduc_responsaveis[pendingSweducStudent.sweduc_responsavel_index??0])} · {sweducResponsibleContact(pendingSweducStudent.sweduc_responsaveis[pendingSweducStudent.sweduc_responsavel_index??0])}</small>
             </div>:null}
             <div className="assistant-dps-editor">
@@ -1156,7 +1158,7 @@ export function IssuanceAssistant({onNavigate}:{onNavigate:(page:AppPage)=>void}
               <div className="notice compact"><UsersRound/><span>Escolha o responsável correto para esta emissão. O cadastro usado pela nota será atualizado antes da validação.</span></div>
               {responsibleSwitchBusy?<div className="assistant-loading">{responsibleSwitchBusy}</div>:responsibleSwitchOptions.length===0?<div className="assistant-empty">Nenhum responsável disponível para trocar.</div>:<div className="assistant-responsible-list">
                 {responsibleSwitchOptions.map((responsible,index)=><button key={`${responsible.nome||"responsavel"}-${index}`} type="button" onClick={()=>void applyResponsibleToCurrentEmission(responsible,index)}>
-                  <span><strong>{responsible.nome||`Responsável ${index+1}`}</strong>{responsible.responsavel_pedagogico&&<em>Sugerido pela SWeduc</em>}</span>
+                  <span><strong>{responsible.nome||`Responsável ${index+1}`}</strong>{isSweducFinancialResponsible(responsible)?<em>Responsável financeiro</em>:isSweducTrueFlag(responsible.responsavel_pedagogico)&&<em>Sugerido pela SWeduc</em>}</span>
                   <small>{sweducResponsibleDocument(responsible)} · {sweducResponsibleContact(responsible)}</small>
                 </button>)}
               </div>}
