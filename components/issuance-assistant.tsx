@@ -41,8 +41,9 @@ type AssistantPayment={
 };
 type AssistantStudent={
   id:number;nome:string;turma:string|null;segmento:string;responsavel:string;cpf_cnpj:string|null;email:string|null;whatsapp:string|null;
-  cep:string|null;logradouro:string|null;numero:string|null;cidade:string|null;uf:string|null;sweduc_matricula_id?:number|null;sweduc_aluno_id?:number|null;sweduc_ano_letivo?:string|null;valor_mensalidade_sugerido?:string|null
+  cep:string|null;logradouro:string|null;numero:string|null;complemento?:string|null;bairro?:string|null;cidade:string|null;uf:string|null;sweduc_matricula_id?:number|null;sweduc_aluno_id?:number|null;sweduc_ano_letivo?:string|null;valor_mensalidade_sugerido?:string|null;sweduc_responsaveis?:SweducResponsible[];sweduc_responsavel_index?:number|null
 };
+type SweducResponsible={nome?:string;cpf?:string;cpf_cnpj?:string;documento?:string;responsavel_pedagogico?:boolean;telefones?:Array<{numero?:string}>;emails?:Array<{email?:string}>;logradouro?:string;endereco?:string;rua?:string;numero?:string;numero_endereco?:string;complemento?:string;bairro?:string;cidade?:string;municipio?:string;uf?:string;estado?:string;cep?:string};
 type DeliveryState={mensalidade_id:number;status:string;canal:string;created_at:string};
 type StepState="done"|"current"|"pending"|"warning";
 type AssistantStep={key:string;label:string;short:string;description:string;state:StepState};
@@ -61,6 +62,22 @@ const formatCompetence=(value:string)=>{const parts=value.split("-");return part
 const currentCompetenceInput=()=>{const parts=new Intl.DateTimeFormat("pt-BR",{timeZone:"America/Sao_Paulo",year:"numeric",month:"2-digit"}).formatToParts(new Date());const part=(type:"year"|"month")=>parts.find(item=>item.type===type)?.value||"";return part("year")+"-"+part("month")};
 const upper=(value:string)=>value.toLocaleUpperCase("pt-BR");
 const digits=(value:string,limit:number)=>value.replace(/\D/g,"").slice(0,limit);
+const firstNestedText=(source:SweducResponsible|undefined,keys:Array<keyof SweducResponsible>,nestedKeys:string[])=>{if(!source)return "";for(const key of keys){const value=source[key];if(Array.isArray(value)){for(const entry of value){if(entry&&typeof entry==="object"){for(const nestedKey of nestedKeys){const nestedValue=(entry as Record<string,unknown>)[nestedKey];if(typeof nestedValue==="string"&&nestedValue.trim())return nestedValue.trim()}}}}else if(typeof value==="string"&&value.trim())return value.trim()}return ""};
+const sweducResponsibleDocument=(responsible:SweducResponsible)=>responsible.cpf||responsible.cpf_cnpj||responsible.documento||"Documento não informado";
+const sweducResponsibleContact=(responsible:SweducResponsible)=>responsible.telefones?.[0]?.numero||responsible.emails?.[0]?.email||"Contato não informado";
+const applySweducResponsible=(student:AssistantStudent,responsible:SweducResponsible,index:number):AssistantStudent=>{
+  const responsavel=responsible.nome||"RESPONSÁVEL NÃO INFORMADO";
+  const cpf=digits(responsible.cpf_cnpj||responsible.cpf||responsible.documento||"",14)||null;
+  const email=firstNestedText(responsible,["emails"],["email","endereco","valor"]).toLocaleLowerCase("pt-BR")||null;
+  const whatsapp=digits(firstNestedText(responsible,["telefones"],["numero","telefone","celular","valor"]),15)||null;
+  const logradouro=responsible.logradouro||responsible.endereco||responsible.rua||student.logradouro;
+  const numero=responsible.numero||responsible.numero_endereco||student.numero;
+  const complemento=responsible.complemento||student.complemento;
+  const bairro=responsible.bairro||student.bairro;
+  const cidade=responsible.cidade||responsible.municipio||student.cidade;
+  const uf=(responsible.uf||responsible.estado||student.uf||"").slice(0,2).toLocaleUpperCase("pt-BR")||null;
+  return {...student,responsavel:upper(responsavel),cpf_cnpj:cpf,email,whatsapp,cep:digits(responsible.cep||student.cep||"",8)||student.cep,logradouro:logradouro?upper(logradouro):null,numero:numero?upper(numero):null,complemento:complemento?upper(complemento):null,bairro:bairro?upper(bairro):null,cidade:cidade?upper(cidade):null,uf,sweduc_responsavel_index:index};
+};
 const formatCurrencyInput=(value:string)=>{const cents=digits(value,13);return cents?Number(cents)/100:0};
 const currencyInput=(value:string)=>{const amount=formatCurrencyInput(value);return amount?amount.toLocaleString("pt-BR",{style:"currency",currency:"BRL"}):""};
 const fiscalServiceForSegment=(segment?:string|null)=>{const normalized=normalize(segment||"");if(normalized.includes("medio"))return {code:"08.01.01",description:"Ensino regular médio",nbs:"122013000"};if(normalized.includes("1º")||normalized.includes("6º")||normalized.includes("fundamental"))return {code:"08.01.01",description:"Ensino regular fundamental",nbs:"122012000"};return {code:"08.01.01",description:"Ensino regular pré-escolar",nbs:"122011200"}};
@@ -156,7 +173,7 @@ export function IssuanceAssistant({onNavigate}:{onNavigate:(page:AppPage)=>void}
     setError("");
     const [paymentsResult,studentsResult,deliveriesResult]=await Promise.all([
       supabase.from("mensalidades").select("id,aluno_id,competencia,valor_nfse,descricao_servico,status_pagamento,status_nfse,dps_xml_path,dps_xml_id,nfse_homologacao_xml_path,chave_nfse_homologacao,homologacao_emitida_em,alunos(nome,turma,responsavel,segmento,cpf_cnpj,email,whatsapp,agenda_edu_student_id,agenda_edu_use_external_id,cep,logradouro,numero,cidade,uf)").order("created_at",{ascending:false}),
-      supabase.from("alunos").select("id,nome,turma,segmento,responsavel,cpf_cnpj,email,whatsapp,cep,logradouro,numero,cidade,uf").order("nome"),
+      supabase.from("alunos").select("id,nome,turma,segmento,responsavel,cpf_cnpj,email,whatsapp,cep,logradouro,numero,complemento,bairro,cidade,uf").order("nome"),
       supabase.from("nfse_entregas").select("mensalidade_id,status,canal,created_at").order("created_at",{ascending:false}),
     ]);
     if(paymentsResult.error){
@@ -227,6 +244,15 @@ export function IssuanceAssistant({onNavigate}:{onNavigate:(page:AppPage)=>void}
     return students.filter(student=>normalize([student.nome,student.responsavel,student.turma,student.segmento,student.cpf_cnpj].filter(Boolean).join(" ")).includes(q));
   },[studentQuery,students]);
   const selectedStudent=useMemo(()=>pendingSweducStudent?.id===newStudentId?pendingSweducStudent:students.find(student=>student.id===newStudentId)||null,[newStudentId,students,pendingSweducStudent]);
+  function changePreparedResponsible(index:number){
+    if(!pendingSweducStudent?.sweduc_responsaveis?.[index])return;
+    const updated=applySweducResponsible(pendingSweducStudent,pendingSweducStudent.sweduc_responsaveis[index],index);
+    setPendingSweducStudent(updated);
+    sessionStorage.setItem("jpi-assistant-prepared-sweduc-student",JSON.stringify(updated));
+    if(!newDescriptionEdited)setNewDescription(defaultServiceDescription(newCompetence,updated));
+    setMessage("Responsável da nota atualizado. Confira CPF/CNPJ, contato e valor antes de criar a mensalidade.");
+    setError("");
+  }
   const resumePayment=useMemo(()=>payments.find(item=>item.id===resumePaymentId)||null,[payments,resumePaymentId]);
   const showNewEmissionForm=manualNewEmission||Boolean(pendingSweducStudent)||Boolean(selectedStudent)||!resumePayment;
   const selected=useMemo(()=>payments.find(item=>item.id===selectedId)||null,[payments,selectedId]);
@@ -333,8 +359,8 @@ export function IssuanceAssistant({onNavigate}:{onNavigate:(page:AppPage)=>void}
         if(!selectedStudent.responsavel||!selectedStudent.cpf_cnpj)throw new Error("Confira o responsável e CPF/CNPJ antes de confirmar a emissão.");
         const existingStudent=selectedStudent.sweduc_matricula_id?await supabase.from("alunos").select("id").eq("sweduc_matricula_id",selectedStudent.sweduc_matricula_id).maybeSingle():{data:null,error:null};
         if(existingStudent.error)throw new Error(existingStudent.error.message||"Não foi possível verificar o cadastro fiscal do aluno.");
-        const studentPayload={nome:selectedStudent.nome,turma:selectedStudent.turma,segmento:selectedStudent.segmento,responsavel:selectedStudent.responsavel,cpf_cnpj:selectedStudent.cpf_cnpj,email:selectedStudent.email,whatsapp:selectedStudent.whatsapp,cep:selectedStudent.cep,logradouro:selectedStudent.logradouro,numero:selectedStudent.numero,cidade:selectedStudent.cidade,uf:selectedStudent.uf,sweduc_matricula_id:selectedStudent.sweduc_matricula_id||null,sweduc_aluno_id:selectedStudent.sweduc_aluno_id||null,sweduc_ano_letivo:selectedStudent.sweduc_ano_letivo||null,sweduc_atualizado_em:new Date().toISOString()};
-        const saved=existingStudent.data?.id?await supabase.from("alunos").update(studentPayload).eq("id",existingStudent.data.id).select("id,nome,turma,segmento,responsavel,cpf_cnpj,email,whatsapp,cep,logradouro,numero,cidade,uf").single():await supabase.from("alunos").insert(studentPayload).select("id,nome,turma,segmento,responsavel,cpf_cnpj,email,whatsapp,cep,logradouro,numero,cidade,uf").single();
+        const studentPayload={nome:selectedStudent.nome,turma:selectedStudent.turma,segmento:selectedStudent.segmento,responsavel:selectedStudent.responsavel,cpf_cnpj:selectedStudent.cpf_cnpj,email:selectedStudent.email,whatsapp:selectedStudent.whatsapp,cep:selectedStudent.cep,logradouro:selectedStudent.logradouro,numero:selectedStudent.numero,complemento:selectedStudent.complemento||null,bairro:selectedStudent.bairro||null,cidade:selectedStudent.cidade,uf:selectedStudent.uf,sweduc_matricula_id:selectedStudent.sweduc_matricula_id||null,sweduc_aluno_id:selectedStudent.sweduc_aluno_id||null,sweduc_ano_letivo:selectedStudent.sweduc_ano_letivo||null,sweduc_atualizado_em:new Date().toISOString()};
+        const saved=existingStudent.data?.id?await supabase.from("alunos").update(studentPayload).eq("id",existingStudent.data.id).select("id,nome,turma,segmento,responsavel,cpf_cnpj,email,whatsapp,cep,logradouro,numero,complemento,bairro,cidade,uf").single():await supabase.from("alunos").insert(studentPayload).select("id,nome,turma,segmento,responsavel,cpf_cnpj,email,whatsapp,cep,logradouro,numero,complemento,bairro,cidade,uf").single();
         if(saved.error||!saved.data)throw new Error(saved.error?.message||"Não foi possível confirmar o aluno no cadastro fiscal.");
         const savedStudent=saved.data as AssistantStudent;
         studentId=savedStudent.id;
@@ -817,6 +843,10 @@ export function IssuanceAssistant({onNavigate}:{onNavigate:(page:AppPage)=>void}
               <div><span>NOVA EMISSÃO</span><h2>{selectedStudent.nome}</h2><p>{selectedStudent.responsavel||"Responsável não informado"} · {selectedStudent.segmento}</p></div>
               <span className="assistant-current-badge active">Etapa 2 de 9</span>
             </div>
+            {pendingSweducStudent?.sweduc_responsaveis?.length&&pendingSweducStudent.sweduc_responsaveis.length>1?<div className="assistant-responsible-switch">
+              <label><span>Responsável da nota</span><select value={pendingSweducStudent.sweduc_responsavel_index??0} onChange={event=>changePreparedResponsible(Number(event.target.value))}>{pendingSweducStudent.sweduc_responsaveis.map((responsible,index)=><option key={`${responsible.nome||"responsavel"}-${index}`} value={index}>{responsible.nome||`Responsável ${index+1}`}{responsible.responsavel_pedagogico?" · sugerido":""}</option>)}</select></label>
+              <small>{sweducResponsibleDocument(pendingSweducStudent.sweduc_responsaveis[pendingSweducStudent.sweduc_responsavel_index??0])} · {sweducResponsibleContact(pendingSweducStudent.sweduc_responsaveis[pendingSweducStudent.sweduc_responsavel_index??0])}</small>
+            </div>:null}
             <div className="assistant-dps-editor">
               <div className="assistant-edit-grid">
                 <label><span>Competência</span><input type="month" max={currentCompetenceInput()} value={newCompetence} onChange={e=>{const value=e.target.value;setNewCompetence(value);if(!newDescriptionEdited)setNewDescription(defaultServiceDescription(value,selectedStudent))}}/></label>
