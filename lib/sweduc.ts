@@ -149,13 +149,13 @@ function firstNestedText(source:Record<string,unknown>,keys:string[],nestedKeys:
   }
   return "";
 }
-export function inferSweducSegment(curso?:string|null,serie?:string|null){
-  const value=`${curso||""} ${serie||""}`.normalize("NFD").replace(/[\u0300-\u036f]/g,"").toLocaleLowerCase("pt-BR");
+export function inferSweducSegment(curso?:string|null,serie?:string|null,turma?:string|null){
+  const value=`${curso||""} ${serie||""} ${turma||""}`.normalize("NFD").replace(/[\u0300-\u036f]/g,"").toLocaleLowerCase("pt-BR");
+  if(value.includes("maternal"))return "Maternal";
+  if(value.includes("pre")||value.includes("infantil")||value.includes("jardim"))return "Pré-escola";
   if(value.includes("medio"))return "Ensino Médio";
   if(value.includes("9")||value.includes("8")||value.includes("7")||value.includes("6")||value.includes("fundamental ii"))return "6º ao 9º anos";
   if(value.includes("5")||value.includes("4")||value.includes("3")||value.includes("2")||value.includes("1")||value.includes("fundamental"))return "1º ao 5º anos";
-  if(value.includes("pre")||value.includes("infantil")||value.includes("jardim"))return "Pré-escola";
-  if(value.includes("maternal"))return "Maternal";
   return "Pré-escola";
 }
 export function mapSweducToFiscalStudent(input:{student:SweducStudentSummary&Record<string,unknown>;responsible?:Record<string,unknown>|null;details?:Record<string,unknown>|null}):SweducFiscalStudent{
@@ -176,7 +176,7 @@ export function mapSweducToFiscalStudent(input:{student:SweducStudentSummary&Rec
   return {
     nome:alunoNome.toLocaleUpperCase("pt-BR"),
     turma:pickText(student,["turma"])||pickText(details,["turma"])||null,
-    segmento:inferSweducSegment(pickText(student,["curso"])||pickText(details,["curso"]),pickText(student,["serie"])||pickText(details,["serie"])),
+    segmento:inferSweducSegment(pickText(student,["curso"])||pickText(details,["curso"]),pickText(student,["serie"])||pickText(details,["serie"]),pickText(student,["turma"])||pickText(details,["turma"])),
     responsavel:responsavel.toLocaleUpperCase("pt-BR"),
     cpf_cnpj:cpf||null,email,whatsapp,cep,logradouro:logradouro.toLocaleUpperCase("pt-BR")||null,numero:numero.toLocaleUpperCase("pt-BR")||null,
     complemento:complemento.toLocaleUpperCase("pt-BR")||null,bairro:bairro.toLocaleUpperCase("pt-BR")||null,cidade:cidade.toLocaleUpperCase("pt-BR")||null,uf:uf||null,endereco

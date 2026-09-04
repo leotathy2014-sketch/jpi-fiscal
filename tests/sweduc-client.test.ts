@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import {createSweducAccessToken,currentSweducAcademicYear,getSweducActiveAcademicYear,getSweducStudentDetailsWithToken,listSweducStudentsWithToken,normalizeSweducHost,parseSweducCredentials,serializeSweducCredentials} from "../lib/sweduc.ts";
+import {createSweducAccessToken,currentSweducAcademicYear,getSweducActiveAcademicYear,getSweducStudentDetailsWithToken,inferSweducSegment,listSweducStudentsWithToken,normalizeSweducHost,parseSweducCredentials,serializeSweducCredentials} from "../lib/sweduc.ts";
 
 const credentials={host:"https://joaopauloi.escolarsw.com.br",clientId:"cliente",clientSecret:"segredo"};
 
@@ -75,4 +75,10 @@ test("usa os endpoints oficiais de listagem e detalhes",async()=>{
   assert.equal(listing.total,1);assert.equal(detail.responsaveis.length,1);assert.equal(detail.financeiro.length,1);
   assert.match(urls[0],/\/api\/v2\/alunos\/listar\?page=1&search=Jo%C3%A3o/);
   assert.match(urls[1],/\/api\/v2\/alunos\/detalhes\?matricula_id=101/);
+});
+
+test("classifica turma de pré-escola antes de fundamental",()=>{
+  assert.equal(inferSweducSegment("1º ao 5º anos","", "PRÉ-I/M"),"Pré-escola");
+  assert.equal(inferSweducSegment("Educação Infantil","Maternal 1","MATERNAL/M"),"Maternal");
+  assert.equal(inferSweducSegment("Ensino Fundamental 2","6º Ano","601"),"6º ao 9º anos");
 });
