@@ -107,7 +107,16 @@ export async function POST(request:NextRequest){
     const result=await query.order("nome",{ascending:true}).range(from,to);
     if(result.error)return json({error:"Não foi possível consultar o espelho SWeduc no banco."},500);
     const rows=(result.data||[]) as Array<Record<string,unknown>>;
-    return json({ok:true,students:rows,page,lastPage:Math.max(1,Math.ceil(Number(result.count||0)/pageSize)),nextPage:to+1<Number(result.count||0)?page+1:null,totalAvailable:Number(result.count||0),message:rows.length?`Consulta local concluída com ${Number(result.count||0)} matrícula(s) encontrada(s). Nada foi salvo no cadastro fiscal.`:"Nenhum aluno encontrado no espelho SWeduc. Use a sincronização manual ou aguarde a próxima atualização automática."});
+    const totalLocal=Number(result.count||0);
+    if(rows.length||totalLocal>0||course||serie||turma)return json({ok:true,students:rows,page,lastPage:Math.max(1,Math.ceil(totalLocal/pageSize)),nextPage:to+1<totalLocal?page+1:null,totalAvailable:totalLocal,message:rows.length?`Consulta local concluída com ${totalLocal} matrícula(s) encontrada(s). Nada foi salvo no cadastro fiscal.`:"Nenhum aluno encontrado no espelho SWeduc para estes filtros."});
+    let activeCredentials:SweducCredentials|undefined;let activeAccessToken="";
+    try{
+      const creds=await credentials(auth.supabase);activeCredentials=creds;const resolved=await resolveSweducAcademicYear(creds.host,Number.isSafeInteger(rawYear)&&rawYear>1900?rawYear:undefined);const activeYear=resolved.selected;const token=await createSweducAccessToken(creds);activeAccessToken=token.accessToken;
+      const listing=await listSweducStudentsWithToken(creds.host,token.accessToken,{page,ano_letivo_id:activeYear.id,search:search||undefined});
+      const apiRows=(listing.data||[]).map(mapSummaryToGrid);
+      const lastPage=Math.min(Math.max(1,Number(listing.last_page||page)),MAX_SWEDUC_PAGES);
+      return json({ok:true,students:apiRows,page,lastPage,nextPage:page<lastPage?page+1:null,academicYear:activeYear.year,totalAvailable:Number(listing.total||0),message:`Espelho SWeduc ainda vazio. Consulta temporária feita direto na API para ${activeYear.year}. Nada foi salvo no cadastro fiscal.`});
+    }catch(error){return json({error:safeSweducError(error,activeCredentials,[activeAccessToken])},400)}
   }
   if(action==="sync"){
     let synced=0;let totalAvailable=0;let activeCredentials:SweducCredentials|undefined;let activeAccessToken="";const rawPage=Number(body.page||1);const requestedPage=Number.isSafeInteger(rawPage)?Math.max(1,Math.min(rawPage,MAX_SWEDUC_PAGES)):1;const search=String(body.search||"").trim().toLocaleLowerCase("pt-BR");
