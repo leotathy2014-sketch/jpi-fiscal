@@ -104,7 +104,7 @@ function missingStudentFields(payment:AssistantPayment){
   if(!student.responsavel)missing.push("responsável financeiro");
   if(!student.cpf_cnpj)missing.push("CPF/CNPJ");
   if(!student.email)missing.push("e-mail");
-  if(!student.cep||!student.logradouro||!student.numero||!student.cidade||!student.uf)missing.push("endereço completo");
+  if(!student.cep||!student.logradouro||!student.cidade||!student.uf)missing.push("endereço completo");
   return missing;
 }
 
