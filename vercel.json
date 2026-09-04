@@ -5,5 +5,11 @@
       "dev/assistente-emissao": false,
       "debug/*": false
     }
-  }
+  },
+  "crons": [
+    {
+      "path": "/api/cron/sweduc-sync",
+      "schedule": "0 9 * * *"
+    }
+  ]
 }

@@ -64,7 +64,7 @@ export async function POST(request:NextRequest){
   let body:Record<string,unknown>;try{body=await request.json()}catch{return json({error:"Dados da solicitação inválidos."},400)}
   const action=String(body.action||"");
   if(["save","test"].includes(action)&&!await hasServerPermission(auth.supabase,"settings.integrations.edit"))return json({error:"Seu usuário não possui permissão para configurar a SWeduc."},403);
-  if(["sync","details"].includes(action)&&!await hasServerPermission(auth.supabase,"settings.integrations.view")&&!await hasServerPermission(auth.supabase,"settings.integrations.edit")&&!await hasServerPermission(auth.supabase,"students.view")&&!await hasServerPermission(auth.supabase,"students.create")&&!await hasServerPermission(auth.supabase,"students.edit")&&!await hasServerPermission(auth.supabase,"payments.create")&&!await hasServerPermission(auth.supabase,"nfse.prepare"))return json({error:"Seu usuário não possui permissão para consultar alunos da SWeduc."},403);
+  if(["lookup","sync","details"].includes(action)&&!await hasServerPermission(auth.supabase,"settings.integrations.view")&&!await hasServerPermission(auth.supabase,"settings.integrations.edit")&&!await hasServerPermission(auth.supabase,"students.view")&&!await hasServerPermission(auth.supabase,"students.create")&&!await hasServerPermission(auth.supabase,"students.edit")&&!await hasServerPermission(auth.supabase,"payments.create")&&!await hasServerPermission(auth.supabase,"nfse.prepare"))return json({error:"Seu usuário não possui permissão para consultar alunos da SWeduc."},403);
   if(action==="save"){
     let host:string;try{host=normalizeSweducHost(String(body.host||""))}catch(error){return json({error:error instanceof Error?error.message:"Informe um HOST válido."},400)}
     const clientIdInput=String(body.clientId||"").trim();const clientSecretInput=String(body.clientSecret||"").trim();const usernameInput=String(body.username||"").trim();const passwordInput=String(body.password||"");
@@ -95,6 +95,19 @@ export async function POST(request:NextRequest){
   if(action==="test"){
     let activeCredentials:SweducCredentials|undefined;
     try{activeCredentials=await credentials(auth.supabase);const activeYear=await getSweducActiveAcademicYear(activeCredentials.host);const sample=await listSweducStudents(activeCredentials,{page:1,ano_letivo_id:activeYear.id});const at=new Date().toISOString();await auth.supabase.from("sweduc_config").update({host:activeCredentials.host,ultimo_status:"conectado",testada_em:at,ultimo_erro:null,updated_at:at,updated_by:auth.user.id}).eq("id",true);return json({ok:true,academicYear:activeYear.year,message:`Conexão confirmada para o ano letivo ${activeYear.year}. A SWeduc retornou ${Number(sample.total||sample.data?.length||0)} matrícula(s). Nenhum dado foi importado neste teste.`});}catch(error){const message=safeSweducError(error,activeCredentials);await auth.supabase.from("sweduc_config").update({ultimo_status:"erro",ultimo_erro:message,updated_at:new Date().toISOString(),updated_by:auth.user.id}).eq("id",true);return json({error:message},400)}
+  }
+  if(action==="lookup"){
+    const rawYear=Number(body.academicYear||0);const search=String(body.search||"").trim();const course=String(body.course||"").trim();const serie=String(body.serie||"").trim();const turma=String(body.turma||"").trim();const page=Math.max(1,Math.min(Number(body.page||1),100));const pageSize=80;const from=(page-1)*pageSize;const to=from+pageSize-1;
+    let query=auth.supabase.from("sweduc_alunos").select("matricula_id,aluno_id,nome,data_nascimento,numero_aluno,numero_matricula,status,unidade,curso,serie,turma,ano_letivo,responsaveis,financeiro,dados_origem,sincronizado_em",{count:"exact"});
+    if(Number.isSafeInteger(rawYear)&&rawYear>1900)query=query.eq("ano_letivo",String(rawYear));
+    if(search)query=query.ilike("nome",`%${search}%`);
+    if(course)query=query.eq("curso",course);
+    if(serie)query=query.eq("serie",serie);
+    if(turma)query=query.eq("turma",turma);
+    const result=await query.order("nome",{ascending:true}).range(from,to);
+    if(result.error)return json({error:"Não foi possível consultar o espelho SWeduc no banco."},500);
+    const rows=(result.data||[]) as Array<Record<string,unknown>>;
+    return json({ok:true,students:rows,page,lastPage:Math.max(1,Math.ceil(Number(result.count||0)/pageSize)),nextPage:to+1<Number(result.count||0)?page+1:null,totalAvailable:Number(result.count||0),message:rows.length?`Consulta local concluída com ${Number(result.count||0)} matrícula(s) encontrada(s). Nada foi salvo no cadastro fiscal.`:"Nenhum aluno encontrado no espelho SWeduc. Use a sincronização manual ou aguarde a próxima atualização automática."});
   }
   if(action==="sync"){
     let synced=0;let totalAvailable=0;let activeCredentials:SweducCredentials|undefined;let activeAccessToken="";const rawPage=Number(body.page||1);const requestedPage=Number.isSafeInteger(rawPage)?Math.max(1,Math.min(rawPage,MAX_SWEDUC_PAGES)):1;const search=String(body.search||"").trim().toLocaleLowerCase("pt-BR");
@@ -152,7 +165,7 @@ export async function POST(request:NextRequest){
       if(!canCreate)return json({error:"Seu usuário precisa de permissão para cadastrar alunos."},403);
       result=await auth.supabase.from("alunos").insert(payload).select("id,nome").single();
     }
-    if(result.error||!result.data)return json({error:"Não foi possível carregar este aluno para a nota."},500);
+      if(result.error||!result.data)return json({error:"Não foi possível carregar este aluno para a nota."},500);
     return json({ok:true,student:result.data,message:`${result.data.nome} foi carregado no cadastro fiscal e já pode ser usado na emissão.`});
   }
   return json({error:"Ação SWeduc inválida."},400);
