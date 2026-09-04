@@ -760,6 +760,8 @@
 .sweduc-selection-grid{display:grid;grid-template-columns:minmax(0,1fr) 300px;gap:14px;align-items:start}
 .table-card tr.selected-row{background:#eef6ff}
 .table-card tr.selected-row td:first-child{box-shadow:inset 3px 0 0 #1466df}
+.sweduc-responsible-row td{padding:10px 16px 16px!important;background:#f8fbff;border-bottom:1px solid #d9e7f7!important}
+.sweduc-responsible-row .sweduc-responsible-confirm{margin:0;border-color:#bcd6f3;box-shadow:0 8px 20px rgba(20,102,223,.08)}
 .secondary.mini{min-height:26px;padding:0 9px;font-size:11px;border-radius:7px}
 .sweduc-import-panel{display:grid;gap:13px;border:1px solid #d5e0ee;border-radius:12px;background:#fbfdff;padding:14px;position:sticky;top:12px}
 .sweduc-import-panel h3{margin:2px 0 0;font-size:17px;color:#243247}
