@@ -110,11 +110,11 @@ export async function POST(request:NextRequest){
     if(course)query=query.eq("curso",course);
     if(serie)query=query.eq("serie",serie);
     if(turma)query=query.eq("turma",turma);
-    const result=await query.order("nome",{ascending:true}).range(from,to);
+    const [result,mirrorCount]=await Promise.all([query.order("nome",{ascending:true}).range(from,to),auth.supabase.from("sweduc_alunos").select("matricula_id",{count:"exact",head:true})]);
     if(result.error)return json({error:"Não foi possível consultar o espelho SWeduc no banco."},500);
     const rows=(result.data||[]) as Array<Record<string,unknown>>;
-    const totalLocal=Number(result.count||0);
-    if(rows.length||totalLocal>0||course||serie||turma)return json({ok:true,students:rows,page,lastPage:Math.max(1,Math.ceil(totalLocal/pageSize)),nextPage:to+1<totalLocal?page+1:null,totalAvailable:totalLocal,message:rows.length?`Consulta local concluída com ${totalLocal} matrícula(s) encontrada(s). Nada foi salvo no cadastro fiscal.`:"Nenhum aluno encontrado no espelho SWeduc para estes filtros."});
+    const totalLocal=Number(result.count||0);const mirrorTotal=Number(mirrorCount.count||0);
+    if(rows.length||mirrorTotal>0||course||serie||turma)return json({ok:true,students:rows,page,lastPage:Math.max(1,Math.ceil(totalLocal/pageSize)),nextPage:to+1<totalLocal?page+1:null,totalAvailable:totalLocal,message:rows.length?`Consulta local concluída com ${totalLocal} matrícula(s) encontrada(s). Nada foi salvo no cadastro fiscal.`:"Nenhum aluno encontrado no espelho SWeduc para estes filtros."});
     let activeCredentials:SweducCredentials|undefined;let activeAccessToken="";
     try{
       const creds=await credentials(auth.supabase);activeCredentials=creds;const resolved=await resolveSweducAcademicYear(creds.host,Number.isSafeInteger(rawYear)&&rawYear>1900?rawYear:undefined);const activeYear=resolved.selected;const token=await createSweducAccessToken(creds);activeAccessToken=token.accessToken;
