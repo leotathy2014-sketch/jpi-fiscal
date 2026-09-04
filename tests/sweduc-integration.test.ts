@@ -96,9 +96,9 @@ test("permite buscar aluno SWeduc no cadastro e no assistente sem abrir configur
   assert.match(operationalPicker,/sortStudents/);
   assert.match(route,/matchesSearch/);
   assert.match(route,/action==="lookup"/);
-  assert.match(operationalPicker,/course:courseFilter/);
-  assert.match(operationalPicker,/serie:serieFilter/);
-  assert.match(operationalPicker,/turma:turmaFilter/);
+  assert.match(operationalPicker,/course:yearOverride/);
+  assert.match(operationalPicker,/serie:yearOverride/);
+  assert.match(operationalPicker,/turma:yearOverride/);
   assert.match(route,/students\.view/);
   assert.match(route,/students\.create/);
   assert.match(route,/nfse\.prepare/);

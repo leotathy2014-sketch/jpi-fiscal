@@ -1,5 +1,5 @@
 "use client";
-import {useCallback,useEffect,useMemo,useState} from "react";
+import {useCallback,useEffect,useMemo,useRef,useState} from "react";
 import {Check,RefreshCw,Search,UserCheck,UsersRound} from "lucide-react";
 import {createSupabaseBrowserClient} from "@/lib/supabase";
 import {authenticatedFetch} from "@/lib/authenticated-fetch";
@@ -35,6 +35,7 @@ export function SweducOperationalPicker({onStudentReady}:{onStudentReady:(studen
   const [busy,setBusy]=useState("");
   const [error,setError]=useState("");
   const [message,setMessage]=useState("");
+  const loadedYearRef=useRef<number|null>(null);
 
   const token=useCallback(async()=>{
     if(!supabase)throw new Error("Sessão indisponível. Entre novamente.");
@@ -74,16 +75,17 @@ export function SweducOperationalPicker({onStudentReady}:{onStudentReady:(studen
   const pagedVisible=visible.slice((safeGridPage-1)*pageSize,safeGridPage*pageSize);
   useEffect(()=>{setGridPage(1)},[query,courseFilter,serieFilter,turmaFilter,selectedYear]);
 
-  async function consult(){
-    if(!selectedYear)return;
+  async function consult(yearOverride?:number){
+    const activeYear=yearOverride||selectedYear;
+    if(!activeYear)return;
     const term=query.trim();
-    setBusy("consult");setError("");setMessage(term?`Buscando "${term}" em ${selectedYear} na SWeduc…`:`Consultando alunos de ${selectedYear} no espelho SWeduc…`);
+    setBusy("consult");setError("");setMessage(term?`Buscando "${term}" em ${activeYear} na SWeduc…`:`Consultando alunos de ${activeYear} no espelho SWeduc…`);
     setStudents([]);setSelected(null);setResponsibleIndex(0);setGridPage(1);
     let page=1;let total=0;
     try{
       const accessToken=await token();
       while(page<=1000){
-        const response=await authenticatedFetch("/api/integrations/sweduc",{method:"POST",headers:{Authorization:`Bearer ${accessToken}`,"Content-Type":"application/json"},body:JSON.stringify({action:"lookup",page,academicYear:selectedYear,search:term,course:courseFilter,serie:serieFilter,turma:turmaFilter}),cache:"no-store"});
+        const response=await authenticatedFetch("/api/integrations/sweduc",{method:"POST",headers:{Authorization:`Bearer ${accessToken}`,"Content-Type":"application/json"},body:JSON.stringify({action:"lookup",page,academicYear:activeYear,search:term,course:yearOverride?"":courseFilter,serie:yearOverride?"":serieFilter,turma:yearOverride?"":turmaFilter}),cache:"no-store"});
         const data=await response.json().catch(()=>({})) as {students?:SweducStudent[];nextPage?:number|null;lastPage?:number;academicYear?:number;error?:string;message?:string};
         if(!response.ok)throw new Error(data.error||"Não foi possível consultar a SWeduc.");
         const loaded=data.students||[];total+=loaded.length;setStudents(current=>sortStudents([...current,...loaded]));
@@ -119,11 +121,17 @@ export function SweducOperationalPicker({onStudentReady}:{onStudentReady:(studen
     }catch(e){setError(e instanceof Error?e.message:"Não foi possível carregar este aluno para a nota.")}finally{setBusy("")}
   }
 
+  useEffect(()=>{
+    if(!selectedYear||loadedYearRef.current===selectedYear)return;
+    loadedYearRef.current=selectedYear;
+    void consult(selectedYear);
+  },[selectedYear]);
+
   return <section className="notice compact sweduc-operational-picker"><UsersRound/><div><strong>Buscar aluno na SWeduc</strong><span>Primeiro escolha ano letivo, segmento/curso, série e turma. Depois pesquise o aluno pelo nome; a busca ignora acentos e caracteres especiais. Nada é salvo até confirmar em Carregar para a nota.</span>
     <div className="sweduc-student-search-panel">
       <div className="sweduc-filter-row">
-        <label>Ano letivo<select value={selectedYear||""} onChange={event=>{setSelectedYear(Number(event.target.value));setStudents([]);setSelected(null);setResponsibleIndex(0);setQuery("");setCourseFilter("");setSerieFilter("");setTurmaFilter("")}}>{years.map(year=><option key={year.year} value={year.year}>{year.year}</option>)}</select></label>
-        <label>Segmento / curso<select value={courseFilter} disabled={!students.length} onChange={event=>{setCourseFilter(event.target.value);setSerieFilter("");setTurmaFilter("")}}><option value="">Todos</option>{courseOptions.map(option=><option key={option} value={option}>{option}</option>)}</select></label>
+        <label>Ano letivo<select value={selectedYear||""} onChange={event=>{const year=Number(event.target.value);loadedYearRef.current=null;setSelectedYear(year);setStudents([]);setSelected(null);setResponsibleIndex(0);setQuery("");setCourseFilter("");setSerieFilter("");setTurmaFilter("")}}>{years.map(year=><option key={year.year} value={year.year}>{year.year}</option>)}</select></label>
+        <label>Segmento / curso<select value={courseFilter} disabled={Boolean(busy)||!selectedYear||!courseOptions.length} onChange={event=>{setCourseFilter(event.target.value);setSerieFilter("");setTurmaFilter("")}}><option value="">Todos</option>{courseOptions.map(option=><option key={option} value={option}>{option}</option>)}</select></label>
         <label>Série<select value={serieFilter} disabled={!courseFilter} onChange={event=>{setSerieFilter(event.target.value);setTurmaFilter("")}}><option value="">Todas</option>{serieOptions.map(option=><option key={option} value={option}>{option}</option>)}</select></label>
         <label>Turma<select value={turmaFilter} disabled={!serieFilter} onChange={event=>setTurmaFilter(event.target.value)}><option value="">Todas</option>{turmaOptions.map(option=><option key={option} value={option}>{option}</option>)}</select></label>
       </div>
