@@ -1184,7 +1184,7 @@ export function IssuanceAssistant({onNavigate}:{onNavigate:(page:AppPage)=>void}
               {!manualPending&&<div className="assistant-delivery-send-row">
                 <div><small>Canal selecionado</small><strong>{deliveryChannel==="email"?"E-mail":deliveryChannel==="whatsapp-manual"?"WhatsApp manual":"Agenda Edu"}</strong><span>{currentDeliveryReady?"Pronto para enviar":"Ainda não está pronto para este envio"}</span></div>
                 <button className="primary" type="button" onClick={()=>void sendCurrentDocument()} disabled={!currentDeliveryReady||deliveryBusy}>
-                  <Send size={17}/>{deliveryBusy?"Enviando…":deliveryChannel==="whatsapp-manual"?"Preparar WhatsApp":"Enviar agora"}
+                  <Send size={17}/>{deliveryBusy?"Enviando…":deliveryChannel==="whatsapp-manual"?"Preparar WhatsApp":deliveryChannel==="agenda-edu"?"Enviar pela Agenda Edu":"Enviar por e-mail"}
                 </button>
               </div>}
             </div>
