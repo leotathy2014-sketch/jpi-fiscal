@@ -83,7 +83,7 @@ function financialAmount(item:Record<string,unknown>){
   return Number.isFinite(gross)?Math.abs(gross).toFixed(2):"";
 }
 function financialDescription(item:Record<string,unknown>){
-  const direct=financialText(item,["descricao","descrição","descricao_titulo","descricaoTitulo","historico","histórico","categoria","tipo","nome","produto","servico","serviço","plano_conta"]);
+  const direct=financialText(item,["descricao","descrição","descricao_titulo","descricaoTitulo","historico","histórico","categoria","categoria_titulo","tipo","tipo_titulo","titulo","nome_titulo","nome","produto","servico","serviço","plano_conta","plano_contas","grupo_receita","receita","classe"]);
   const itens=Array.isArray(item.itens)?item.itens:[];
   const itemTexts=itens.flatMap(entry=>entry&&typeof entry==="object"?[
     financialText(entry as Record<string,unknown>,["descricao","descrição","nome","produto","servico","serviço","categoria","tipo"]),

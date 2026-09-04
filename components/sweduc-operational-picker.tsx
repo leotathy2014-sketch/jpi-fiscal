@@ -24,7 +24,7 @@ function financialValue(item:SweducFinancial){
   return Number.isFinite(gross)?formatFinancialValue(gross):"Valor não informado";
 }
 function financialDescription(item:SweducFinancial){
-  const direct=financialText(item,["descricao","descrição","descricao_titulo","descricaoTitulo","historico","histórico","categoria","tipo","nome","produto","servico","serviço","plano_conta"]);
+  const direct=financialText(item,["descricao","descrição","descricao_titulo","descricaoTitulo","historico","histórico","categoria","categoria_titulo","tipo","tipo_titulo","titulo","nome_titulo","nome","produto","servico","serviço","plano_conta","plano_contas","grupo_receita","receita","classe"]);
   const itens=Array.isArray(item.itens)?item.itens:[];
   const itemTexts=itens.flatMap(entry=>entry&&typeof entry==="object"?[financialText(entry as SweducFinancial,["descricao","descrição","nome","produto","servico","serviço","categoria","tipo"])]:[]).filter(Boolean);
   return [direct,...itemTexts].filter(Boolean).join(" ");
