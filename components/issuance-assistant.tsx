@@ -46,7 +46,7 @@ type AssistantPayment={
 };
 type AssistantStudent={
   id:number;nome:string;turma:string|null;segmento:string;responsavel:string;cpf_cnpj:string|null;email:string|null;whatsapp:string|null;
-  cep:string|null;logradouro:string|null;numero:string|null;complemento?:string|null;bairro?:string|null;cidade:string|null;uf:string|null;sweduc_matricula_id?:number|null;sweduc_aluno_id?:number|null;sweduc_ano_letivo?:string|null;valor_mensalidade_sugerido?:string|null;sweduc_responsaveis?:SweducResponsible[];sweduc_responsavel_index?:number|null
+  cep:string|null;logradouro:string|null;numero:string|null;complemento?:string|null;bairro?:string|null;cidade:string|null;uf:string|null;sweduc_matricula_id?:number|null;sweduc_aluno_id?:number|null;sweduc_ano_letivo?:string|null;valor_mensalidade_sugerido?:string|null;sweduc_financeiro?:Array<Record<string,unknown>>;sweduc_responsaveis?:SweducResponsible[];sweduc_responsavel_index?:number|null
 };
 type SweducResponsible={nome?:string;cpf?:string;cpf_cnpj?:string;documento?:string;responsavel_pedagogico?:boolean;telefones?:Array<{numero?:string}>;emails?:Array<{email?:string}>;logradouro?:string;endereco?:string;rua?:string;numero?:string;numero_endereco?:string;complemento?:string;bairro?:string;cidade?:string;municipio?:string;uf?:string;estado?:string;cep?:string};
 type DeliveryState={mensalidade_id:number;status:string;canal:string;created_at:string};
@@ -88,6 +88,37 @@ const currencyInput=(value:string)=>{const amount=formatCurrencyInput(value);ret
 const fiscalServiceForSegment=(segment?:string|null)=>{const normalized=normalize(segment||"");if(normalized.includes("medio"))return {code:"08.01.01",description:"Ensino regular médio",nbs:"122013000"};if(normalized.includes("1º")||normalized.includes("6º")||normalized.includes("fundamental"))return {code:"08.01.01",description:"Ensino regular fundamental",nbs:"122012000"};return {code:"08.01.01",description:"Ensino regular pré-escolar",nbs:"122011200"}};
 const defaultServiceDescription=(competence:string,student?:{nome?:string|null;turma?:string|null;segmento?:string|null}|null)=>["MENSALIDADE ESCOLAR",student?.nome?"ALUNO: "+upper(student.nome):null,student?.turma?"TURMA: "+upper(student.turma):null,student?.segmento?"SEGMENTO: "+upper(student.segmento):null,"COMPETÊNCIA "+formatCompetence(competence)].filter(Boolean).join(" - ");
 const parseMoneyInput=(value:string)=>{const clean=value.replace(/R\$/g,"").replace(/\s/g,"");if(clean.includes(","))return Number(clean.replace(/\./g,"").replace(",","."));return Number(clean)};
+const financialText=(item:Record<string,unknown>,keys:string[])=>{for(const key of keys){const value=item[key];if(value!==undefined&&value!==null&&String(value).trim())return String(value)}return ""};
+const parseFinancialNumber=(value:string)=>{const clean=value.replace(/[^\d.,-]/g,"").trim();if(!clean)return NaN;const parsed=clean.includes(",")?Number(clean.replace(/\./g,"").replace(",",".")):Number(clean);return Number.isFinite(parsed)?parsed:NaN};
+const findFinancialAmount=(item:Record<string,unknown>,keys:string[])=>{for(const key of keys){const amount=parseFinancialNumber(financialText(item,[key]));if(Number.isFinite(amount))return amount}return NaN};
+const sweducMonthlyAmount=(item:Record<string,unknown>)=>{
+  const net=findFinancialAmount(item,["valor_liquido","valorLiquido","valor_com_desconto","valorComDesconto","valor_final","valorFinal","valor_real","valorReal","valor_cobrado","valorCobrado","valor_devido","valorDevido","valor_atualizado","valorAtualizado","saldo","saldo_devedor","saldoDevedor","valor_a_pagar","valorAPagar","valor_pago"]);
+  if(Number.isFinite(net)&&net!==0)return Math.abs(net);
+  const gross=findFinancialAmount(item,["valor_bruto","valorBruto","valor","valor_titulo","valor_mensalidade","valor_original","vl_titulo","vlr_titulo","total"]);
+  const discount=findFinancialAmount(item,["desconto","valor_desconto","descontos","bolsa","valor_bolsa","desconto_concedido","valor_desconto_final"]);
+  const extraDiscount=findFinancialAmount(item,["desconto_efetivado","desconto_no_titulo","desconto_no_aluno"]);
+  const fee=findFinancialAmount(item,["juros_efetivado","multa_efetivada"]);
+  if(Number.isFinite(gross)){
+    const totalDiscount=(Number.isFinite(discount)?Math.abs(discount):0)+(Number.isFinite(extraDiscount)?Math.abs(extraDiscount):0);
+    const totalFee=Number.isFinite(fee)?Math.abs(fee):0;
+    return Math.max(0,gross-totalDiscount+totalFee);
+  }
+  return NaN;
+};
+const sweducMonthlyTitleForCompetence=(financeiro:Array<Record<string,unknown>>|undefined,competence:string)=>{
+  const match=competence.match(/^(20\d{2})-(0[1-9]|1[0-2])$/);if(!match)return null;
+  const year=Number(match[1]);const month=Number(match[2]);
+  const isMonthly=(item:Record<string,unknown>)=>{
+    const itens=Array.isArray(item.itens)?item.itens:[];
+    const texts=[financialText(item,["descricao_item","descricao","descricao_titulo","nome","produto","servico","categoria","tipo"]),...itens.map(entry=>entry&&typeof entry==="object"?financialText(entry as Record<string,unknown>,["descricao_item","descricaoItem","descrição_item","descricao","nome","produto","servico","categoria","tipo"]):"")].join(" ");
+    return normalize(texts).includes("mensalidade");
+  };
+  const dateMatches=(item:Record<string,unknown>)=>{const due=financialText(item,["data_vencimento","dataVencimento","vencimento","vencimento_titulo"]);const date=new Date(`${due}T12:00:00`);return due&&Number.isFinite(date.getTime())&&date.getFullYear()===year&&date.getMonth()+1===month};
+  const parcelMatches=(item:Record<string,unknown>)=>{const itens=Array.isArray(item.itens)?item.itens:[];return itens.some(entry=>entry&&typeof entry==="object"&&Number(financialText(entry as Record<string,unknown>,["parcela"]))===month)};
+  const title=(financeiro||[]).find(item=>isMonthly(item)&&dateMatches(item))||(financeiro||[]).find(item=>isMonthly(item)&&parcelMatches(item))||(financeiro||[]).find(item=>isMonthly(item));
+  if(!title)return null;
+  return {dueDate:financialText(title,["data_vencimento","dataVencimento","vencimento","vencimento_titulo"])||null,amount:sweducMonthlyAmount(title),title};
+};
 const dpsDraftVersionPath=(paymentId:number,draftId:string)=>{const timestamp=new Date().toISOString().replace(/\D/g,"").slice(0,17);const revision=timestamp+"-"+crypto.randomUUID().slice(0,8);return "dps/"+paymentId+"/rascunhos/"+revision+"/"+draftId+".xml"};
 
 function Modal({title,onClose,children}:{title:string;onClose:()=>void;children:React.ReactNode}){return <div className="modal-backdrop"><div className="modal-card"><div className="modal-head"><h2>{title}</h2><button className="icon-button" onClick={onClose}><X/></button></div>{children}</div></div>}
@@ -249,6 +280,7 @@ export function IssuanceAssistant({onNavigate}:{onNavigate:(page:AppPage)=>void}
     return payments.filter(payment=>normalize([payment.alunos?.nome,payment.alunos?.responsavel,payment.competencia,payment.status_nfse,String(payment.id)].filter(Boolean).join(" ")).includes(q));
   },[payments,query]);
   const selectedStudent=useMemo(()=>pendingSweducStudent?.id===newStudentId?pendingSweducStudent:students.find(student=>student.id===newStudentId)||null,[newStudentId,students,pendingSweducStudent]);
+  const selectedSweducMonthlyTitle=useMemo(()=>selectedStudent?.sweduc_financeiro?.length?sweducMonthlyTitleForCompetence(selectedStudent.sweduc_financeiro,newCompetence):null,[selectedStudent,newCompetence]);
   function changePreparedResponsible(index:number){
     if(!pendingSweducStudent?.sweduc_responsaveis?.[index])return;
     const updated=applySweducResponsible(pendingSweducStudent,pendingSweducStudent.sweduc_responsaveis[index],index);
@@ -273,6 +305,10 @@ export function IssuanceAssistant({onNavigate}:{onNavigate:(page:AppPage)=>void}
     if(!selectedStudent){setNewDescription("");setNewDescriptionEdited(false);return}
     if(!newDescriptionEdited)setNewDescription(defaultServiceDescription(newCompetence,selectedStudent));
   },[selectedStudent,newCompetence,newDescriptionEdited]);
+  useEffect(()=>{
+    if(!selectedSweducMonthlyTitle||!Number.isFinite(selectedSweducMonthlyTitle.amount))return;
+    setNewValue(selectedSweducMonthlyTitle.amount.toLocaleString("pt-BR",{style:"currency",currency:"BRL"}));
+  },[selectedSweducMonthlyTitle]);
   const delivery=useMemo(()=>selected?deliveries.find(item=>item.mensalidade_id===selected.id&&item.status==="enviado")||null:null,[deliveries,selected]);
   const missing=selected?missingStudentFields(selected):[];
   const progress=selected?statusOrder(selected):null;
@@ -877,6 +913,7 @@ export function IssuanceAssistant({onNavigate}:{onNavigate:(page:AppPage)=>void}
               <div className="assistant-edit-grid">
                 <label><span>Competência</span><input type="month" max={currentCompetenceInput()} value={newCompetence} onChange={e=>{const value=e.target.value;setNewCompetence(value);if(!newDescriptionEdited)setNewDescription(defaultServiceDescription(value,selectedStudent))}}/></label>
                 <label><span>Valor da mensalidade / NFS-e</span><input type="text" inputMode="numeric" placeholder="R$ 0,00" value={newValue} onChange={e=>setNewValue(currencyInput(e.target.value))}/></label>
+                <label><span>Vencimento SWeduc</span><input type="text" value={selectedSweducMonthlyTitle?.dueDate?new Date(`${selectedSweducMonthlyTitle.dueDate}T12:00:00`).toLocaleDateString("pt-BR"):"Não encontrado para esta competência"} readOnly/></label>
               </div>
               <label><span>Status do pagamento</span><select value={newPaymentStatus} onChange={e=>setNewPaymentStatus(e.target.value)}><option value="Aberto">Pendente</option><option value="Pago">Pago</option></select></label>
               <label className="assistant-description-field"><span>Descrição do serviço <em>Editável</em></span><textarea rows={5} maxLength={1000} value={newDescription} onChange={e=>{setNewDescriptionEdited(true);setNewDescription(e.target.value)}}/><small>{newDescription.length}/1000 caracteres</small></label>

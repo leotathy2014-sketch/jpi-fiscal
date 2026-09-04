@@ -76,7 +76,7 @@ function sortStudents(students:SweducStudent[]){
   );
 }
 
-export function SweducOperationalPicker({onStudentReady}:{onStudentReady:(student:{id:number;nome:string;turma?:string|null;segmento?:string;responsavel?:string;cpf_cnpj?:string|null;email?:string|null;whatsapp?:string|null;cep?:string|null;logradouro?:string|null;numero?:string|null;cidade?:string|null;uf?:string|null;sweduc_matricula_id?:number|null;sweduc_aluno_id?:number|null;sweduc_ano_letivo?:string|null;valor_mensalidade_sugerido?:string|null;sweduc_responsaveis?:SweducResponsible[];sweduc_responsavel_index?:number|null})=>void}){
+export function SweducOperationalPicker({onStudentReady}:{onStudentReady:(student:{id:number;nome:string;turma?:string|null;segmento?:string;responsavel?:string;cpf_cnpj?:string|null;email?:string|null;whatsapp?:string|null;cep?:string|null;logradouro?:string|null;numero?:string|null;cidade?:string|null;uf?:string|null;sweduc_matricula_id?:number|null;sweduc_aluno_id?:number|null;sweduc_ano_letivo?:string|null;valor_mensalidade_sugerido?:string|null;sweduc_financeiro?:SweducFinancial[];sweduc_responsaveis?:SweducResponsible[];sweduc_responsavel_index?:number|null})=>void}){
   const supabase=useMemo(()=>createSupabaseBrowserClient(),[]);
   const [years,setYears]=useState<AcademicYear[]>([]);
   const [academicReferences,setAcademicReferences]=useState<AcademicReference[]>([]);

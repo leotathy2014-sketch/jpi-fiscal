@@ -75,6 +75,7 @@ test("importa dados acadêmicos, responsáveis, contatos e financeiro",()=>{
   assert.match(operationalPicker,/descricao_item/);assert.match(operationalPicker,/valor_bruto/);assert.match(operationalPicker,/valor_item/);assert.match(operationalPicker,/bolsa/);
   assert.match(fiscalLinkMigration,/sweduc_matricula_id/);assert.match(fiscalLinkMigration,/unique index/);
   assert.match(assistant,/jpi-assistant-student-focus/);assert.match(assistant,/Aluno importado da SWeduc selecionado/);
+  assert.match(assistant,/sweduc_financeiro/);assert.match(assistant,/sweducMonthlyTitleForCompetence/);assert.match(assistant,/Vencimento SWeduc/);assert.match(assistant,/data_vencimento/);assert.match(assistant,/parcela/);
 });
 
 test("mostra no painel e cadastro a atualização de alunos pela API",()=>{
