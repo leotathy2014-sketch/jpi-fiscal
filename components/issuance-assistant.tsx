@@ -119,6 +119,7 @@ export function IssuanceAssistant({onNavigate}:{onNavigate:(page:AppPage)=>void}
   const [students,setStudents]=useState<AssistantStudent[]>([]);
   const [pendingSweducStudent,setPendingSweducStudent]=useState<AssistantStudent|null>(null);
   const [newEmissionOpen,setNewEmissionOpen]=useState(true);
+  const [manualNewEmission,setManualNewEmission]=useState(false);
   const [resumePaymentId,setResumePaymentId]=useState<number|null>(null);
   const [newStudentId,setNewStudentId]=useState<number|null>(null);
   const [studentQuery,setStudentQuery]=useState("");
@@ -187,6 +188,7 @@ export function IssuanceAssistant({onNavigate}:{onNavigate:(page:AppPage)=>void}
       sessionStorage.removeItem("jpi-assistant-resume-after-student-edit");
       sessionStorage.removeItem("jpi-assistant-prepared-sweduc-student");
       setPendingSweducStudent(null);
+      setManualNewEmission(false);
       setNewEmissionOpen(false);
       setSelectedId(resumeAfterEdit);
       setResumePaymentId(resumeAfterEdit);
@@ -198,7 +200,7 @@ export function IssuanceAssistant({onNavigate}:{onNavigate:(page:AppPage)=>void}
     if(prepared){
       try{
         const student=JSON.parse(prepared) as AssistantStudent;
-        setPendingSweducStudent(student);setNewStudentId(student.id);setNewEmissionOpen(true);setStudentQuery("");if(student.valor_mensalidade_sugerido)setNewValue(currencyInput(student.valor_mensalidade_sugerido));setNewDescriptionEdited(false);setNewDescription(defaultServiceDescription(newCompetence,student));setMessage(student.valor_mensalidade_sugerido?`${student.nome} foi preparado pela SWeduc com valor sugerido. Confira competência, responsável e valor antes de iniciar a nota.`:`${student.nome} foi preparado pela SWeduc. Confira competência e valor para iniciar a nota.`);
+        setPendingSweducStudent(student);setManualNewEmission(true);setNewStudentId(student.id);setNewEmissionOpen(true);setStudentQuery("");if(student.valor_mensalidade_sugerido)setNewValue(currencyInput(student.valor_mensalidade_sugerido));setNewDescriptionEdited(false);setNewDescription(defaultServiceDescription(newCompetence,student));setMessage(student.valor_mensalidade_sugerido?`${student.nome} foi preparado pela SWeduc com valor sugerido. Confira competência, responsável e valor antes de iniciar a nota.`:`${student.nome} foi preparado pela SWeduc. Confira competência e valor para iniciar a nota.`);
         window.requestAnimationFrame(()=>window.requestAnimationFrame(()=>document.getElementById("assistant-new-emission")?.scrollIntoView({behavior:"smooth",block:"start"})));
       }catch{setError("Não foi possível abrir os dados preparados pela SWeduc. Selecione o aluno novamente.")}
       return;
@@ -206,6 +208,7 @@ export function IssuanceAssistant({onNavigate}:{onNavigate:(page:AppPage)=>void}
     const importedId=Number(sessionStorage.getItem("jpi-assistant-student-focus")||"0");
     if(!importedId||!students.some(student=>student.id===importedId))return;
     sessionStorage.removeItem("jpi-assistant-student-focus");
+    setManualNewEmission(true);
     setNewEmissionOpen(true);
     setNewStudentId(importedId);
     setStudentQuery("");
@@ -225,6 +228,7 @@ export function IssuanceAssistant({onNavigate}:{onNavigate:(page:AppPage)=>void}
   },[studentQuery,students]);
   const selectedStudent=useMemo(()=>pendingSweducStudent?.id===newStudentId?pendingSweducStudent:students.find(student=>student.id===newStudentId)||null,[newStudentId,students,pendingSweducStudent]);
   const resumePayment=useMemo(()=>payments.find(item=>item.id===resumePaymentId)||null,[payments,resumePaymentId]);
+  const showNewEmissionForm=manualNewEmission||Boolean(pendingSweducStudent)||Boolean(selectedStudent)||!resumePayment;
   const selected=useMemo(()=>payments.find(item=>item.id===selectedId)||null,[payments,selectedId]);
   useEffect(()=>{
     if(!selected){setDraftCompetence("");setDraftValue("");setDraftDescription("");return}
@@ -725,6 +729,7 @@ export function IssuanceAssistant({onNavigate}:{onNavigate:(page:AppPage)=>void}
     setMessage("Homologação aberta no JPI Fiscal oficial. Depois de concluir, volte a esta aba e clique em Atualizar.");
   }
   function startNewEmission(){
+    setManualNewEmission(true);
     setNewEmissionOpen(true);
     setPendingSweducStudent(null);
     setNewStudentId(null);
@@ -787,14 +792,14 @@ export function IssuanceAssistant({onNavigate}:{onNavigate:(page:AppPage)=>void}
     {newEmissionOpen&&<section id="assistant-new-emission" className="panel assistant-new-start">
       <div className="panel-title">
         <div><span className="eyebrow">ETAPAS 1 E 2</span><h2>Aluno cadastrado → Mensalidade</h2><p>Escolha o aluno e crie a cobrança que dará origem à NFS-e.</p></div>
-        {payments.length>0&&<button className="secondary" onClick={()=>{setNewEmissionOpen(false);setError("");setMessage("")}}>Continuar emissão existente</button>}
+        {payments.length>0&&<button className="secondary" onClick={()=>{setManualNewEmission(false);setNewEmissionOpen(false);setError("");setMessage("")}}>Continuar emissão existente</button>}
       </div>
       {resumePayment&&<div className="assistant-resume-card">
         <RefreshCw size={20}/>
         <div><span>EMISSÃO EM ANDAMENTO</span><strong>{resumePayment.alunos?.nome||("Aluno #"+resumePayment.aluno_id)}</strong><small>{resumePayment.competencia} · {money(resumePayment.valor_nfse)} · {resumePayment.status_nfse}</small></div>
-        <button className="secondary" type="button" onClick={()=>{setSelectedId(resumePayment.id);setNewEmissionOpen(false);setError("");setMessage("")}}>Continuar de onde parei <ChevronRight size={16}/></button>
+        <button className="secondary" type="button" onClick={()=>{setSelectedId(resumePayment.id);setManualNewEmission(false);setNewEmissionOpen(false);setError("");setMessage("")}}>Continuar de onde parei <ChevronRight size={16}/></button>
       </div>}
-      <div className={`assistant-new-start-grid ${selectedStudent?"":"search-mode"}`}>
+      {showNewEmissionForm&&<div className={`assistant-new-start-grid ${selectedStudent?"":"search-mode"}`}>
         <div className="assistant-new-students">
           {pendingSweducStudent?<><div className="assistant-sweduc-prepared"><span>ALUNO PREPARADO PELA SWEDUC</span><strong>{pendingSweducStudent.nome}</strong><small>{pendingSweducStudent.responsavel||"Responsável não informado"} · {pendingSweducStudent.turma||"Sem turma"} · {pendingSweducStudent.segmento}{pendingSweducStudent.valor_mensalidade_sugerido?` · Valor sugerido: ${currencyInput(pendingSweducStudent.valor_mensalidade_sugerido)}`:""}</small><button type="button" className="secondary" onClick={resetPreparedStudent}>Trocar aluno</button></div>{(error||message)&&<div className={error?"assistant-process-message error":"assistant-process-message"} role="status">{error?<CircleAlert size={18}/>:<Check size={18}/>}<div><strong>{error?"Atenção ao processo":"Processo em andamento"}</strong><span>{error||message}</span></div></div>}</>:<><SweducOperationalPicker onStudentReady={student=>{const prepared=student as AssistantStudent;sessionStorage.setItem("jpi-assistant-prepared-sweduc-student",JSON.stringify(prepared));setPendingSweducStudent(prepared);setNewStudentId(prepared.id);setStudentQuery("");if(prepared.valor_mensalidade_sugerido)setNewValue(currencyInput(prepared.valor_mensalidade_sugerido));setNewDescriptionEdited(false);setNewDescription(defaultServiceDescription(newCompetence,prepared));setMessage(prepared.valor_mensalidade_sugerido?`${prepared.nome} foi preparado pela SWeduc com valor sugerido. Confira responsável, competência e valor; o cadastro só será gravado ao iniciar a emissão.`:`${prepared.nome} foi preparado pela SWeduc. Confira responsável, competência e valor; o cadastro só será gravado ao iniciar a emissão.`)}}/>
           <div className="search-input"><Search/><input value={studentQuery} onChange={e=>setStudentQuery(e.target.value)} placeholder="Buscar aluno, responsável, turma ou CPF"/></div>
@@ -833,7 +838,7 @@ export function IssuanceAssistant({onNavigate}:{onNavigate:(page:AppPage)=>void}
             </div>
           </>
         </div>}
-      </div>
+      </div>}
     </section>}
 
     <section className="assistant-stepper" aria-label="Etapas da emissão">
