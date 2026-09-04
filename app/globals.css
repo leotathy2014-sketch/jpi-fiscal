@@ -122,6 +122,14 @@
 .sweduc-operational-picker .table-card td{padding:10px 14px;vertical-align:middle}
 .sweduc-select-student-button{min-height:32px;padding:0 13px;border-radius:8px;font-size:12px;white-space:nowrap}
 
+.assistant-process-message{display:flex;align-items:flex-start;gap:10px;margin-top:10px;padding:12px 13px;border:1px solid #bfe6d4;border-radius:12px;background:#ecfbf4;color:#17633f;box-shadow:0 8px 20px rgba(22,135,95,.08)}
+.assistant-process-message svg{flex:none;margin-top:1px;stroke-width:3}
+.assistant-process-message div{display:grid;gap:3px}
+.assistant-process-message strong{font-size:12px;color:#0d5c37}
+.assistant-process-message span{font-size:12px;line-height:1.35;color:#2f6f53}
+.assistant-process-message.error{border-color:#f1c6c6;background:#fff3f3;color:#9c2c2c;box-shadow:0 8px 20px rgba(156,44,44,.08)}
+.assistant-process-message.error strong,.assistant-process-message.error span{color:#9c2c2c}
+
 
 /* Painel Master e permissões granulares */
 .permission-admin-header{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:16px 18px;margin-bottom:14px;border:1px solid var(--line);border-radius:12px;background:white}
