@@ -987,8 +987,15 @@ export function IssuanceAssistant({onNavigate}:{onNavigate:(page:AppPage)=>void}
             const issued=Boolean(payment.chave_nfse_homologacao);
             return <button key={payment.id} className={selectedId===payment.id?"assistant-payment selected":"assistant-payment"} onClick={()=>setSelectedId(payment.id)}>
               <span className="assistant-payment-icon"><GraduationCap size={17}/></span>
-              <span><strong>{payment.alunos?.nome||`Aluno #${payment.aluno_id}`}</strong><small>{payment.competencia} · {money(payment.valor_nfse)}</small></span>
-              <em className={issued?"done":order.xmlDone?"xml":"pending"}>{issued?"Emitida":order.xmlDone?"XML pronto":payment.status_nfse}</em>
+              <span className="assistant-payment-copy">
+                <strong>{payment.alunos?.nome||`Aluno #${payment.aluno_id}`}</strong>
+                <small>{payment.alunos?.responsavel||"Responsável não informado"}</small>
+                <span className="assistant-payment-meta">
+                  <b>{payment.competencia}</b>
+                  <b>{money(payment.valor_nfse)}</b>
+                  <em className={issued?"done":order.xmlDone?"xml":"pending"}>{issued?"Emitida":order.xmlDone?"XML pronto":payment.status_nfse}</em>
+                </span>
+              </span>
             </button>
           })}
         </div></>}

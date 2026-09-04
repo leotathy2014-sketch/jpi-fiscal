@@ -354,14 +354,18 @@
 .assistant-period-filter input{grid-column:1/-1}
 .assistant-list-hint{margin-top:10px;font-size:9px;font-weight:800;color:#6f8095;text-transform:uppercase;letter-spacing:.03em}
 .assistant-payment-list{display:grid;gap:6px;margin-top:8px;max-height:430px;overflow:auto;padding-right:3px}
-.assistant-payment{width:100%;border:1px solid #e2e8ef;background:#fff;border-radius:12px;padding:8px;display:grid;grid-template-columns:auto minmax(0,1fr);gap:8px;align-items:center;text-align:left;cursor:pointer;font-family:inherit;position:relative}
+.assistant-payment{width:100%;border:1px solid #e2e8ef;background:#fff;border-radius:12px;padding:9px;display:grid;grid-template-columns:auto minmax(0,1fr);gap:9px;align-items:start;text-align:left;cursor:pointer;font-family:inherit;position:relative}
 .assistant-payment:hover{border-color:#bfd3ec;background:#f8fbff}
 .assistant-payment.selected{border-color:var(--blue);box-shadow:0 0 0 2px color-mix(in srgb,var(--blue) 10%,transparent);background:#f7fbff}
 .assistant-payment-icon{width:30px;height:30px;border-radius:9px;display:grid;place-items:center;background:#eef4fb;color:var(--blue)}
-.assistant-payment>span:nth-child(2){display:grid;gap:3px;min-width:0}
-.assistant-payment strong{font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.assistant-payment small{font-size:9px;color:var(--muted)}
-.assistant-payment em{grid-column:2;justify-self:start;font-style:normal;font-size:8px;font-weight:900;border-radius:999px;padding:4px 7px;white-space:nowrap}
+.assistant-payment-copy{display:grid;gap:5px;min-width:0}
+.assistant-payment strong{font-size:11px;line-height:1.2;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:#14263d}
+.assistant-payment small{font-size:9px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.assistant-payment-meta{display:flex;align-items:center;gap:5px;flex-wrap:wrap}
+.assistant-payment-meta b,.assistant-payment em{display:inline-flex;align-items:center;min-height:20px;border-radius:999px;padding:3px 7px;font-size:8px;font-weight:900;white-space:nowrap}
+.assistant-payment-meta b:first-child{background:#eef4ff;color:#1466df}
+.assistant-payment-meta b:nth-child(2){background:#f4f7fb;color:#2e4159}
+.assistant-payment em{font-style:normal}
 .assistant-payment em.pending{background:#fff3df;color:#a46109}
 .assistant-payment em.xml{background:#eef4ff;color:#385f9e}
 .assistant-payment em.done{background:#e8f7f1;color:#157653}
