@@ -154,9 +154,19 @@ function findFinancialAmount(item:Record<string,unknown>,keys:string[]){
 function financialAmount(item:Record<string,unknown>){
   const net=findFinancialAmount(item,["valor_liquido","valorLiquido","valor_com_desconto","valorComDesconto","valor_final","valorFinal","valor_real","valorReal","valor_cobrado","valorCobrado","valor_devido","valorDevido","valor_atualizado","valorAtualizado","saldo","saldo_devedor","saldoDevedor","valor_a_pagar","valorAPagar","valor_pago"]);
   if(Number.isFinite(net)&&net!==0)return Math.abs(net).toFixed(2);
-  const gross=findFinancialAmount(item,["valor","Valor","VALOR","valor_titulo","valor_mensalidade","valor_original","vl_titulo","vlr_titulo","total"]);
+  const gross=findFinancialAmount(item,["valor_bruto","valorBruto","valor","Valor","VALOR","valor_titulo","valor_mensalidade","valor_original","vl_titulo","vlr_titulo","total"]);
   const discount=findFinancialAmount(item,["desconto","valor_desconto","valorDesconto","descontos","bolsa","valor_bolsa","valorBolsa","desconto_concedido","descontoConcedido","valor_desconto_final","valorDescontoFinal"]);
-  if(Number.isFinite(gross)&&Number.isFinite(discount)&&Math.abs(discount)>0)return Math.max(0,gross-Math.abs(discount)).toFixed(2);
+  const extraDiscount=findFinancialAmount(item,["desconto_efetivado","descontoEfetivado","desconto_no_titulo","descontoNoTitulo","desconto_no_aluno","descontoNoAluno"]);
+  const fee=findFinancialAmount(item,["juros_efetivado","jurosEfetivado","multa_efetivada","multaEfetivada"]);
+  if(Number.isFinite(gross)&&(Number.isFinite(discount)||Number.isFinite(extraDiscount)||Number.isFinite(fee))){
+    const totalDiscount=(Number.isFinite(discount)?Math.abs(discount):0)+(Number.isFinite(extraDiscount)?Math.abs(extraDiscount):0);
+    const totalFee=Number.isFinite(fee)?Math.abs(fee):0;
+    return Math.max(0,gross-totalDiscount+totalFee).toFixed(2);
+  }
+  const itens=Array.isArray(item.itens)?item.itens:[];
+  const monthlyItem=itens.find(entry=>entry&&typeof entry==="object"&&normalizeSearchText(financialText(entry as Record<string,unknown>,["descricao_item","descricaoItem","descrição_item","descricao","descrição"])).includes("mensalidade")) as Record<string,unknown>|undefined;
+  const itemAmount=monthlyItem?findFinancialAmount(monthlyItem,["valor_item","valorItem","valor","total"]):NaN;
+  if(Number.isFinite(itemAmount))return Math.abs(itemAmount).toFixed(2);
   return Number.isFinite(gross)?Math.abs(gross).toFixed(2):"";
 }
 function collectFinancialStrings(value:unknown,depth=0):string[]{

@@ -19,9 +19,19 @@ function formatFinancialValue(value:number){return Math.abs(value).toLocaleStrin
 function financialValue(item:SweducFinancial){
   const net=findFinancialAmount(item,["valor_liquido","valorLiquido","valor_com_desconto","valorComDesconto","valor_final","valorFinal","valor_real","valorReal","valor_cobrado","valorCobrado","valor_devido","valorDevido","valor_atualizado","valorAtualizado","saldo","saldo_devedor","saldoDevedor","valor_a_pagar","valorAPagar","valor_pago"]);
   if(Number.isFinite(net)&&net!==0)return formatFinancialValue(net);
-  const gross=findFinancialAmount(item,["valor","Valor","VALOR","valor_titulo","valor_mensalidade","valor_original","vl_titulo","vlr_titulo","total"]);
+  const gross=findFinancialAmount(item,["valor_bruto","valorBruto","valor","Valor","VALOR","valor_titulo","valor_mensalidade","valor_original","vl_titulo","vlr_titulo","total"]);
   const discount=findFinancialAmount(item,["desconto","valor_desconto","valorDesconto","descontos","bolsa","valor_bolsa","valorBolsa","desconto_concedido","descontoConcedido","valor_desconto_final","valorDescontoFinal"]);
-  if(Number.isFinite(gross)&&Number.isFinite(discount)&&Math.abs(discount)>0)return `${formatFinancialValue(Math.max(0,gross-Math.abs(discount)))} com desconto`;
+  const extraDiscount=findFinancialAmount(item,["desconto_efetivado","descontoEfetivado","desconto_no_titulo","descontoNoTitulo","desconto_no_aluno","descontoNoAluno"]);
+  const fee=findFinancialAmount(item,["juros_efetivado","jurosEfetivado","multa_efetivada","multaEfetivada"]);
+  if(Number.isFinite(gross)&&(Number.isFinite(discount)||Number.isFinite(extraDiscount)||Number.isFinite(fee))){
+    const totalDiscount=(Number.isFinite(discount)?Math.abs(discount):0)+(Number.isFinite(extraDiscount)?Math.abs(extraDiscount):0);
+    const totalFee=Number.isFinite(fee)?Math.abs(fee):0;
+    return `${formatFinancialValue(Math.max(0,gross-totalDiscount+totalFee))} com desconto`;
+  }
+  const itens=Array.isArray(item.itens)?item.itens:[];
+  const monthlyItem=itens.find(entry=>entry&&typeof entry==="object"&&normalizeSearchText(financialText(entry as SweducFinancial,["descricao_item","descricaoItem","descrição_item","descricao","descrição"])).includes("mensalidade")) as SweducFinancial|undefined;
+  const itemAmount=monthlyItem?findFinancialAmount(monthlyItem,["valor_item","valorItem","valor","total"]):NaN;
+  if(Number.isFinite(itemAmount))return formatFinancialValue(itemAmount);
   return Number.isFinite(gross)?formatFinancialValue(gross):"Valor não informado";
 }
 function collectFinancialStrings(value:unknown,depth=0):string[]{
@@ -37,9 +47,9 @@ function financialDescription(item:SweducFinancial){
   const itemTexts=itens.flatMap(entry=>entry&&typeof entry==="object"?[financialText(entry as SweducFinancial,["descricao","descrição","descricao_item","descricaoItem","descrição_item","nome","produto","servico","serviço","categoria","tipo"])]:[]).filter(Boolean);
   return [direct,...itemTexts,...collectFinancialStrings(item)].filter(Boolean).join(" ");
 }
-function financialLabel(item:SweducFinancial,index:number){return financialDescription(item)||financialText(item,["numero_titulo","numeroTitulo","titulo_id","tituloId","competencia"])||`Registro financeiro ${index+1}`}
-function financialStatus(item:SweducFinancial){return financialText(item,["situacao","status","Situacao","STATUS"])}
-function financialDueDate(item:SweducFinancial){return financialText(item,["vencimento","data_vencimento","dataVencimento","vencimento_titulo"])}
+function financialLabel(item:SweducFinancial,index:number){return financialDescription(item)||financialText(item,["numero_titulo","numeroTitulo","num_titulo","numTitulo","titulo_id","tituloId","competencia"])||`Registro financeiro ${index+1}`}
+function financialStatus(item:SweducFinancial){return financialText(item,["situacao_label","situacaoLabel","situacao","status","Situacao","STATUS"])}
+function financialDueDate(item:SweducFinancial){return financialText(item,["data_vencimento","dataVencimento","vencimento","vencimento_titulo"])}
 function isMonthlyFinancial(item:SweducFinancial){
   const text=normalizeSearchText(financialDescription(item));
   if(!text)return false;
