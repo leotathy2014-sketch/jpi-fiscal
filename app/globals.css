@@ -728,6 +728,12 @@
 .sweduc-sync-years-list label{display:inline-flex;align-items:center;gap:8px;border:1px solid #cbd8e7;border-radius:999px;background:#fff;padding:9px 13px;color:#344155;font-weight:800;font-size:12.5px;cursor:pointer}
 .sweduc-sync-years-list label.selected{border-color:#1466df;background:#edf6ff;color:#174f9a}
 .sweduc-sync-years-list input{width:15px;height:15px;accent-color:#1466df}
+.sweduc-sync-loading{display:grid;grid-template-columns:1fr auto;gap:8px 14px;align-items:center;margin-top:14px;padding:14px 15px;border:1px solid #b8d4f5;border-radius:14px;background:linear-gradient(135deg,#f7fbff,#eaf4ff);box-shadow:0 10px 26px rgba(20,102,223,.10);color:#214f83}
+.sweduc-sync-loading strong{display:block;font-size:13.5px;color:#174f9a}
+.sweduc-sync-loading small{display:block;margin-top:2px;color:#657b92;font-size:12px;line-height:1.35}
+.sweduc-sync-loading>span{font-size:13px;font-weight:900;color:#1466df}
+.sweduc-sync-loading>i{grid-column:1/-1;display:block;height:9px;border-radius:999px;background:#d9e9fb;overflow:hidden}
+.sweduc-sync-loading>i>b{display:block;height:100%;min-width:8%;border-radius:inherit;background:linear-gradient(90deg,#1466df,#35a3ff);transition:width .25s ease}
 .sweduc-student-search-panel{display:grid;gap:12px;margin-top:14px}
 .sweduc-filter-row{display:grid;grid-template-columns:minmax(130px,170px) minmax(240px,1fr) minmax(110px,140px) minmax(110px,140px);gap:10px;align-items:end}
 .sweduc-filter-row label{display:grid;gap:6px;font-size:11px;font-weight:800;color:#445168;text-transform:uppercase;letter-spacing:.03em}

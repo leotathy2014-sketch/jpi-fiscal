@@ -45,6 +45,7 @@ export function SweducOperationalPicker({onStudentReady}:{onStudentReady:(studen
   const [busy,setBusy]=useState("");
   const [error,setError]=useState("");
   const [message,setMessage]=useState("");
+  const [syncProgress,setSyncProgress]=useState(0);
   const loadedYearRef=useRef<number|null>(null);
 
   const token=useCallback(async()=>{
@@ -83,6 +84,7 @@ export function SweducOperationalPicker({onStudentReady}:{onStudentReady:(studen
   const totalGridPages=Math.max(1,Math.ceil(visible.length/pageSize));
   const safeGridPage=Math.min(gridPage,totalGridPages);
   const pagedVisible=visible.slice((safeGridPage-1)*pageSize,safeGridPage*pageSize);
+  const syncingInitial=busy==="consult"&&students.length===0;
   useEffect(()=>{setGridPage(1)},[query,courseFilter,serieFilter,turmaFilter,selectedYear]);
 
   async function consult(yearOverride?:number){
@@ -90,6 +92,7 @@ export function SweducOperationalPicker({onStudentReady}:{onStudentReady:(studen
     if(!activeYear)return;
     const term=query.trim();
     setBusy("consult");setError("");setMessage(term?`Buscando "${term}" em ${activeYear} na SWeduc…`:`Consultando alunos de ${activeYear} no espelho SWeduc…`);
+    setSyncProgress(8);
     setStudents([]);setSelected(null);setResponsibleIndex(0);setGridPage(1);
     let page=1;let total=0;
     try{
@@ -99,10 +102,12 @@ export function SweducOperationalPicker({onStudentReady}:{onStudentReady:(studen
         const data=await response.json().catch(()=>({})) as {students?:SweducStudent[];nextPage?:number|null;lastPage?:number;academicYear?:number;error?:string;message?:string};
         if(!response.ok)throw new Error(data.error||"Não foi possível consultar a SWeduc.");
         const loaded=data.students||[];total+=loaded.length;setStudents(current=>sortStudents([...current,...loaded]));
+        setSyncProgress(Math.min(96,data.lastPage?Math.round((page/Math.max(1,data.lastPage))*100):Math.min(90,15+(page*8))));
         setMessage(data.nextPage?`Organizando página ${page} de ${data.lastPage||"…"} · ${total} matrícula(s) na tela.`:data.message||`Consulta concluída: ${total} matrícula(s) na tela. Nada foi salvo ainda.`);
         if(!data.nextPage)break;
         page=data.nextPage;
       }
+      setSyncProgress(100);
     }catch(e){setError(e instanceof Error?e.message:"Não foi possível consultar a SWeduc.")}finally{setBusy("")}
   }
 
@@ -138,14 +143,15 @@ export function SweducOperationalPicker({onStudentReady}:{onStudentReady:(studen
   },[selectedYear]);
 
   return <section className="notice compact sweduc-operational-picker"><UsersRound/><div><strong>Buscar aluno na SWeduc</strong><span>Primeiro escolha ano letivo, segmento/curso, série e turma. Depois pesquise o aluno pelo nome; a busca ignora acentos e caracteres especiais. Nada é salvo até confirmar em Carregar para a nota.</span>
+    {syncingInitial&&<div className="sweduc-sync-loading" role="status" aria-live="polite"><div><strong>Sincronizando dados SWeduc</strong><small>Estamos preparando ano letivo, segmentos, séries e turmas antes de liberar a busca.</small></div><span>{syncProgress}%</span><i><b style={{width:`${syncProgress}%`}}/></i></div>}
     <div className="sweduc-student-search-panel">
       <div className="sweduc-filter-row">
-        <label>Ano letivo<select value={selectedYear||""} onChange={event=>{const year=Number(event.target.value);loadedYearRef.current=null;setSelectedYear(year);setStudents([]);setSelected(null);setResponsibleIndex(0);setQuery("");setCourseFilter("");setSerieFilter("");setTurmaFilter("")}}>{years.map(year=><option key={year.year} value={year.year}>{year.year}</option>)}</select></label>
-        <label>Segmento / curso<select value={courseFilter} disabled={Boolean(busy)||!selectedYear||!courseOptions.length} onChange={event=>{setCourseFilter(event.target.value);setSerieFilter("");setTurmaFilter("")}}><option value="">Todos</option>{courseOptions.map(option=><option key={option} value={option}>{option}</option>)}</select></label>
-        <label>Série<select value={serieFilter} disabled={!courseFilter} onChange={event=>{setSerieFilter(event.target.value);setTurmaFilter("")}}><option value="">Todas</option>{serieOptions.map(option=><option key={option} value={option}>{option}</option>)}</select></label>
-        <label>Turma<select value={turmaFilter} disabled={!serieFilter} onChange={event=>setTurmaFilter(event.target.value)}><option value="">Todas</option>{turmaOptions.map(option=><option key={option} value={option}>{option}</option>)}</select></label>
+        <label>Ano letivo<select value={selectedYear||""} disabled={syncingInitial} onChange={event=>{const year=Number(event.target.value);loadedYearRef.current=null;setSelectedYear(year);setStudents([]);setSelected(null);setResponsibleIndex(0);setQuery("");setCourseFilter("");setSerieFilter("");setTurmaFilter("")}}>{years.map(year=><option key={year.year} value={year.year}>{year.year}</option>)}</select></label>
+        <label>Segmento / curso<select value={courseFilter} disabled={syncingInitial||Boolean(busy)||!selectedYear||!courseOptions.length} onChange={event=>{setCourseFilter(event.target.value);setSerieFilter("");setTurmaFilter("")}}><option value="">Todos</option>{courseOptions.map(option=><option key={option} value={option}>{option}</option>)}</select></label>
+        <label>Série<select value={serieFilter} disabled={syncingInitial||!courseFilter} onChange={event=>{setSerieFilter(event.target.value);setTurmaFilter("")}}><option value="">Todas</option>{serieOptions.map(option=><option key={option} value={option}>{option}</option>)}</select></label>
+        <label>Turma<select value={turmaFilter} disabled={syncingInitial||!serieFilter} onChange={event=>setTurmaFilter(event.target.value)}><option value="">Todas</option>{turmaOptions.map(option=><option key={option} value={option}>{option}</option>)}</select></label>
       </div>
-      <label className="sweduc-search-row sweduc-search-label">Pesquisar aluno<div className="search-input sweduc-student-name-search"><Search/><input value={query} onChange={event=>setQuery(event.target.value.toLocaleUpperCase("pt-BR"))} onKeyDown={event=>{if(event.key==="Enter"){event.preventDefault();void consult()}}} placeholder="BUSCAR ALUNO PELO NOME, MESMO COM ACENTO OU CARACTERES ESPECIAIS"/><button type="button" aria-label="Pesquisar aluno" disabled={Boolean(busy)||!selectedYear} onClick={()=>void consult()}>{busy==="consult"?<RefreshCw size={15}/>:<Search size={16}/>}</button></div></label>
+      <label className="sweduc-search-row sweduc-search-label">Pesquisar aluno<div className="search-input sweduc-student-name-search"><Search/><input value={query} disabled={syncingInitial} onChange={event=>setQuery(event.target.value.toLocaleUpperCase("pt-BR"))} onKeyDown={event=>{if(event.key==="Enter"){event.preventDefault();void consult()}}} placeholder="BUSCAR ALUNO PELO NOME, MESMO COM ACENTO OU CARACTERES ESPECIAIS"/><button type="button" aria-label="Pesquisar aluno" disabled={Boolean(busy)||!selectedYear} onClick={()=>void consult()}>{busy==="consult"?<RefreshCw size={15}/>:<Search size={16}/>}</button></div></label>
     </div>
     {error&&<span className="agenda-secret-error">{error}</span>}{message&&<small>{message}</small>}
     {visible.length>0&&<div className="table-card"><div className="sweduc-grid-pagination"><span>Página {safeGridPage} de {totalGridPages} · {visible.length} aluno(s) encontrado(s) · 25 por página</span><div><button type="button" className="secondary mini" disabled={safeGridPage<=1} onClick={()=>setGridPage(page=>Math.max(1,page-1))}>Anterior</button><button type="button" className="secondary mini" disabled={safeGridPage>=totalGridPages} onClick={()=>setGridPage(page=>Math.min(totalGridPages,page+1))}>Próxima</button></div></div><table><thead><tr><th>Ano letivo</th><th>Aluno</th><th>Matrícula</th><th>Segmento / curso</th><th>Turma / série</th><th></th></tr></thead><tbody>{pagedVisible.map(student=><tr key={student.matricula_id} className={selected?.matricula_id===student.matricula_id?"selected-row":""} onClick={()=>void openResponsibleChoice(student)}><td>{student.ano_letivo||selectedYear}</td><td><strong>{student.nome}</strong><span className="subcell">{student.unidade||"Unidade não informada"}</span></td><td>{student.numero_matricula||student.matricula_id}</td><td>{student.curso||"—"}</td><td>{[student.turma,student.serie].filter(Boolean).join(" · ")||"—"}</td><td><button type="button" className="primary mini" disabled={Boolean(busy)} onClick={event=>{event.stopPropagation();void openResponsibleChoice(student)}}>{busy===`details-${student.matricula_id}`?"Carregando…":<><UserCheck size={15}/>Selecionar aluno</>}</button></td></tr>)}</tbody></table>{visible.length>pageSize&&<small>Grade em ordem alfabética. Use a paginação ou refine os filtros para localizar mais rápido.</small>}</div>}
