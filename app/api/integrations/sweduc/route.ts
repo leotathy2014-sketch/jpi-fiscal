@@ -163,7 +163,7 @@ function collectFinancialStrings(value:unknown,depth=0):string[]{
   if(depth>3||value===null||value===undefined)return [];
   if(typeof value==="string"||typeof value==="number")return [String(value)];
   if(Array.isArray(value))return value.flatMap(item=>collectFinancialStrings(item,depth+1));
-  if(typeof value==="object")return Object.entries(value as Record<string,unknown>).flatMap(([key,entry])=>[key,...collectFinancialStrings(entry,depth+1)]);
+  if(typeof value==="object")return Object.values(value as Record<string,unknown>).flatMap(entry=>collectFinancialStrings(entry,depth+1));
   return [];
 }
 function financialDescription(item:Record<string,unknown>){

@@ -47,7 +47,12 @@ test("oferece configuração, teste e consulta sem salvar lista de alunos",()=>{
   assert.match(temporaryTestRoute,/useUsernamePassword/);assert.match(temporaryTestRoute,/username/);assert.match(temporaryTestRoute,/password/);assert.match(temporaryTestRoute,/grantType/);
   assert.match(route,/action==="test"/);assert.match(route,/action==="sync"/);assert.match(route,/from\("sweduc_alunos"\)\.upsert/);
   assert.match(temporaryTestRoute,/createSweducAccessToken/);assert.match(temporaryTestRoute,/listSweducStudentsWithToken/);assert.match(temporaryTestRoute,/getSweducStudentDetailsWithToken/);assert.match(temporaryTestRoute,/Nada foi salvo ou importado/);
-  assert.match(readFileSync(new URL("../lib/sweduc.ts",import.meta.url),"utf8"),/alunos\/detalhes\?matricula_id=\$\{matriculaId\}/);
+  const sweducLib=readFileSync(new URL("../lib/sweduc.ts",import.meta.url),"utf8");
+  assert.match(sweducLib,/alunos\/detalhes\?\$\{query\}/);
+  assert.match(sweducLib,/matricula_id=\$\{matriculaId\}/);
+  assert.match(sweducLib,/id_matricula=\$\{matriculaId\}/);
+  assert.match(sweducLib,/matricula=\$\{matriculaId\}/);
+  assert.match(sweducLib,/data","dados","detalhes","aluno","matricula"/);
   assert.match(route,/rows=summaries\.map\(mapSummaryToGrid\)/);assert.match(route,/search:search\|\|undefined/);assert.match(route,/getSweducStudentDetailsWithToken/);
   assert.match(route,/MAX_SWEDUC_PAGES=1000/);assert.match(ui,/while\(page<=1000\)/);
   assert.match(route,/grantType,username,password/);assert.match(route,/auth_method/);assert.match(route,/usuario_configurado/);

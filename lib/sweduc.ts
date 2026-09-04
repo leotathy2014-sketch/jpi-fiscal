@@ -124,10 +124,26 @@ export async function getSweducStudentDetails(credentials:SweducCredentials,matr
 
 export async function getSweducStudentDetailsWithToken(host:string,accessToken:string,matriculaId:number,fetchImpl:FetchLike=fetch){
   if(!Number.isInteger(matriculaId)||matriculaId<=0)throw new Error("A matrícula informada é inválida.");
-  const response=await fetchImpl(`${normalizeSweducHost(host)}/api/v2/alunos/detalhes?matricula_id=${matriculaId}`,{headers:{Accept:"application/json",Authorization:`Bearer ${accessToken}`},cache:"no-store",redirect:"error",signal:AbortSignal.timeout(SWEDUC_TIMEOUT_MS)});
-  if(!response.ok)throw new Error(await apiMessage(response,"A SWeduc não permitiu consultar os detalhes da matrícula."));
-  const result=await response.json() as Partial<SweducStudentDetail>;
-  return {detalhes:result.detalhes||{},responsaveis:Array.isArray(result.responsaveis)?result.responsaveis:[],financeiro:Array.isArray(result.financeiro)?result.financeiro:[]};
+  const base=normalizeSweducHost(host);
+  const headers={Accept:"application/json",Authorization:`Bearer ${accessToken}`};
+  const attempts=[`matricula_id=${matriculaId}`,`id_matricula=${matriculaId}`,`matricula=${matriculaId}`];
+  let lastError="";
+  for(const query of attempts){
+    const response=await fetchImpl(`${base}/api/v2/alunos/detalhes?${query}`,{headers,cache:"no-store",redirect:"error",signal:AbortSignal.timeout(SWEDUC_TIMEOUT_MS)});
+    if(!response.ok){lastError=await apiMessage(response,"A SWeduc não permitiu consultar os detalhes da matrícula.");continue}
+    const result=await response.json() as Partial<SweducStudentDetail>&Record<string,unknown>;
+    const nested=(key:string):unknown=>{
+      if(Array.isArray(result[key]))return result[key];
+      for(const container of ["data","dados","detalhes","aluno","matricula"]){
+        const source=result[container];
+        if(source&&typeof source==="object"&&Array.isArray((source as Record<string,unknown>)[key]))return (source as Record<string,unknown>)[key];
+      }
+      return [];
+    };
+    const detalhes=(result.detalhes&&typeof result.detalhes==="object"?result.detalhes:null)||(result.data&&typeof result.data==="object"?result.data:null)||result;
+    return {detalhes:detalhes as Record<string,unknown>,responsaveis:Array.isArray(nested("responsaveis"))?nested("responsaveis") as Array<Record<string,unknown>>:[],financeiro:Array.isArray(nested("financeiro"))?nested("financeiro") as Array<Record<string,unknown>>:[]};
+  }
+  throw new Error(lastError||"A SWeduc não permitiu consultar os detalhes da matrícula.");
 }
 
 const normalizeText=(value:unknown)=>String(value||"").trim();
