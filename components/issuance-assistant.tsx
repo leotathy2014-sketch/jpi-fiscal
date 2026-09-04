@@ -52,6 +52,7 @@ type SweducResponsible={nome?:string;parentesco?:string;cpf?:string;cpf_cnpj?:st
 type DeliveryState={mensalidade_id:number;status:string;canal:string;created_at:string};
 type StepState="done"|"current"|"pending"|"warning";
 type AssistantStep={key:string;label:string;short:string;description:string;state:StepState};
+type AssistantPeriodFilter="all"|"current"|"previous"|"year"|"custom";
 type FiscalContext={cnpj:string|null;razao_social:string|null;cidade:string|null;uf:string|null;regime_tributario:string;pis_aliquota:number;cofins_aliquota:number;pis_cofins_cst:string;pis_cofins_retencao:number};
 type DeliveryDocument={id:number;mensalidade_id:number;versao:number;chave_acesso:string;estado:string;emitida_em:string|null};
 type DeliveryChannel="email"|"whatsapp-manual"|"agenda-edu";
@@ -65,6 +66,8 @@ const normalize=(value:string)=>value.normalize("NFD").replace(/[\u0300-\u036f]/
 const competenceInput=(value:string)=>{const match=value.trim().match(/^(0[1-9]|1[0-2])\/(20\d{2})$/);return match?match[2]+"-"+match[1]:value};
 const formatCompetence=(value:string)=>{const parts=value.split("-");return parts[0]&&parts[1]?parts[1]+"/"+parts[0]:value};
 const currentCompetenceInput=()=>{const parts=new Intl.DateTimeFormat("pt-BR",{timeZone:"America/Sao_Paulo",year:"numeric",month:"2-digit"}).formatToParts(new Date());const part=(type:"year"|"month")=>parts.find(item=>item.type===type)?.value||"";return part("year")+"-"+part("month")};
+const previousCompetenceInput=()=>{const [year,month]=currentCompetenceInput().split("-").map(Number);const date=new Date(year,month-2,1);return `${date.getFullYear()}-${String(date.getMonth()+1).padStart(2,"0")}`};
+const paymentCompetenceInput=(payment:AssistantPayment)=>competenceInput(payment.competencia);
 const upper=(value:string)=>value.toLocaleUpperCase("pt-BR");
 const digits=(value:string,limit:number)=>value.replace(/\D/g,"").slice(0,limit);
 const firstNestedText=(source:SweducResponsible|undefined,keys:Array<keyof SweducResponsible>,nestedKeys:string[])=>{if(!source)return "";for(const key of keys){const value=source[key];if(Array.isArray(value)){for(const entry of value){if(entry&&typeof entry==="object"){for(const nestedKey of nestedKeys){const nestedValue=(entry as Record<string,unknown>)[nestedKey];if(typeof nestedValue==="string"&&nestedValue.trim())return nestedValue.trim()}}}}else if(typeof value==="string"&&value.trim())return value.trim()}return ""};
@@ -189,6 +192,8 @@ export function IssuanceAssistant({onNavigate}:{onNavigate:(page:AppPage)=>void}
   const [deliveries,setDeliveries]=useState<DeliveryState[]>([]);
   const [selectedId,setSelectedId]=useState<number|null>(null);
   const [query,setQuery]=useState("");
+  const [periodFilter,setPeriodFilter]=useState<AssistantPeriodFilter>("current");
+  const [customPeriod,setCustomPeriod]=useState(()=>currentCompetenceInput());
   const [loading,setLoading]=useState(true);
   const [refreshing,setRefreshing]=useState(false);
   const [error,setError]=useState("");
@@ -279,9 +284,20 @@ export function IssuanceAssistant({onNavigate}:{onNavigate:(page:AppPage)=>void}
 
   const filtered=useMemo(()=>{
     const q=normalize(query.trim());
-    if(!q)return payments;
-    return payments.filter(payment=>normalize([payment.alunos?.nome,payment.alunos?.responsavel,payment.competencia,payment.status_nfse,String(payment.id)].filter(Boolean).join(" ")).includes(q));
-  },[payments,query]);
+    const current=currentCompetenceInput();
+    const previous=previousCompetenceInput();
+    return payments.filter(payment=>{
+      const competence=paymentCompetenceInput(payment);
+      const periodOk=periodFilter==="all"||
+        (periodFilter==="current"&&competence===current)||
+        (periodFilter==="previous"&&competence===previous)||
+        (periodFilter==="year"&&competence.startsWith(current.slice(0,4)+"-"))||
+        (periodFilter==="custom"&&competence===customPeriod);
+      if(!periodOk)return false;
+      if(!q)return true;
+      return normalize([payment.alunos?.nome,payment.alunos?.responsavel,payment.competencia,payment.status_nfse,String(payment.id)].filter(Boolean).join(" ")).includes(q);
+    });
+  },[payments,query,periodFilter,customPeriod]);
   const selectedStudent=useMemo(()=>pendingSweducStudent?.id===newStudentId?pendingSweducStudent:students.find(student=>student.id===newStudentId)||null,[newStudentId,students,pendingSweducStudent]);
   const selectedSweducMonthlyTitle=useMemo(()=>selectedStudent?.sweduc_financeiro?.length?sweducMonthlyTitleForCompetence(selectedStudent.sweduc_financeiro,newCompetence):null,[selectedStudent,newCompetence]);
   function changePreparedResponsible(index:number){
@@ -953,6 +969,17 @@ export function IssuanceAssistant({onNavigate}:{onNavigate:(page:AppPage)=>void}
     {!newEmissionOpen&&<section className="assistant-grid">
       <article className="panel assistant-selector">
         <div className="panel-title assistant-queue-title"><div><span className="eyebrow">FILA DE NOTAS</span><h2>Emissões em andamento</h2><p>Escolha uma nota para continuar exatamente de onde parou.</p></div><span className="assistant-count">{payments.length}</span></div>
+        <div className="assistant-period-filter" aria-label="Filtrar emissões por período">
+          <span><CalendarDays size={14}/>Período</span>
+          <select value={periodFilter} onChange={event=>setPeriodFilter(event.target.value as AssistantPeriodFilter)}>
+            <option value="current">Mês atual</option>
+            <option value="previous">Mês anterior</option>
+            <option value="year">Ano atual</option>
+            <option value="custom">Escolher mês</option>
+            <option value="all">Todos</option>
+          </select>
+          {periodFilter==="custom"&&<input type="month" value={customPeriod} max={currentCompetenceInput()} onChange={event=>setCustomPeriod(event.target.value)}/>}
+        </div>
         <div className="search-input"><Search/><input value={query} onChange={e=>setQuery(e.target.value)} placeholder="Buscar aluno, responsável, competência ou nº interno"/></div>
         {loading?<div className="assistant-loading">Carregando notas…</div>:filtered.length===0?<div className="assistant-empty">Nenhuma mensalidade encontrada.</div>:<><div className="assistant-list-hint">Mostrando {Math.min(filtered.length,40)} de {filtered.length} nota(s)</div><div className="assistant-payment-list">
           {filtered.slice(0,40).map(payment=>{
