@@ -57,6 +57,9 @@ function defaultRecentYears(academicYears:{year:number}[],currentYear:number){
   return sanitizeSyncYears(recent.length?recent:[currentYear-1,currentYear]);
 }
 
+function normalizeSearchText(value:unknown){return String(value||"").normalize("NFD").replace(/[\u0300-\u036f]/g,"").replace(/[^\p{L}\p{N}\s]/gu," ").replace(/\s+/g," ").trim().toLocaleLowerCase("pt-BR")}
+function matchesSearch(row:Record<string,unknown>,term:string){const normalized=normalizeSearchText(term);if(!normalized)return true;return [row.nome,row.numero_matricula,row.matricula_id,row.turma,row.serie,row.curso].some(value=>normalizeSearchText(value).includes(normalized))}
+
 export async function GET(request:NextRequest){
   const auth=await authorize(request);if(!auth.ok)return auth.response;
   if(!await hasServerPermission(auth.supabase,"settings.integrations.view")&&!await hasServerPermission(auth.supabase,"settings.integrations.edit")&&!await hasServerPermission(auth.supabase,"students.view")&&!await hasServerPermission(auth.supabase,"students.create")&&!await hasServerPermission(auth.supabase,"students.edit")&&!await hasServerPermission(auth.supabase,"payments.create")&&!await hasServerPermission(auth.supabase,"nfse.prepare"))return json({error:"Seu usuário não possui permissão para consultar esta integração."},403);
@@ -133,8 +136,19 @@ export async function POST(request:NextRequest){
     if(turma)query=query.eq("turma",turma);
     const [result,mirrorCount]=await Promise.all([query.order("nome",{ascending:true}).range(from,to),auth.supabase.from("sweduc_alunos").select("matricula_id",{count:"exact",head:true})]);
     if(result.error)return json({error:"Não foi possível consultar o espelho SWeduc no banco."},500);
-    const rows=(result.data||[]) as Array<Record<string,unknown>>;
+    let rows=(result.data||[]) as Array<Record<string,unknown>>;
     const totalLocal=Number(result.count||0);const mirrorTotal=Number(mirrorCount.count||0);
+    if(search&&!rows.length&&mirrorTotal>0){
+      let broad=auth.supabase.from("sweduc_alunos").select("matricula_id,aluno_id,nome,data_nascimento,numero_aluno,numero_matricula,status,unidade,curso,serie,turma,ano_letivo,responsaveis,financeiro,dados_origem,sincronizado_em");
+      if(Number.isSafeInteger(rawYear)&&rawYear>1900)broad=broad.eq("ano_letivo",String(rawYear));
+      if(course)broad=broad.eq("curso",course);
+      if(serie)broad=broad.eq("serie",serie);
+      if(turma)broad=broad.eq("turma",turma);
+      const broadResult=await broad.order("nome",{ascending:true}).limit(1000);
+      if(broadResult.error)return json({error:"Não foi possível consultar o espelho SWeduc no banco."},500);
+      rows=((broadResult.data||[]) as Array<Record<string,unknown>>).filter(row=>matchesSearch(row,search)).slice(from,to+1);
+      if(rows.length)return json({ok:true,students:rows,page,lastPage:1,nextPage:null,totalAvailable:rows.length,message:`Consulta local encontrou ${rows.length} matrícula(s) ignorando acentos e caracteres especiais. Nada foi salvo no cadastro fiscal.`});
+    }
     if(rows.length||(!search&&mirrorTotal>0)||course||serie||turma)return json({ok:true,students:rows,page,lastPage:Math.max(1,Math.ceil(totalLocal/pageSize)),nextPage:to+1<totalLocal?page+1:null,totalAvailable:totalLocal,message:rows.length?`Consulta local concluída com ${totalLocal} matrícula(s) encontrada(s). Nada foi salvo no cadastro fiscal.`:"Nenhum aluno encontrado no espelho SWeduc para estes filtros."});
     let activeCredentials:SweducCredentials|undefined;let activeAccessToken="";
     try{
