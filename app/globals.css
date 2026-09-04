@@ -777,6 +777,12 @@
 .sweduc-temporary-result>svg{width:20px;height:20px;flex:none;margin-top:1px}
 .sweduc-temporary-result>div{display:grid;gap:3px}
 .sweduc-financial-test-result pre{max-height:260px;overflow:auto;margin:8px 0 0;padding:12px;border:1px solid #cfe4da;border-radius:10px;background:#fff;color:#243247;font-size:11.5px;line-height:1.45;white-space:pre-wrap;word-break:break-word}
+.sweduc-financial-responsible-list{display:grid;gap:7px;margin-top:8px}
+.sweduc-financial-responsible-list>strong{font-size:12px;color:#214f83}
+.sweduc-financial-responsible-list>span{display:grid;gap:2px;padding:8px 10px;border:1px solid #d8e4ef;border-radius:9px;background:#fff;color:#243247}
+.sweduc-financial-responsible-list>span.highlight{border-color:#bfe1d2;background:#f3fbf7}
+.sweduc-financial-responsible-list b{font-size:12.5px}
+.sweduc-financial-responsible-list small{font-size:11px;color:#62778e}
 .sweduc-temporary-result strong{font-size:13.5px}
 .sweduc-temporary-result span,.sweduc-temporary-result small{font-size:12px;line-height:1.45}
 .sweduc-temporary-result small{color:#397561}

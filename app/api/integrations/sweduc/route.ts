@@ -207,6 +207,30 @@ function suggestedFinancialAmount(financeiro:Array<Record<string,unknown>>){
   const fallback=openValued.length===1?openValued[0]:null;
   return formatSuggestedMoney(financialAmount(monthlyOpen||monthlyAny||fallback||{}));
 }
+function responsibleText(item:Record<string,unknown>){
+  return Object.entries(item).flatMap(([key,value])=>[key,typeof value==="string"||typeof value==="number"||typeof value==="boolean"?String(value):""]).join(" ");
+}
+function responsibleDocument(item:Record<string,unknown>){
+  return financialText(item,["cpf","cpf_cnpj","documento","cnpj","numero_documento","numeroDocumento"]);
+}
+function responsibleContact(item:Record<string,unknown>){
+  const phone=Array.isArray(item.telefones)?item.telefones.map(entry=>entry&&typeof entry==="object"?financialText(entry as Record<string,unknown>,["numero","telefone","celular","valor"]):"").find(Boolean):"";
+  const email=Array.isArray(item.emails)?item.emails.map(entry=>entry&&typeof entry==="object"?financialText(entry as Record<string,unknown>,["email","endereco","valor"]):"").find(Boolean):"";
+  return phone||email||financialText(item,["telefone","celular","email"]);
+}
+function financialResponsibleCandidates(responsaveis:Array<Record<string,unknown>>){
+  return responsaveis.map((responsible,index)=>{
+    const text=normalizeSearchText(responsibleText(responsible));
+    const signals=[
+      responsible.responsavel_financeiro===true||responsible.financeiro===true||responsible.eh_financeiro===true?"campo financeiro=true":"",
+      text.includes("financeiro")?"texto contém financeiro":"",
+      responsible.responsavel_pedagogico===true?"responsável pedagógico=true":"",
+      responsibleDocument(responsible)?"tem documento":"",
+      responsibleContact(responsible)?"tem contato":"",
+    ].filter(Boolean) as string[];
+    return {index,nome:financialText(responsible,["nome","responsavel","name"])||`Responsável ${index+1}`,documento:responsibleDocument(responsible)||null,contato:responsibleContact(responsible)||null,responsavel_pedagogico:responsible.responsavel_pedagogico===true,provavel_financeiro:signals.some(signal=>signal.includes("financeiro")),pistas:signals,raw:responsible};
+  }).sort((a,b)=>Number(b.provavel_financeiro)-Number(a.provavel_financeiro)||Number(b.responsavel_pedagogico)-Number(a.responsavel_pedagogico)||b.pistas.length-a.pistas.length);
+}
 
 export async function GET(request:NextRequest){
   const auth=await authorize(request);if(!auth.ok)return auth.response;
@@ -348,7 +372,7 @@ export async function POST(request:NextRequest){
       activeCredentials=await credentials(auth.supabase);const token=await createSweducAccessToken(activeCredentials);activeAccessToken=token.accessToken;
       const detail=await getSweducStudentDetailsWithToken(activeCredentials.host,token.accessToken,matriculaId);
       const valorMensalidadeSugerido=suggestedFinancialAmount(detail.financeiro);
-      return json({ok:true,matriculaId,financeiro:detail.financeiro,detalhes:detail.detalhes,valorMensalidadeSugerido,titulos:detail.financeiro.length,message:valorMensalidadeSugerido?`Financeiro consultado. Valor sugerido para mensalidade: R$ ${valorMensalidadeSugerido}.`:`Financeiro consultado, mas não encontrei um título claro de mensalidade.`});
+      return json({ok:true,matriculaId,financeiro:detail.financeiro,responsaveis:detail.responsaveis,responsaveisFinanceiros:financialResponsibleCandidates(detail.responsaveis),detalhes:detail.detalhes,valorMensalidadeSugerido,titulos:detail.financeiro.length,message:valorMensalidadeSugerido?`Financeiro consultado. Valor sugerido para mensalidade: R$ ${valorMensalidadeSugerido}.`:`Financeiro consultado, mas não encontrei um título claro de mensalidade.`});
     }catch(error){return json({error:safeSweducError(error,activeCredentials,[activeAccessToken])},400)}
   }
   if(action==="import"){
