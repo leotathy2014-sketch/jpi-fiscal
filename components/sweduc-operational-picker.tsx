@@ -11,6 +11,16 @@ type SweducStudent={matricula_id:number;nome:string;numero_matricula:string|null
 function responsibleDocument(responsible:SweducResponsible){return responsible.cpf||responsible.cpf_cnpj||responsible.documento||"Documento não informado"}
 function responsibleContact(responsible:SweducResponsible){return responsible.telefones?.[0]?.numero||responsible.emails?.[0]?.email||"Contato não informado"}
 function normalizeSearchText(value:unknown){return String(value||"").normalize("NFD").replace(/[\u0300-\u036f]/g,"").replace(/[^\p{L}\p{N}\s]/gu," ").replace(/\s+/g," ").trim().toLocaleLowerCase("pt-BR")}
+function sameOption(left:unknown,right:unknown){return normalizeSearchText(left)===normalizeSearchText(right)}
+function uniqueSortedOptions(values:Array<string|null|undefined>){
+  const options=new Map<string,string>();
+  for(const value of values){
+    const label=String(value||"").replace(/\s+/g," ").trim();
+    const key=normalizeSearchText(label);
+    if(label&&key&&!options.has(key))options.set(key,label);
+  }
+  return Array.from(options.values()).sort((a,b)=>a.localeCompare(b,"pt-BR",{numeric:true,sensitivity:"base"}));
+}
 function sortStudents(students:SweducStudent[]){
   return [...students].sort((a,b)=>
     String(a.nome||"").localeCompare(String(b.nome||""),"pt-BR",{numeric:true,sensitivity:"base"})||
@@ -60,12 +70,12 @@ export function SweducOperationalPicker({onStudentReady}:{onStudentReady:(studen
   },[token]);
 
   useEffect(()=>{void loadYears()},[loadYears]);
-  const courseOptions=useMemo(()=>Array.from(new Set(students.map(student=>student.curso).filter(Boolean) as string[])).sort((a,b)=>a.localeCompare(b,"pt-BR")),[students]);
-  const serieOptions=useMemo(()=>Array.from(new Set(students.filter(student=>!courseFilter||student.curso===courseFilter).map(student=>student.serie).filter(Boolean) as string[])).sort((a,b)=>a.localeCompare(b,"pt-BR")),[students,courseFilter]);
-  const turmaOptions=useMemo(()=>Array.from(new Set(students.filter(student=>(!courseFilter||student.curso===courseFilter)&&(!serieFilter||student.serie===serieFilter)).map(student=>student.turma).filter(Boolean) as string[])).sort((a,b)=>a.localeCompare(b,"pt-BR")),[students,courseFilter,serieFilter]);
+  const courseOptions=useMemo(()=>uniqueSortedOptions(students.map(student=>student.curso)),[students]);
+  const serieOptions=useMemo(()=>uniqueSortedOptions(students.filter(student=>!courseFilter||sameOption(student.curso,courseFilter)).map(student=>student.serie)),[students,courseFilter]);
+  const turmaOptions=useMemo(()=>uniqueSortedOptions(students.filter(student=>(!courseFilter||sameOption(student.curso,courseFilter))&&(!serieFilter||sameOption(student.serie,serieFilter))).map(student=>student.turma)),[students,courseFilter,serieFilter]);
   const visible=useMemo(()=>{
     const term=normalizeSearchText(query);
-    const source=students.filter(student=>(!courseFilter||student.curso===courseFilter)&&(!serieFilter||student.serie===serieFilter)&&(!turmaFilter||student.turma===turmaFilter));
+    const source=students.filter(student=>(!courseFilter||sameOption(student.curso,courseFilter))&&(!serieFilter||sameOption(student.serie,serieFilter))&&(!turmaFilter||sameOption(student.turma,turmaFilter)));
     const filtered=!term?source:source.filter(student=>[student.nome,student.numero_matricula,String(student.matricula_id),student.turma,student.serie,student.curso].filter(Boolean).some(value=>normalizeSearchText(value).includes(term)));
     return sortStudents(filtered);
   },[students,query,courseFilter,serieFilter,turmaFilter]);
