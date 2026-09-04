@@ -70,8 +70,9 @@ test("mostra no painel e cadastro a atualização de alunos pela API",()=>{
   assert.match(livePages,/Atualização API alunos/);
   assert.match(livePages,/atualizado\(s\) pela SWeduc/);
   assert.match(livePages,/sweduc_atualizado_em/);
-  assert.match(livePages,/Atualização API/);
-  assert.match(livePages,/Manual \/ sem API/);
+  assert.match(livePages,/SweducOperationalPicker/);
+  assert.doesNotMatch(livePages,/Manual \/ sem API/);
+  assert.doesNotMatch(livePages,/Buscar por aluno, responsável ou CPF/);
 });
 
 test("permite buscar aluno SWeduc no cadastro e no assistente sem abrir configurações",()=>{
