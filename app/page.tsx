@@ -6,6 +6,7 @@ import { AppShell, type AppPage, type Role } from "@/components/app-shell";
 import { InviteConfirm, Login, RecoveryConfirm, SetPassword } from "@/components/login";
 import { BrandLogo } from "@/components/branding";
 import { AccessProvider } from "@/components/access";
+import { authenticatedFetch } from "@/lib/authenticated-fetch";
 
 
 export default function Home() {
@@ -16,6 +17,9 @@ export default function Home() {
   const [role, setRole] = useState<Role>("Consulta");
   const [page, setPage] = useState<AppPage>("Painel");
   const [accessReady, setAccessReady] = useState(false);
+  const [openingReady,setOpeningReady]=useState(false);
+  const [openingProgress,setOpeningProgress]=useState(0);
+  const [openingStatus,setOpeningStatus]=useState("Preparando sistema…");
   const [permissions,setPermissions]=useState<string[]>([]);
   const [needsPassword, setNeedsPassword] = useState(false);
   const [passwordRecovery, setPasswordRecovery] = useState(false);
@@ -111,7 +115,7 @@ export default function Home() {
         if(!active)return;
         setPermissions([]);setEmail(null);setAccessToken(null);setAuthError("Seu acesso está bloqueado ou ainda não foi autorizado.");return;
       }
-      setAuthError("");setRole(roles[payload.role]);setPermissions(Array.isArray(payload.permissions)?payload.permissions:[]);setAccessReady(true);
+      setAuthError("");setRole(roles[payload.role]);setPermissions(Array.isArray(payload.permissions)?payload.permissions:[]);setOpeningReady(false);setAccessReady(true);
     };
     const refresh=()=>void loadAccess();
     void loadAccess();
@@ -120,6 +124,45 @@ export default function Home() {
     window.addEventListener("jpi-permissions-updated",refresh);
     return()=>{active=false;window.clearInterval(timer);window.removeEventListener("focus",refresh);window.removeEventListener("jpi-permissions-updated",refresh)};
   }, [supabase, email]);
+
+  useEffect(()=>{
+    if(!email||!accessReady||!accessToken){setOpeningReady(false);return}
+    const canPreload=permissions.some(permission=>["students.view","payments.create","nfse.prepare","settings.integrations.view"].includes(permission));
+    if(!canPreload){setOpeningReady(true);return}
+    let cancelled=false;const started=Date.now();const key="jpi-sweduc-login-preload";
+    const finish=(message:string)=>{if(cancelled)return;setOpeningStatus(message);setOpeningProgress(100);window.setTimeout(()=>{if(!cancelled)setOpeningReady(true)},350)};
+    const run=async()=>{
+      const last=Number(localStorage.getItem(key)||"0");
+      if(last&&Date.now()-last<2*60*60*1000){finish("Dados recentes já preparados.");return}
+      try{
+        setOpeningStatus("Conectando ao espelho SWeduc…");setOpeningProgress(12);
+        const configResponse=await authenticatedFetch("/api/integrations/sweduc",{headers:{Authorization:`Bearer ${accessToken}`},cache:"no-store"});
+        const config=await configResponse.json().catch(()=>({})) as {syncYears?:number[];selectedAcademicYear?:number;config?:{credencial_configurada?:boolean};error?:string};
+        if(cancelled)return;
+        if(!configResponse.ok||!config.config?.credencial_configurada){finish("Sistema pronto.");return}
+        const years=(config.syncYears?.length?config.syncYears:[config.selectedAcademicYear]).filter((year):year is number=>Number.isSafeInteger(Number(year)));
+        if(!years.length){finish("Sistema pronto.");return}
+        localStorage.setItem(key,String(Date.now()));
+        let done=0;const maxCalls=Math.max(1,years.length*20);
+        for(const year of years){
+          let page=1;
+          while(!cancelled&&page&&done<maxCalls){
+            if(Date.now()-started>45000){finish("Sistema liberado. A atualização continuará em segundo plano.");return}
+            setOpeningStatus(`Atualizando alunos SWeduc de ${year}…`);
+            setOpeningProgress(Math.min(94,18+Math.round((done/maxCalls)*76)));
+            const response=await authenticatedFetch("/api/integrations/sweduc",{method:"POST",headers:{Authorization:`Bearer ${accessToken}`,"Content-Type":"application/json"},body:JSON.stringify({action:"sync",academicYear:year,page}),cache:"no-store"});
+            const data=await response.json().catch(()=>({})) as {nextPage?:number|null};
+            done++;
+            if(!response.ok)break;
+            page=Number(data.nextPage||0);
+          }
+        }
+        finish("Espelho SWeduc pronto para busca.");
+      }catch{finish("Sistema pronto. A SWeduc será atualizada em segundo plano.")}
+    };
+    void run();
+    return()=>{cancelled=true};
+  },[email,accessReady,accessToken,permissions]);
 
   async function signIn(inputEmail: string, password: string, remember: boolean) {
     setAuthError("");
@@ -235,5 +278,6 @@ export default function Home() {
   if (!email && !demoSession) return <Login onSignIn={signIn} onResetPassword={requestPasswordReset} configured={hasSupabaseConfig()} externalError={authError} externalMessage={authMessage} />;
   if (email&&(needsPassword||passwordRecovery)) return <SetPassword onSave={definePassword} recovery={passwordRecovery}/>;
   if (email&&!accessReady) return <div className="splash"><BrandLogo/><p>Verificando permissões…</p></div>;
+  if (email&&accessReady&&!openingReady) return <div className="splash"><BrandLogo/><p>{openingStatus}</p><div className="splash-progress" aria-label="Carregamento do sistema"><span style={{width:`${openingProgress}%`}}/></div><small>{openingProgress}%</small></div>;
   return <AccessProvider role={role} permissions={permissions}><AppShell email={email ?? "administrador@jpi.edu.br"} accessToken={accessToken} role={role} page={page} onPageChange={setPage} onSignOut={signOut} /></AccessProvider>;
 }
