@@ -980,8 +980,8 @@ export function IssuanceAssistant({onNavigate}:{onNavigate:(page:AppPage)=>void}
           </select>
           {periodFilter==="custom"&&<input type="month" value={customPeriod} max={currentCompetenceInput()} onChange={event=>setCustomPeriod(event.target.value)}/>}
         </div>
-        <div className="search-input"><Search/><input value={query} onChange={e=>setQuery(e.target.value)} placeholder="Buscar aluno, responsável, competência ou nº interno"/></div>
-        {loading?<div className="assistant-loading">Carregando notas…</div>:filtered.length===0?<div className="assistant-empty">Nenhuma mensalidade encontrada.</div>:<><div className="assistant-list-hint">Mostrando {Math.min(filtered.length,40)} de {filtered.length} nota(s)</div><div className="assistant-payment-list">
+        <div className="search-input assistant-queue-search"><Search/><input value={query} onChange={e=>setQuery(e.target.value)} placeholder="Buscar nota ou aluno"/></div>
+        {loading?<div className="assistant-loading">Carregando notas…</div>:filtered.length===0?<div className="assistant-empty">Nenhuma mensalidade encontrada.</div>:<><div className="assistant-list-hint">{Math.min(filtered.length,40)} de {filtered.length} nota(s)</div><div className="assistant-payment-list">
           {filtered.slice(0,40).map(payment=>{
             const order=statusOrder(payment);
             const issued=Boolean(payment.chave_nfse_homologacao);
