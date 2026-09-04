@@ -11,6 +11,7 @@ const migration=readFileSync(new URL("../supabase/migrations/20260901120000_cria
 const fiscalLinkMigration=readFileSync(new URL("../supabase/migrations/20260903120000_vincular_sweduc_ao_cadastro_fiscal.sql",import.meta.url),"utf8");
 const automaticSyncMigration=readFileSync(new URL("../supabase/migrations/20260903213000_habilitar_sincronizacao_automatica_sweduc.sql",import.meta.url),"utf8");
 const syncYearsMigration=readFileSync(new URL("../supabase/migrations/20260904103000_configurar_anos_sweduc.sql",import.meta.url),"utf8");
+const syncUnitsMigration=readFileSync(new URL("../supabase/migrations/20260904190000_configurar_unidades_sweduc.sql",import.meta.url),"utf8");
 const academicReferencesMigration=readFileSync(new URL("../supabase/migrations/20260904152000_criar_referencias_academicas_sweduc.sql",import.meta.url),"utf8");
 const cronRoute=readFileSync(new URL("../app/api/cron/sweduc-sync/route.ts",import.meta.url),"utf8");
 const vercelConfig=readFileSync(new URL("../vercel.json",import.meta.url),"utf8");
@@ -54,7 +55,7 @@ test("oferece configuração, teste e consulta sem salvar lista de alunos",()=>{
   assert.match(sweducLib,/id_matricula=\$\{matriculaId\}/);
   assert.match(sweducLib,/matricula=\$\{matriculaId\}/);
   assert.match(sweducLib,/data","dados","detalhes","aluno","matricula"/);
-  assert.match(route,/rows=summaries\.map\(mapSummaryToGrid\)/);assert.match(route,/search:search\|\|undefined/);assert.match(route,/getSweducStudentDetailsWithToken/);
+  assert.match(route,/filterRowsByUnits\(summaries\.map\(mapSummaryToGrid\),syncUnits\)/);assert.match(route,/search:search\|\|undefined/);assert.match(route,/getSweducStudentDetailsWithToken/);
   assert.match(route,/MAX_SWEDUC_PAGES=1000/);assert.match(ui,/while\(page<=1000\)/);
   assert.match(route,/grantType,username,password/);assert.match(route,/auth_method/);assert.match(route,/usuario_configurado/);
   assert.match(route,/resolveSweducAcademicYear/);assert.match(route,/ano_letivo_id:activeYear\.id/);assert.match(route,/Nada foi salvo no banco/);
@@ -126,6 +127,8 @@ test("sincroniza automaticamente o espelho SWeduc sem alterar Agenda Edu nem cad
   assert.match(cronRoute,/SUPABASE_SERVICE_ROLE_KEY/);
   assert.match(cronRoute,/get_sweduc_secret_service/);
   assert.match(cronRoute,/anos_sincronizacao/);
+  assert.match(cronRoute,/unidades_sincronizacao/);
+  assert.match(cronRoute,/filterRowsByUnits/);
   assert.match(cronRoute,/resolveSweducAcademicYear/);
   assert.match(cronRoute,/listSweducStudentsWithToken/);
   assert.match(cronRoute,/from\("sweduc_alunos"\)\.upsert/);
@@ -142,13 +145,19 @@ test("sincroniza automaticamente o espelho SWeduc sem alterar Agenda Edu nem cad
   assert.match(route,/\.eq\("turma",turma\)/);
   assert.match(route,/action==="save_years"/);
   assert.match(route,/anos_sincronizacao/);
+  assert.match(route,/unidades_sincronizacao/);
+  assert.match(route,/syncUnits/);
   assert.match(route,/sweduc_referencias_academicas/);
   assert.match(route,/upsertSweducAcademicReferences/);
   assert.match(cronRoute,/sweduc_referencias_academicas/);
   assert.match(ui,/Anos sincronizados no espelho/);
-  assert.match(ui,/Salvar anos do espelho/);
-  assert.match(ui,/Sincronizar anos escolhidos/);
+  assert.match(ui,/JPI - Matriz/);
+  assert.match(ui,/JPI - Filial/);
+  assert.match(ui,/Salvar espelho SWeduc/);
+  assert.match(ui,/Sincronizar seleção/);
   assert.match(syncYearsMigration,/add column if not exists anos_sincronizacao/);
+  assert.match(syncUnitsMigration,/add column if not exists unidades_sincronizacao/);
+  assert.match(syncUnitsMigration,/JPI - Matriz/);
 });
 
 test("mantém referências acadêmicas SWeduc para filtros sem duplicidade",()=>{

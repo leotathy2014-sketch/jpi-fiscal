@@ -788,6 +788,7 @@
 .sweduc-temporary-result span,.sweduc-temporary-result small{font-size:12px;line-height:1.45}
 .sweduc-temporary-result small{color:#397561}
 .sweduc-sync-years-card{border-color:#bcd6f3;background:linear-gradient(135deg,#fbfdff,#f1f7ff)}
+.sweduc-sync-subtitle{display:block;margin-top:4px;font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:#214f83}
 .sweduc-sync-years-list{display:flex;flex-wrap:wrap;gap:9px}
 .sweduc-sync-years-list label{display:inline-flex;align-items:center;gap:8px;border:1px solid #cbd8e7;border-radius:999px;background:#fff;padding:9px 13px;color:#344155;font-weight:800;font-size:12.5px;cursor:pointer}
 .sweduc-sync-years-list label.selected{border-color:#1466df;background:#edf6ff;color:#174f9a}

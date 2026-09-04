@@ -13,6 +13,15 @@ function sanitizeSyncYears(value:unknown){
   const years=source.map(year=>Number(year)).filter(year=>Number.isSafeInteger(year)&&year>=2020&&year<=2100);
   return Array.from(new Set(years)).sort((a,b)=>a-b);
 }
+const DEFAULT_SWEDUC_UNITS=["JPI - Matriz"];
+const SWEDUC_UNIT_OPTIONS=["JPI - Matriz","JPI - Filial"];
+function sanitizeSyncUnits(value:unknown){
+  const source=Array.isArray(value)&&value.length?value:DEFAULT_SWEDUC_UNITS;
+  const units=source.map(unit=>String(unit||"").replace(/\s+/g," ").trim()).filter(unit=>SWEDUC_UNIT_OPTIONS.includes(unit));
+  return Array.from(new Set(units));
+}
+function normalizeUnit(value:unknown){return String(value||"").normalize("NFD").replace(/[\u0300-\u036f]/g,"").replace(/\s+/g," ").trim().toLocaleLowerCase("pt-BR")}
+function filterRowsByUnits(rows:Array<Record<string,unknown>>,units:string[]){return rows.filter(row=>units.some(unit=>normalizeUnit(unit)===normalizeUnit(row.unidade)))}
 
 function safeSweducError(error:unknown,current?:SweducCredentials,sensitiveValues:string[]=[]){
   let message=error instanceof Error?error.message:"A SWeduc não confirmou a sincronização automática.";
@@ -100,7 +109,7 @@ export async function GET(request:NextRequest){
   try{
     const [secretResult,configResult]=await Promise.all([
       supabase.rpc("get_sweduc_secret_service",{p_backend_secret:backendSecret}),
-      supabase.from("sweduc_config").select("host,anos_sincronizacao").eq("id",true).single()
+      supabase.from("sweduc_config").select("host,anos_sincronizacao,unidades_sincronizacao").eq("id",true).single()
     ]);
     if(secretResult.error||!secretResult.data)throw new Error("Cadastre primeiro as credenciais da SWeduc.");
     const parsed=parseSweducCredentials(String(secretResult.data));
@@ -109,6 +118,7 @@ export async function GET(request:NextRequest){
     const at=new Date().toISOString();
     await supabase.from("sweduc_config").update({ultimo_status:"sincronizando",ultimo_erro:null,updated_at:at}).eq("id",true);
     const years=sanitizeSyncYears(configResult.data?.anos_sincronizacao);
+    const units=sanitizeSyncUnits(configResult.data?.unidades_sincronizacao);
     for(const year of years){
       const resolved=await resolveSweducAcademicYear(activeCredentials.host,year);
       const academicYear=resolved.selected;
@@ -116,7 +126,7 @@ export async function GET(request:NextRequest){
       while(page<=lastPage&&page<=MAX_PAGES_PER_RUN){
         const listing=await listSweducStudentsWithToken(activeCredentials.host,token.accessToken,{page,ano_letivo_id:academicYear.id});
         lastPage=Math.max(1,Number(listing.last_page||page));
-        const rows=(listing.data||[]).map(summary=>mapSummaryToMirror(summary,at));
+        const rows=filterRowsByUnits((listing.data||[]).map(summary=>mapSummaryToMirror(summary,at)),units);
         if(rows.length){
           const result=await supabase.from("sweduc_alunos").upsert(rows,{onConflict:"matricula_id"});
           if(result.error)throw new Error("Não foi possível atualizar o espelho SWeduc.");
