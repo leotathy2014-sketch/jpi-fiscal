@@ -59,6 +59,20 @@ function defaultRecentYears(academicYears:{year:number}[],currentYear:number){
 
 function normalizeSearchText(value:unknown){return String(value||"").normalize("NFD").replace(/[\u0300-\u036f]/g,"").replace(/[^\p{L}\p{N}\s]/gu," ").replace(/\s+/g," ").trim().toLocaleLowerCase("pt-BR")}
 function matchesSearch(row:Record<string,unknown>,term:string){const normalized=normalizeSearchText(term);if(!normalized)return true;return [row.nome,row.numero_matricula,row.matricula_id,row.turma,row.serie,row.curso].some(value=>normalizeSearchText(value).includes(normalized))}
+function financialText(item:Record<string,unknown>,keys:string[]){for(const key of keys){const value=item[key];if(value!==undefined&&value!==null&&String(value).trim())return String(value)}return ""}
+function financialAmount(item:Record<string,unknown>){return financialText(item,["valor","Valor","VALOR","valor_titulo","valor_mensalidade","valor_original","vl_titulo","vlr_titulo","total"])}
+function formatSuggestedMoney(value:string){
+  const clean=value.replace(/[^\d.,-]/g,"").trim();
+  if(!clean)return "";
+  const number=clean.includes(",")?Number(clean.replace(/\./g,"").replace(",",".")):Number(clean);
+  if(!Number.isFinite(number)||number<0)return "";
+  return number.toLocaleString("pt-BR",{minimumFractionDigits:2,maximumFractionDigits:2});
+}
+function suggestedFinancialAmount(financeiro:Array<Record<string,unknown>>){
+  const opened=financeiro.find(item=>normalizeSearchText(financialText(item,["situacao","status","Situacao","STATUS"])).includes("aberto")&&financialAmount(item));
+  const fallback=financeiro.find(item=>financialAmount(item));
+  return formatSuggestedMoney(financialAmount(opened||fallback||{}));
+}
 
 export async function GET(request:NextRequest){
   const auth=await authorize(request);if(!auth.ok)return auth.response;
@@ -204,7 +218,8 @@ export async function POST(request:NextRequest){
     const fiscalStudent=mapSweducToFiscalStudent({student:student as unknown as SweducStudentSummary&Record<string,unknown>,responsible:selectedResponsible,details});
     if(!fiscalStudent.nome)return json({error:"A matrícula selecionada não trouxe nome do aluno."},400);
     if(!fiscalStudent.responsavel||fiscalStudent.responsavel==="RESPONSÁVEL NÃO INFORMADO")return json({error:"Selecione um responsável válido para carregar os dados da nota."},400);
-    return json({ok:true,student:{id:-matriculaId,...fiscalStudent,sweduc_matricula_id:matriculaId,sweduc_aluno_id:Number(student.aluno_id||0)||null,sweduc_ano_letivo:String(student.ano_letivo||"")||null},message:`${fiscalStudent.nome} foi preparado para a nota. Confira os dados; nada foi gravado ainda.`});
+    const valorMensalidadeSugerido=suggestedFinancialAmount(detail.financeiro);
+    return json({ok:true,student:{id:-matriculaId,...fiscalStudent,sweduc_matricula_id:matriculaId,sweduc_aluno_id:Number(student.aluno_id||0)||null,sweduc_ano_letivo:String(student.ano_letivo||"")||null,valor_mensalidade_sugerido:valorMensalidadeSugerido||null},message:valorMensalidadeSugerido?`${fiscalStudent.nome} foi preparado para a nota com valor sugerido pela SWeduc. Confira os dados; nada foi gravado ainda.`:`${fiscalStudent.nome} foi preparado para a nota. Confira os dados; nada foi gravado ainda.`});
   }
   return json({error:"Ação SWeduc inválida."},400);
 }
