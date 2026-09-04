@@ -225,7 +225,7 @@ export async function POST(request:NextRequest){
   let body:Record<string,unknown>;try{body=await request.json()}catch{return json({error:"Dados da solicitação inválidos."},400)}
   const action=String(body.action||"");
   if(["save","test","save_years"].includes(action)&&!await hasServerPermission(auth.supabase,"settings.integrations.edit"))return json({error:"Seu usuário não possui permissão para configurar a SWeduc."},403);
-  if(["lookup","sync","details"].includes(action)&&!await hasServerPermission(auth.supabase,"settings.integrations.view")&&!await hasServerPermission(auth.supabase,"settings.integrations.edit")&&!await hasServerPermission(auth.supabase,"students.view")&&!await hasServerPermission(auth.supabase,"students.create")&&!await hasServerPermission(auth.supabase,"students.edit")&&!await hasServerPermission(auth.supabase,"payments.create")&&!await hasServerPermission(auth.supabase,"nfse.prepare"))return json({error:"Seu usuário não possui permissão para consultar alunos da SWeduc."},403);
+  if(["lookup","sync","details","financial_test"].includes(action)&&!await hasServerPermission(auth.supabase,"settings.integrations.view")&&!await hasServerPermission(auth.supabase,"settings.integrations.edit")&&!await hasServerPermission(auth.supabase,"students.view")&&!await hasServerPermission(auth.supabase,"students.create")&&!await hasServerPermission(auth.supabase,"students.edit")&&!await hasServerPermission(auth.supabase,"payments.create")&&!await hasServerPermission(auth.supabase,"nfse.prepare"))return json({error:"Seu usuário não possui permissão para consultar alunos da SWeduc."},403);
   if(action==="save"){
     let host:string;try{host=normalizeSweducHost(String(body.host||""))}catch(error){return json({error:error instanceof Error?error.message:"Informe um HOST válido."},400)}
     const clientIdInput=String(body.clientId||"").trim();const clientSecretInput=String(body.clientSecret||"").trim();const usernameInput=String(body.username||"").trim();const passwordInput=String(body.password||"");
@@ -328,6 +328,17 @@ export async function POST(request:NextRequest){
       activeCredentials=await credentials(auth.supabase);const token=await createSweducAccessToken(activeCredentials);activeAccessToken=token.accessToken;
       const detail=await getSweducStudentDetailsWithToken(activeCredentials.host,token.accessToken,matriculaId);
       return json({ok:true,student:{...student,responsaveis:detail.responsaveis,financeiro:detail.financeiro,dados_origem:{...((student.dados_origem as Record<string,unknown>|undefined)||{}),detalhes:detail.detalhes}},responsaveis:detail.responsaveis,financeiro:detail.financeiro,message:"Responsáveis carregados para conferência. Nada foi salvo ainda."});
+    }catch(error){return json({error:safeSweducError(error,activeCredentials,[activeAccessToken])},400)}
+  }
+  if(action==="financial_test"){
+    const matriculaId=Number(body.matriculaId||0);
+    if(!Number.isSafeInteger(matriculaId)||matriculaId<=0)return json({error:"Informe o ID da matrícula do ano letivo para testar o financeiro."},400);
+    let activeCredentials:SweducCredentials|undefined;let activeAccessToken="";
+    try{
+      activeCredentials=await credentials(auth.supabase);const token=await createSweducAccessToken(activeCredentials);activeAccessToken=token.accessToken;
+      const detail=await getSweducStudentDetailsWithToken(activeCredentials.host,token.accessToken,matriculaId);
+      const valorMensalidadeSugerido=suggestedFinancialAmount(detail.financeiro);
+      return json({ok:true,matriculaId,financeiro:detail.financeiro,detalhes:detail.detalhes,valorMensalidadeSugerido,titulos:detail.financeiro.length,message:valorMensalidadeSugerido?`Financeiro consultado. Valor sugerido para mensalidade: R$ ${valorMensalidadeSugerido}.`:`Financeiro consultado, mas não encontrei um título claro de mensalidade.`});
     }catch(error){return json({error:safeSweducError(error,activeCredentials,[activeAccessToken])},400)}
   }
   if(action==="import"){
