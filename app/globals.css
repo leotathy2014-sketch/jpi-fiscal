@@ -316,6 +316,12 @@
 .issuance-assistant-page{display:grid;gap:16px}
 .assistant-heading{align-items:flex-start}
 .assistant-progress-panel{display:grid;gap:8px;padding:10px 12px;border:1px solid var(--border);background:#fff;border-radius:16px;box-shadow:0 10px 26px rgba(18,38,63,.04)}
+.assistant-progress-panel.inline{margin-top:12px;padding:9px 10px;border-radius:13px;background:#fbfdff;box-shadow:none}
+.assistant-progress-panel.inline .assistant-stepper{grid-template-columns:repeat(9,minmax(74px,1fr))}
+.assistant-progress-panel.inline .assistant-step{min-width:74px;padding:6px 7px}
+.assistant-progress-panel.inline .assistant-step-number{width:20px;height:20px;font-size:8px}
+.assistant-progress-panel.inline .assistant-step strong{font-size:9px}
+.assistant-progress-panel.inline .assistant-step.current small,.assistant-progress-panel.inline .assistant-step.warning small{display:none}
 .assistant-progress-head{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:0 2px}
 .assistant-progress-head>div{display:flex;align-items:center;gap:8px;min-width:0}
 .assistant-progress-head span{font-size:8px;font-weight:900;letter-spacing:.08em;text-transform:uppercase;color:#7a8798;white-space:nowrap}

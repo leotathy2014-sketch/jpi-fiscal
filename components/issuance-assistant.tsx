@@ -937,7 +937,7 @@ export function IssuanceAssistant({onNavigate}:{onNavigate:(page:AppPage)=>void}
       </div>}
     </section>}
 
-    <section className="assistant-progress-panel" aria-label="Etapas da emissão">
+    {newEmissionOpen&&<section className="assistant-progress-panel" aria-label="Etapas da emissão">
       <div className="assistant-progress-head">
         <div><span>Progresso da emissão</span><strong>{steps[effectiveCurrent]?.label||"Processo"}</strong></div>
         <small>{steps[effectiveCurrent]?.description||"Acompanhe as etapas da nota."}</small>
@@ -948,7 +948,7 @@ export function IssuanceAssistant({onNavigate}:{onNavigate:(page:AppPage)=>void}
           <div><strong>{step.label}</strong><small>{step.description}</small></div>
           {index<steps.length-1&&<ChevronRight className="assistant-step-arrow" size={14}/>}</div>)}
       </div>
-    </section>
+    </section>}
 
     {!newEmissionOpen&&<section className="assistant-grid">
       <article className="panel assistant-selector">
@@ -973,6 +973,19 @@ export function IssuanceAssistant({onNavigate}:{onNavigate:(page:AppPage)=>void}
             <div><span>PRÓXIMA AÇÃO</span><h2>{nextTitle}</h2><p>{selected.alunos?.nome} · {selected.competencia} · {money(selected.valor_nfse)}</p></div>
             <span className={`assistant-current-badge ${missing.length&&effectiveCurrent===2?"warning":"active"}`}>Etapa {effectiveCurrent+1} de 9</span>
           </div>
+
+          <section className="assistant-progress-panel inline" aria-label="Etapas da emissão">
+            <div className="assistant-progress-head">
+              <div><span>Progresso da emissão</span><strong>{steps[effectiveCurrent]?.label||"Processo"}</strong></div>
+              <small>{steps[effectiveCurrent]?.description||"Acompanhe as etapas da nota."}</small>
+            </div>
+            <div className="assistant-stepper">
+              {steps.map((step,index)=><div className={`assistant-step ${step.state}`} key={step.key}>
+                <span className="assistant-step-number">{step.state==="done"?<Check size={13}/>:step.short}</span>
+                <div><strong>{step.label}</strong><small>{step.description}</small></div>
+                {index<steps.length-1&&<ChevronRight className="assistant-step-arrow" size={14}/>}</div>)}
+            </div>
+          </section>
 
           <div className="assistant-summary">
             <div><span><WalletCards size={17}/></span><small>Valor NFS-e</small><strong>{money(selected.valor_nfse)}</strong></div>
