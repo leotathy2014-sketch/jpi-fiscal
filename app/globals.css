@@ -419,6 +419,8 @@
 /* Início da nova emissão: aluno -> mensalidade */
 .assistant-new-start{display:grid;gap:14px}
 .assistant-new-start-grid{display:grid;grid-template-columns:minmax(280px,.8fr) minmax(0,1.25fr);gap:14px}
+.assistant-new-start-grid.search-mode{grid-template-columns:1fr}
+.assistant-new-start-grid.search-mode .assistant-new-students{width:100%}
 .assistant-new-students,.assistant-new-form{min-width:0}
 .assistant-new-students .assistant-payment-list{max-height:420px}
 .assistant-new-form{border:1px solid #e1e7ee;border-radius:14px;background:#fbfdff;padding:14px}

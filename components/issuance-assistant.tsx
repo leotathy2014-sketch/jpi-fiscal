@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { CalendarDays, Check, ChevronRight, CircleAlert, Eye, FileCode2, FileText, GraduationCap, Mail, MailCheck, MessageCircle, Plus, ReceiptText, RefreshCw, Search, Send, ShieldCheck, Sparkles, UsersRound, WalletCards } from "lucide-react";
+import { CalendarDays, Check, ChevronRight, CircleAlert, Eye, FileCode2, FileText, GraduationCap, Mail, MailCheck, MessageCircle, Plus, ReceiptText, RefreshCw, Search, Send, ShieldCheck, Sparkles, WalletCards } from "lucide-react";
 import { createSupabaseBrowserClient } from "@/lib/supabase";
 import { authenticatedFetch } from "@/lib/authenticated-fetch";
 import { buildDpsDraft, isValidCpfCnpj, NFSE_OWN_APP_SERIES } from "@/lib/nfse-dps";
@@ -773,7 +773,7 @@ export function IssuanceAssistant({onNavigate}:{onNavigate:(page:AppPage)=>void}
         <div><span>EMISSÃO EM ANDAMENTO</span><strong>{resumePayment.alunos?.nome||("Aluno #"+resumePayment.aluno_id)}</strong><small>{resumePayment.competencia} · {money(resumePayment.valor_nfse)} · {resumePayment.status_nfse}</small></div>
         <button className="secondary" type="button" onClick={()=>{setSelectedId(resumePayment.id);setNewEmissionOpen(false);setError("");setMessage("")}}>Continuar de onde parei <ChevronRight size={16}/></button>
       </div>}
-      <div className="assistant-new-start-grid">
+      <div className={`assistant-new-start-grid ${selectedStudent?"":"search-mode"}`}>
         <div className="assistant-new-students">
           {pendingSweducStudent?<div className="assistant-sweduc-prepared"><span>ALUNO PREPARADO PELA SWEDUC</span><strong>{pendingSweducStudent.nome}</strong><small>{pendingSweducStudent.responsavel||"Responsável não informado"} · {pendingSweducStudent.turma||"Sem turma"} · {pendingSweducStudent.segmento}{pendingSweducStudent.valor_mensalidade_sugerido?` · Valor sugerido: R$ ${pendingSweducStudent.valor_mensalidade_sugerido}`:""}</small><button type="button" className="secondary" onClick={resetPreparedStudent}>Trocar aluno</button></div>:<><SweducOperationalPicker onStudentReady={student=>{const prepared=student as AssistantStudent;setPendingSweducStudent(prepared);setNewStudentId(prepared.id);setStudentQuery("");if(prepared.valor_mensalidade_sugerido)setNewValue(prepared.valor_mensalidade_sugerido);setNewDescriptionEdited(false);setNewDescription(defaultServiceDescription(newCompetence,prepared));setMessage(prepared.valor_mensalidade_sugerido?`${prepared.nome} foi preparado pela SWeduc com valor sugerido. Confira responsável, competência e valor; o cadastro só será gravado ao iniciar a emissão.`:`${prepared.nome} foi preparado pela SWeduc. Confira responsável, competência e valor; o cadastro só será gravado ao iniciar a emissão.`)}}/>
           <div className="search-input"><Search/><input value={studentQuery} onChange={e=>setStudentQuery(e.target.value)} placeholder="Buscar aluno, responsável, turma ou CPF"/></div>
@@ -785,8 +785,8 @@ export function IssuanceAssistant({onNavigate}:{onNavigate:(page:AppPage)=>void}
             </button>)}
           </div>}</>}
         </div>
-        <div className="assistant-new-form">
-          {!selectedStudent?<div className="assistant-empty large"><UsersRound/><strong>Selecione um aluno</strong><span>Depois informe competência, valor e status do pagamento.</span></div>:<>
+        {selectedStudent&&<div className="assistant-new-form">
+          <>
             <div className="assistant-current-head">
               <div><span>NOVA EMISSÃO</span><h2>{selectedStudent.nome}</h2><p>{selectedStudent.responsavel||"Responsável não informado"} · {selectedStudent.segmento}</p></div>
               <span className="assistant-current-badge active">Etapa 2 de 9</span>
@@ -810,8 +810,8 @@ export function IssuanceAssistant({onNavigate}:{onNavigate:(page:AppPage)=>void}
               <button className="primary assistant-main-action" onClick={continueProcess} disabled={Boolean(busyAction)||!canCreatePayment}>{busyAction==="create-payment"?"Criando mensalidade…":"Criar mensalidade e iniciar nota"} <ChevronRight size={18}/></button>
               <button className="secondary" onClick={resetPreparedStudent}>Trocar aluno</button>
             </div>
-          </>}
-        </div>
+          </>
+        </div>}
       </div>
     </section>}
 
