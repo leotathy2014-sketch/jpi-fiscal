@@ -161,6 +161,9 @@ export function inferSweducSegment(curso?:string|null,serie?:string|null,turma?:
 export function mapSweducToFiscalStudent(input:{student:SweducStudentSummary&Record<string,unknown>;responsible?:Record<string,unknown>|null;details?:Record<string,unknown>|null}):SweducFiscalStudent{
   const student=input.student;const responsible=input.responsible||{};const details=input.details||{};
   const alunoNome=pickText(student,["nome"])||pickText(details,["nome","aluno"]);
+  const curso=pickText(student,["curso"])||pickText(details,["curso"]);
+  const serie=pickText(student,["serie"])||pickText(details,["serie"]);
+  const turma=pickText(student,["turma"])||pickText(details,["turma"]);
   const responsavel=pickText(responsible,["nome","responsavel","nome_responsavel","pessoa_nome"])||"RESPONSÁVEL NÃO INFORMADO";
   const cpf=digitsOnly(pickText(responsible,["cpf_cnpj","cpf","cnpj","documento","documento_numero","numero_documento"]),14);
   const email=firstNestedText(responsible,["emails","email","email_responsavel"],["email","endereco","valor"]).toLocaleLowerCase("pt-BR")||null;
@@ -175,8 +178,8 @@ export function mapSweducToFiscalStudent(input:{student:SweducStudentSummary&Rec
   const endereco=[logradouro,numero,complemento,bairro,cidade,uf].filter(Boolean).join(", ")||null;
   return {
     nome:alunoNome.toLocaleUpperCase("pt-BR"),
-    turma:pickText(student,["turma"])||pickText(details,["turma"])||null,
-    segmento:inferSweducSegment(pickText(student,["curso"])||pickText(details,["curso"]),pickText(student,["serie"])||pickText(details,["serie"]),pickText(student,["turma"])||pickText(details,["turma"])),
+    turma:turma||null,
+    segmento:curso||inferSweducSegment(curso,serie,turma),
     responsavel:responsavel.toLocaleUpperCase("pt-BR"),
     cpf_cnpj:cpf||null,email,whatsapp,cep,logradouro:logradouro.toLocaleUpperCase("pt-BR")||null,numero:numero.toLocaleUpperCase("pt-BR")||null,
     complemento:complemento.toLocaleUpperCase("pt-BR")||null,bairro:bairro.toLocaleUpperCase("pt-BR")||null,cidade:cidade.toLocaleUpperCase("pt-BR")||null,uf:uf||null,endereco

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import {createSweducAccessToken,currentSweducAcademicYear,getSweducActiveAcademicYear,getSweducStudentDetailsWithToken,inferSweducSegment,listSweducStudentsWithToken,normalizeSweducHost,parseSweducCredentials,serializeSweducCredentials} from "../lib/sweduc.ts";
+import {createSweducAccessToken,currentSweducAcademicYear,getSweducActiveAcademicYear,getSweducStudentDetailsWithToken,inferSweducSegment,listSweducStudentsWithToken,mapSweducToFiscalStudent,normalizeSweducHost,parseSweducCredentials,serializeSweducCredentials} from "../lib/sweduc.ts";
 
 const credentials={host:"https://joaopauloi.escolarsw.com.br",clientId:"cliente",clientSecret:"segredo"};
 
@@ -81,4 +81,14 @@ test("classifica turma de pré-escola antes de fundamental",()=>{
   assert.equal(inferSweducSegment("1º ao 5º anos","", "PRÉ-I/M"),"Pré-escola");
   assert.equal(inferSweducSegment("Educação Infantil","Maternal 1","MATERNAL/M"),"Maternal");
   assert.equal(inferSweducSegment("Ensino Fundamental 2","6º Ano","601"),"6º ao 9º anos");
+});
+
+test("mantém o curso real da SWeduc como segmento fiscal",()=>{
+  const student=mapSweducToFiscalStudent({
+    student:{nome:"Alana de Souza Garcia",curso:"Educação Infantil",serie:"",turma:"PRÉ-I/M",matricula_id:1,aluno_id:1,data_nascimento:null,num_aluno:null,num_matricula:null,status:null,unidade:null,ano_letivo:"2026"},
+    responsible:{nome:"Felipe Garcia de Barros",cpf:"12345678901"},
+    details:{}
+  });
+  assert.equal(student.segmento,"Educação Infantil");
+  assert.equal(student.turma,"PRÉ-I/M");
 });
