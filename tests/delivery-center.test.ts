@@ -24,7 +24,8 @@ test("organiza os envios por e-mail, WhatsApp e Agenda Edu",()=>{
   assert.match(uiSource,/Não há envio pela API da Meta nem cobrança por mensagem/);
   assert.match(uiSource,/Mensagens com os responsáveis/);
   assert.match(uiSource,/channel==="agenda-edu"\?"\/api\/deliveries\/agenda-edu"/);
-  assert.match(uiSource,/fetch\("\/api\/deliveries\/whatsapp-manual"/);
+  assert.match(uiSource,/authenticatedFetch\("\/api\/deliveries\/whatsapp-manual"/);
+  assert.match(uiSource,/ID Agenda Edu do aluno não vinculado/);
 });
 
 test("impede que homologações sejam enviadas aos responsáveis",()=>{
@@ -47,7 +48,7 @@ test("protege contra duplicidade e registra cada tentativa",()=>{
 });
 
 test("mostra somente pendentes e arquiva os sucessos em Enviadas",()=>{
-  assert.match(uiSource,/useState\("pendente"\)/);
+  assert.match(uiSource,/initialDeliveryFocus\?"todas":"pendente"/);
   assert.match(uiSource,/setStatusFilter\(batchMode==="resend"\?"enviado":"pendente"\)/);
   assert.match(uiSource,/<option value="enviado">Enviadas<\/option>/);
   assert.match(uiSource,/deliveryState\(row\)==="enviado"/);

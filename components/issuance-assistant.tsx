@@ -771,18 +771,18 @@ export function IssuanceAssistant({onNavigate}:{onNavigate:(page:AppPage)=>void}
   }
 
   const selectedManualSender=whatsappInfo?.senders?.find(sender=>sender.id===manualSenderId)||null;
-  const canCurrentDelivery=deliveryChannel==="email"?canSendEmail:deliveryChannel==="whatsapp-manual"?canSendWhatsapp:canSendAgenda;
+  const agendaEduStudentId=selected?.alunos?.agenda_edu_student_id||"";
   const currentDeliveryReady=deliveryChannel==="email"
     ?canSendEmail&&Boolean(activeDocument)
     :deliveryChannel==="whatsapp-manual"
       ?canSendWhatsapp&&Boolean(activeDocument)&&Boolean(whatsappInfo?.ready)&&Boolean(selectedManualSender)
-      :canSendAgenda&&Boolean(activeDocument)&&Boolean(agendaEduInfo?.ready);
+      :canSendAgenda&&Boolean(activeDocument)&&Boolean(agendaEduInfo?.ready)&&Boolean(agendaEduStudentId);
   const deliveryRecipient=deliveryChannel==="email"
     ?"Caixa interna de homologação"
     :deliveryChannel==="whatsapp-manual"
       ?whatsappInfo?.testRecipient||"Número interno não configurado"
-      :agendaEduInfo?.ready
-        ?"Responsáveis vinculados no Sandbox"
+      :agendaEduStudentId
+        ?`Agenda Edu · aluno ${agendaEduStudentId}`
         :"Aguardando Agenda Edu";
 
   function focusAndNavigate(target:"NFS-e"|"Enviar notas"|"Alunos e Responsáveis"){
@@ -1157,7 +1157,7 @@ export function IssuanceAssistant({onNavigate}:{onNavigate:(page:AppPage)=>void}
               <div className="assistant-delivery-recipient">
                 <small>DESTINO DE HOMOLOGAÇÃO</small>
                 <strong>{deliveryRecipient}</strong>
-                <span>{deliveryChannel==="email"?selected.alunos?.email||"E-mail do responsável não informado":deliveryChannel==="whatsapp-manual"?selected.alunos?.whatsapp||"WhatsApp do responsável não informado":selected.alunos?.agenda_edu_student_id?"Aluno vinculado à Agenda Edu":"Aluno ainda sem vínculo da Agenda Edu"}</span>
+                <span>{deliveryChannel==="email"?selected.alunos?.email||"E-mail do responsável não informado":deliveryChannel==="whatsapp-manual"?selected.alunos?.whatsapp||"WhatsApp do responsável não informado":agendaEduStudentId?"Aluno vinculado à Agenda Edu":"Aluno ainda sem vínculo da Agenda Edu"}</span>
               </div>
 
               {deliveryChannel==="whatsapp-manual"&&<>
@@ -1168,6 +1168,8 @@ export function IssuanceAssistant({onNavigate}:{onNavigate:(page:AppPage)=>void}
               </>}
 
               {deliveryChannel==="agenda-edu"&&!agendaEduInfo?.ready&&<div className="assistant-warning-box"><CircleAlert/><div><strong>Aguardando Agenda Edu</strong><span>{agendaEduInfo?.message||"A integração ainda depende das informações que a Agenda Edu precisa liberar."}</span></div></div>}
+              {deliveryChannel==="agenda-edu"&&agendaEduInfo?.ready&&agendaEduStudentId&&<div className="assistant-agenda-ready"><Check/><div><strong>Agenda Edu pronta para teste</strong><span>O aluno está vinculado. Ao enviar, o PDF e o XML seguem pelo Sandbox e o histórico fica registrado.</span></div></div>}
+              {deliveryChannel==="agenda-edu"&&agendaEduInfo?.ready&&!agendaEduStudentId&&<div className="assistant-warning-box"><CircleAlert/><div><strong>Aluno sem vínculo Agenda Edu</strong><span>Informe o ID Agenda Edu no cadastro do aluno para liberar o envio por este canal.</span><button className="secondary" type="button" onClick={()=>focusAndNavigate("Alunos e Responsáveis")}>Abrir cadastro do aluno</button></div></div>}
 
               {manualPending&&deliveryChannel==="whatsapp-manual"&&<div className="assistant-manual-confirm">
                 <MessageCircle size={22}/>
