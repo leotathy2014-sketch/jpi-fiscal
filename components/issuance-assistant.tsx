@@ -179,6 +179,16 @@ export function IssuanceAssistant({onNavigate}:{onNavigate:(page:AppPage)=>void}
   useEffect(()=>{void load();const onFocus=()=>void load(true);window.addEventListener("focus",onFocus);return()=>window.removeEventListener("focus",onFocus)},[load]);
   useEffect(()=>{if(selectedId)localStorage.setItem("jpi-issuance-assistant-payment",String(selectedId))},[selectedId]);
   useEffect(()=>{
+    const prepared=sessionStorage.getItem("jpi-assistant-prepared-sweduc-student");
+    if(prepared){
+      sessionStorage.removeItem("jpi-assistant-prepared-sweduc-student");
+      try{
+        const student=JSON.parse(prepared) as AssistantStudent;
+        setPendingSweducStudent(student);setNewStudentId(student.id);setNewEmissionOpen(true);setStudentQuery("");setNewDescriptionEdited(false);setNewDescription(defaultServiceDescription(newCompetence,student));setMessage(`${student.nome} foi preparado pela SWeduc. Confira competência e valor para iniciar a nota.`);
+        window.requestAnimationFrame(()=>window.requestAnimationFrame(()=>document.getElementById("assistant-new-emission")?.scrollIntoView({behavior:"smooth",block:"start"})));
+      }catch{setError("Não foi possível abrir os dados preparados pela SWeduc. Selecione o aluno novamente.")}
+      return;
+    }
     const importedId=Number(sessionStorage.getItem("jpi-assistant-student-focus")||"0");
     if(!importedId||!students.some(student=>student.id===importedId))return;
     sessionStorage.removeItem("jpi-assistant-student-focus");
