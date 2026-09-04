@@ -937,18 +937,24 @@ export function IssuanceAssistant({onNavigate}:{onNavigate:(page:AppPage)=>void}
       </div>}
     </section>}
 
-    <section className="assistant-stepper" aria-label="Etapas da emissão">
-      {steps.map((step,index)=><div className={`assistant-step ${step.state}`} key={step.key}>
-        <span className="assistant-step-number">{step.state==="done"?<Check size={15}/>:step.short}</span>
-        <div><strong>{step.label}</strong><small>{step.description}</small></div>
-        {index<steps.length-1&&<ChevronRight className="assistant-step-arrow" size={16}/>}</div>)}
+    <section className="assistant-progress-panel" aria-label="Etapas da emissão">
+      <div className="assistant-progress-head">
+        <div><span>Progresso da emissão</span><strong>{steps[effectiveCurrent]?.label||"Processo"}</strong></div>
+        <small>{steps[effectiveCurrent]?.description||"Acompanhe as etapas da nota."}</small>
+      </div>
+      <div className="assistant-stepper">
+        {steps.map((step,index)=><div className={`assistant-step ${step.state}`} key={step.key}>
+          <span className="assistant-step-number">{step.state==="done"?<Check size={13}/>:step.short}</span>
+          <div><strong>{step.label}</strong><small>{step.description}</small></div>
+          {index<steps.length-1&&<ChevronRight className="assistant-step-arrow" size={14}/>}</div>)}
+      </div>
     </section>
 
     {!newEmissionOpen&&<section className="assistant-grid">
       <article className="panel assistant-selector">
-        <div className="panel-title"><div><h2>Continuar emissão</h2><p>Mensalidades e notas já iniciadas aparecem automaticamente.</p></div><span className="assistant-count">{payments.length}</span></div>
+        <div className="panel-title assistant-queue-title"><div><span className="eyebrow">FILA DE NOTAS</span><h2>Emissões em andamento</h2><p>Escolha uma nota para continuar exatamente de onde parou.</p></div><span className="assistant-count">{payments.length}</span></div>
         <div className="search-input"><Search/><input value={query} onChange={e=>setQuery(e.target.value)} placeholder="Buscar aluno, responsável, competência ou nº interno"/></div>
-        {loading?<div className="assistant-loading">Carregando notas…</div>:filtered.length===0?<div className="assistant-empty">Nenhuma mensalidade encontrada.</div>:<div className="assistant-payment-list">
+        {loading?<div className="assistant-loading">Carregando notas…</div>:filtered.length===0?<div className="assistant-empty">Nenhuma mensalidade encontrada.</div>:<><div className="assistant-list-hint">Mostrando {Math.min(filtered.length,40)} de {filtered.length} nota(s)</div><div className="assistant-payment-list">
           {filtered.slice(0,40).map(payment=>{
             const order=statusOrder(payment);
             const issued=Boolean(payment.chave_nfse_homologacao);
@@ -958,7 +964,7 @@ export function IssuanceAssistant({onNavigate}:{onNavigate:(page:AppPage)=>void}
               <em className={issued?"done":order.xmlDone?"xml":"pending"}>{issued?"Emitida":order.xmlDone?"XML pronto":payment.status_nfse}</em>
             </button>
           })}
-        </div>}
+        </div></>}
       </article>
 
       <article id="assistant-process-panel" className="panel assistant-action-panel">
