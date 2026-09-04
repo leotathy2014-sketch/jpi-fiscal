@@ -688,7 +688,11 @@ export function IssuanceAssistant({onNavigate}:{onNavigate:(page:AppPage)=>void}
     const focus=String(selected.id);
     if(target==="NFS-e")sessionStorage.setItem("jpi-nfse-focus",focus);
     if(target==="Enviar notas")sessionStorage.setItem("jpi-delivery-focus",focus);
-    if(target==="Alunos e Responsáveis")sessionStorage.setItem("jpi-student-focus",selected.alunos?.nome||String(selected.aluno_id));
+    if(target==="Alunos e Responsáveis"){
+      sessionStorage.setItem("jpi-student-focus",selected.alunos?.nome||String(selected.aluno_id));
+      sessionStorage.setItem("jpi-student-edit-id",String(selected.aluno_id));
+      sessionStorage.setItem("jpi-student-return-assistant",focus);
+    }
     onNavigate(target);
   }
   function openOfficialHomologation(){
