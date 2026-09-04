@@ -47,6 +47,7 @@ test("oferece configuração, teste e consulta sem salvar lista de alunos",()=>{
   assert.match(temporaryTestRoute,/useUsernamePassword/);assert.match(temporaryTestRoute,/username/);assert.match(temporaryTestRoute,/password/);assert.match(temporaryTestRoute,/grantType/);
   assert.match(route,/action==="test"/);assert.match(route,/action==="sync"/);assert.match(route,/from\("sweduc_alunos"\)\.upsert/);
   assert.match(temporaryTestRoute,/createSweducAccessToken/);assert.match(temporaryTestRoute,/listSweducStudentsWithToken/);assert.match(temporaryTestRoute,/getSweducStudentDetailsWithToken/);assert.match(temporaryTestRoute,/Nada foi salvo ou importado/);
+  assert.match(readFileSync(new URL("../lib/sweduc.ts",import.meta.url),"utf8"),/alunos\/detalhes\?matricula_id=\$\{matriculaId\}/);
   assert.match(route,/rows=summaries\.map\(mapSummaryToGrid\)/);assert.match(route,/search:search\|\|undefined/);assert.match(route,/getSweducStudentDetailsWithToken/);
   assert.match(route,/MAX_SWEDUC_PAGES=1000/);assert.match(ui,/while\(page<=1000\)/);
   assert.match(route,/grantType,username,password/);assert.match(route,/auth_method/);assert.match(route,/usuario_configurado/);
@@ -62,6 +63,8 @@ test("importa dados acadêmicos, responsáveis, contatos e financeiro",()=>{
   assert.match(ui,/telefones/);assert.match(ui,/emails/);assert.match(ui,/título\(s\)/);
   assert.match(ui,/Responsável para a nota/);assert.match(ui,/Carregar para a nota/);assert.match(ui,/selectedYear/);
   assert.match(route,/action==="import"/);assert.match(route,/mapSweducToFiscalStudent/);assert.match(route,/sweduc_matricula_id/);
+  assert.match(route,/valor_real/);assert.match(route,/valor_com_desconto/);assert.match(route,/multidisciplinar/);assert.match(route,/collectFinancialStrings/);
+  assert.match(operationalPicker,/valor_real/);assert.match(operationalPicker,/valor_com_desconto/);assert.match(operationalPicker,/com desconto/);
   assert.match(fiscalLinkMigration,/sweduc_matricula_id/);assert.match(fiscalLinkMigration,/unique index/);
   assert.match(assistant,/jpi-assistant-student-focus/);assert.match(assistant,/Aluno importado da SWeduc selecionado/);
 });

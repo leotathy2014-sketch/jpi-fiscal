@@ -17,18 +17,25 @@ function parseFinancialNumber(value:string){const clean=value.replace(/[^\d.,-]/
 function findFinancialAmount(item:SweducFinancial,keys:string[]){for(const key of keys){const amount=parseFinancialNumber(financialText(item,[key]));if(Number.isFinite(amount))return amount}return NaN}
 function formatFinancialValue(value:number){return Math.abs(value).toLocaleString("pt-BR",{style:"currency",currency:"BRL"})}
 function financialValue(item:SweducFinancial){
-  const net=findFinancialAmount(item,["valor_liquido","valorLiquido","valor_com_desconto","valorComDesconto","valor_final","valorFinal","saldo","saldo_devedor","valor_a_pagar","valorAPagar","valor_pago"]);
+  const net=findFinancialAmount(item,["valor_liquido","valorLiquido","valor_com_desconto","valorComDesconto","valor_final","valorFinal","valor_real","valorReal","valor_cobrado","valorCobrado","valor_devido","valorDevido","valor_atualizado","valorAtualizado","saldo","saldo_devedor","saldoDevedor","valor_a_pagar","valorAPagar","valor_pago"]);
   if(Number.isFinite(net)&&net!==0)return formatFinancialValue(net);
   const gross=findFinancialAmount(item,["valor","Valor","VALOR","valor_titulo","valor_mensalidade","valor_original","vl_titulo","vlr_titulo","total"]);
-  const discount=findFinancialAmount(item,["desconto","valor_desconto","valorDesconto","descontos","bolsa","valor_bolsa","valorBolsa"]);
-  if(Number.isFinite(gross)&&Number.isFinite(discount)&&discount>0)return `${formatFinancialValue(Math.max(0,gross-Math.abs(discount)))} com desconto`;
+  const discount=findFinancialAmount(item,["desconto","valor_desconto","valorDesconto","descontos","bolsa","valor_bolsa","valorBolsa","desconto_concedido","descontoConcedido","valor_desconto_final","valorDescontoFinal"]);
+  if(Number.isFinite(gross)&&Number.isFinite(discount)&&Math.abs(discount)>0)return `${formatFinancialValue(Math.max(0,gross-Math.abs(discount)))} com desconto`;
   return Number.isFinite(gross)?formatFinancialValue(gross):"Valor não informado";
+}
+function collectFinancialStrings(value:unknown,depth=0):string[]{
+  if(depth>3||value===null||value===undefined)return [];
+  if(typeof value==="string"||typeof value==="number")return [String(value)];
+  if(Array.isArray(value))return value.flatMap(item=>collectFinancialStrings(item,depth+1));
+  if(typeof value==="object")return Object.entries(value as Record<string,unknown>).flatMap(([key,entry])=>[key,...collectFinancialStrings(entry,depth+1)]);
+  return [];
 }
 function financialDescription(item:SweducFinancial){
   const direct=financialText(item,["descricao","descrição","descricao_titulo","descricaoTitulo","historico","histórico","categoria","categoria_titulo","tipo","tipo_titulo","titulo","nome_titulo","nome","produto","servico","serviço","plano_conta","plano_contas","grupo_receita","receita","classe"]);
   const itens=Array.isArray(item.itens)?item.itens:[];
   const itemTexts=itens.flatMap(entry=>entry&&typeof entry==="object"?[financialText(entry as SweducFinancial,["descricao","descrição","nome","produto","servico","serviço","categoria","tipo"])]:[]).filter(Boolean);
-  return [direct,...itemTexts].filter(Boolean).join(" ");
+  return [direct,...itemTexts,...collectFinancialStrings(item)].filter(Boolean).join(" ");
 }
 function financialLabel(item:SweducFinancial,index:number){return financialDescription(item)||financialText(item,["numero_titulo","numeroTitulo","titulo_id","tituloId","competencia"])||`Registro financeiro ${index+1}`}
 function financialStatus(item:SweducFinancial){return financialText(item,["situacao","status","Situacao","STATUS"])}

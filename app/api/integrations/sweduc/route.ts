@@ -152,12 +152,19 @@ function findFinancialAmount(item:Record<string,unknown>,keys:string[]){
   return NaN;
 }
 function financialAmount(item:Record<string,unknown>){
-  const net=findFinancialAmount(item,["valor_liquido","valorLiquido","valor_com_desconto","valorComDesconto","valor_final","valorFinal","saldo","saldo_devedor","valor_a_pagar","valorAPagar","valor_pago"]);
+  const net=findFinancialAmount(item,["valor_liquido","valorLiquido","valor_com_desconto","valorComDesconto","valor_final","valorFinal","valor_real","valorReal","valor_cobrado","valorCobrado","valor_devido","valorDevido","valor_atualizado","valorAtualizado","saldo","saldo_devedor","saldoDevedor","valor_a_pagar","valorAPagar","valor_pago"]);
   if(Number.isFinite(net)&&net!==0)return Math.abs(net).toFixed(2);
   const gross=findFinancialAmount(item,["valor","Valor","VALOR","valor_titulo","valor_mensalidade","valor_original","vl_titulo","vlr_titulo","total"]);
-  const discount=findFinancialAmount(item,["desconto","valor_desconto","valorDesconto","descontos","bolsa","valor_bolsa","valorBolsa"]);
-  if(Number.isFinite(gross)&&Number.isFinite(discount)&&discount>0)return Math.max(0,gross-Math.abs(discount)).toFixed(2);
+  const discount=findFinancialAmount(item,["desconto","valor_desconto","valorDesconto","descontos","bolsa","valor_bolsa","valorBolsa","desconto_concedido","descontoConcedido","valor_desconto_final","valorDescontoFinal"]);
+  if(Number.isFinite(gross)&&Number.isFinite(discount)&&Math.abs(discount)>0)return Math.max(0,gross-Math.abs(discount)).toFixed(2);
   return Number.isFinite(gross)?Math.abs(gross).toFixed(2):"";
+}
+function collectFinancialStrings(value:unknown,depth=0):string[]{
+  if(depth>3||value===null||value===undefined)return [];
+  if(typeof value==="string"||typeof value==="number")return [String(value)];
+  if(Array.isArray(value))return value.flatMap(item=>collectFinancialStrings(item,depth+1));
+  if(typeof value==="object")return Object.entries(value as Record<string,unknown>).flatMap(([key,entry])=>[key,...collectFinancialStrings(entry,depth+1)]);
+  return [];
 }
 function financialDescription(item:Record<string,unknown>){
   const direct=financialText(item,["descricao","descrição","descricao_titulo","descricaoTitulo","historico","histórico","categoria","categoria_titulo","tipo","tipo_titulo","titulo","nome_titulo","nome","produto","servico","serviço","plano_conta","plano_contas","grupo_receita","receita","classe"]);
@@ -165,7 +172,7 @@ function financialDescription(item:Record<string,unknown>){
   const itemTexts=itens.flatMap(entry=>entry&&typeof entry==="object"?[
     financialText(entry as Record<string,unknown>,["descricao","descrição","nome","produto","servico","serviço","categoria","tipo"]),
   ]:[]).filter(Boolean);
-  return [direct,...itemTexts].filter(Boolean).join(" ");
+  return [direct,...itemTexts,...collectFinancialStrings(item)].filter(Boolean).join(" ");
 }
 function formatSuggestedMoney(value:string){
   const number=parseFinancialNumber(value);
@@ -174,16 +181,21 @@ function formatSuggestedMoney(value:string){
 }
 function suggestedFinancialAmount(financeiro:Array<Record<string,unknown>>){
   const isOpen=(item:Record<string,unknown>)=>{const status=normalizeSearchText(financialText(item,["situacao","status","Situacao","STATUS"]));return !status||status.includes("aberto")||status.includes("pendente")||status.includes("em aberto")};
+  const isBlocked=(item:Record<string,unknown>)=>{
+    const text=normalizeSearchText(financialDescription(item));
+    const blocked=["multidisciplinar","material","apostila","uniforme","taxa","rematricula","matricula","evento","passeio","lanche","cantina"];
+    return blocked.some(word=>text.includes(word));
+  };
   const isMonthly=(item:Record<string,unknown>)=>{
     const text=normalizeSearchText(financialDescription(item));
-    if(!text)return false;
-    const blocked=["multidisciplinar","material","apostila","uniforme","taxa","rematricula","matricula","evento","passeio","lanche","cantina"];
-    if(blocked.some(word=>text.includes(word)))return false;
+    if(!text||isBlocked(item))return false;
     return text.includes("mensalidade")||text.includes("mensal")||text.includes("parcela escolar")||text.includes("servico educacional")||text.includes("servico escolar");
   };
   const monthlyOpen=financeiro.find(item=>isOpen(item)&&isMonthly(item)&&financialAmount(item));
   const monthlyAny=financeiro.find(item=>isMonthly(item)&&financialAmount(item));
-  return formatSuggestedMoney(financialAmount(monthlyOpen||monthlyAny||{}));
+  const openValued=financeiro.filter(item=>isOpen(item)&&!isBlocked(item)&&financialAmount(item));
+  const fallback=openValued.length===1?openValued[0]:null;
+  return formatSuggestedMoney(financialAmount(monthlyOpen||monthlyAny||fallback||{}));
 }
 
 export async function GET(request:NextRequest){
