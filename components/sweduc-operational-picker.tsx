@@ -6,7 +6,7 @@ import {authenticatedFetch} from "@/lib/authenticated-fetch";
 
 type AcademicYear={id:number;year:number};
 type AcademicReference={ano_letivo:number;curso:string|null;serie:string|null;turma:string|null};
-type SweducResponsible={nome?:string;cpf?:string;cpf_cnpj?:string;documento?:string;responsavel_pedagogico?:boolean|number|string;responsavel_financeiro?:boolean|number|string;financeiro?:boolean|number|string;eh_financeiro?:boolean|number|string;telefones?:Array<{numero?:string;telefone?:string}>;emails?:Array<{email?:string}>};
+type SweducResponsible={nome?:string;parentesco?:string;cpf?:string;cpf_cnpj?:string;documento?:string;responsavel_pedagogico?:boolean|number|string;responsavel_financeiro?:boolean|number|string;financeiro?:boolean|number|string;eh_financeiro?:boolean|number|string;telefones?:Array<{numero?:string;telefone?:string}>;emails?:Array<{email?:string}>};
 type SweducFinancial=Record<string,unknown>&{titulo_id?:number|string;numero_titulo?:string;valor?:string|number;situacao?:string;vencimento?:string;descricao?:string};
 type SweducStudent={matricula_id:number;nome:string;numero_matricula:string|null;status:string|null;unidade:string|null;curso:string|null;serie:string|null;turma:string|null;ano_letivo:string|null;responsaveis:SweducResponsible[];financeiro:SweducFinancial[];detalhes_carregados?:boolean};
 
@@ -14,50 +14,7 @@ function responsibleDocument(responsible:SweducResponsible){return responsible.c
 function responsibleContact(responsible:SweducResponsible){return responsible.telefones?.[0]?.numero||responsible.telefones?.[0]?.telefone||responsible.emails?.[0]?.email||"Contato não informado"}
 function isTrueFlag(value:unknown){return value===true||value===1||String(value).trim().toLowerCase()==="1"||String(value).trim().toLowerCase()==="true"||String(value).trim().toLowerCase()==="sim"}
 function isFinancialResponsible(responsible:SweducResponsible){return isTrueFlag(responsible.responsavel_financeiro)||isTrueFlag(responsible.financeiro)||isTrueFlag(responsible.eh_financeiro)}
-function financialText(item:SweducFinancial,keys:string[]){for(const key of keys){const value=item[key];if(value!==undefined&&value!==null&&String(value).trim())return String(value)}return ""}
-function parseFinancialNumber(value:string){const clean=value.replace(/[^\d.,-]/g,"").trim();if(!clean)return NaN;const number=clean.includes(",")?Number(clean.replace(/\./g,"").replace(",",".")):Number(clean);return Number.isFinite(number)?number:NaN}
-function findFinancialAmount(item:SweducFinancial,keys:string[]){for(const key of keys){const amount=parseFinancialNumber(financialText(item,[key]));if(Number.isFinite(amount))return amount}return NaN}
-function formatFinancialValue(value:number){return Math.abs(value).toLocaleString("pt-BR",{style:"currency",currency:"BRL"})}
-function financialValue(item:SweducFinancial){
-  const net=findFinancialAmount(item,["valor_liquido","valorLiquido","valor_com_desconto","valorComDesconto","valor_final","valorFinal","valor_real","valorReal","valor_cobrado","valorCobrado","valor_devido","valorDevido","valor_atualizado","valorAtualizado","saldo","saldo_devedor","saldoDevedor","valor_a_pagar","valorAPagar","valor_pago"]);
-  if(Number.isFinite(net)&&net!==0)return formatFinancialValue(net);
-  const gross=findFinancialAmount(item,["valor_bruto","valorBruto","valor","Valor","VALOR","valor_titulo","valor_mensalidade","valor_original","vl_titulo","vlr_titulo","total"]);
-  const discount=findFinancialAmount(item,["desconto","valor_desconto","valorDesconto","descontos","bolsa","valor_bolsa","valorBolsa","desconto_concedido","descontoConcedido","valor_desconto_final","valorDescontoFinal"]);
-  const extraDiscount=findFinancialAmount(item,["desconto_efetivado","descontoEfetivado","desconto_no_titulo","descontoNoTitulo","desconto_no_aluno","descontoNoAluno"]);
-  const fee=findFinancialAmount(item,["juros_efetivado","jurosEfetivado","multa_efetivada","multaEfetivada"]);
-  if(Number.isFinite(gross)&&(Number.isFinite(discount)||Number.isFinite(extraDiscount)||Number.isFinite(fee))){
-    const totalDiscount=(Number.isFinite(discount)?Math.abs(discount):0)+(Number.isFinite(extraDiscount)?Math.abs(extraDiscount):0);
-    const totalFee=Number.isFinite(fee)?Math.abs(fee):0;
-    return `${formatFinancialValue(Math.max(0,gross-totalDiscount+totalFee))} com desconto`;
-  }
-  const itens=Array.isArray(item.itens)?item.itens:[];
-  const monthlyItem=itens.find(entry=>entry&&typeof entry==="object"&&normalizeSearchText(financialText(entry as SweducFinancial,["descricao_item","descricaoItem","descrição_item","descricao","descrição"])).includes("mensalidade")) as SweducFinancial|undefined;
-  const itemAmount=monthlyItem?findFinancialAmount(monthlyItem,["valor_item","valorItem","valor","total"]):NaN;
-  if(Number.isFinite(itemAmount))return formatFinancialValue(itemAmount);
-  return Number.isFinite(gross)?formatFinancialValue(gross):"Valor não informado";
-}
-function collectFinancialStrings(value:unknown,depth=0):string[]{
-  if(depth>3||value===null||value===undefined)return [];
-  if(typeof value==="string"||typeof value==="number")return [String(value)];
-  if(Array.isArray(value))return value.flatMap(item=>collectFinancialStrings(item,depth+1));
-  if(typeof value==="object")return Object.values(value as Record<string,unknown>).flatMap(entry=>collectFinancialStrings(entry,depth+1));
-  return [];
-}
-function financialDescription(item:SweducFinancial){
-  const direct=financialText(item,["descricao","descrição","descricao_item","descricaoItem","descrição_item","descricao_titulo","descricaoTitulo","historico","histórico","categoria","categoria_titulo","tipo","tipo_titulo","titulo","nome_titulo","nome","produto","servico","serviço","plano_conta","plano_contas","grupo_receita","receita","classe"]);
-  const itens=Array.isArray(item.itens)?item.itens:[];
-  const itemTexts=itens.flatMap(entry=>entry&&typeof entry==="object"?[financialText(entry as SweducFinancial,["descricao","descrição","descricao_item","descricaoItem","descrição_item","nome","produto","servico","serviço","categoria","tipo"])]:[]).filter(Boolean);
-  return [direct,...itemTexts,...collectFinancialStrings(item)].filter(Boolean).join(" ");
-}
-function financialLabel(item:SweducFinancial,index:number){return financialDescription(item)||financialText(item,["numero_titulo","numeroTitulo","num_titulo","numTitulo","titulo_id","tituloId","competencia"])||`Registro financeiro ${index+1}`}
-function financialStatus(item:SweducFinancial){return financialText(item,["situacao_label","situacaoLabel","situacao","status","Situacao","STATUS"])}
-function financialDueDate(item:SweducFinancial){return financialText(item,["data_vencimento","dataVencimento","vencimento","vencimento_titulo"])}
-function isMonthlyFinancial(item:SweducFinancial){
-  const text=normalizeSearchText(financialDescription(item));
-  if(!text)return false;
-  if(["multidisciplinar","material","apostila","uniforme","taxa","rematricula","matricula","evento","passeio","lanche","cantina"].some(word=>text.includes(word)))return false;
-  return text.includes("mensalidade")||text.includes("mensal")||text.includes("parcela escolar")||text.includes("servico educacional")||text.includes("servico escolar");
-}
+function responsibleRoleText(responsible:SweducResponsible){return `${responsible.parentesco||"Parentesco não informado"} · ${isTrueFlag(responsible.responsavel_pedagogico)?"pedagógico":"não pedagógico"}`}
 function normalizeSearchText(value:unknown){return String(value||"").normalize("NFD").replace(/[\u0300-\u036f]/g,"").replace(/[^\p{L}\p{N}\s]/gu," ").replace(/\s+/g," ").trim().toLocaleLowerCase("pt-BR")}
 function sameOption(left:unknown,right:unknown){return normalizeSearchText(left)===normalizeSearchText(right)}
 function uniqueSortedOptions(values:Array<string|null|undefined>){
@@ -197,7 +154,7 @@ export function SweducOperationalPicker({onStudentReady}:{onStudentReady:(studen
     void consult(selectedYear);
   },[selectedYear]);
 
-  const responsibleCard=selected?<div className="responsible-match-card sweduc-responsible-confirm" role="dialog" aria-label="Confirmar responsável financeiro SWeduc"><div><UserCheck/><span><strong>Confirmar responsável da nota</strong><small>{selected.nome} · matrícula {selected.numero_matricula||selected.matricula_id}</small></span></div>{busy===`details-${selected.matricula_id}`?<p>Carregando responsáveis vinculados a este aluno…</p>:selected.responsaveis.length>0?<div className="sweduc-responsible-options">{selected.responsaveis.map((responsible,index)=><label key={`${responsible.nome||"responsavel"}-${index}`} className="sweduc-responsible-option"><input type="radio" name={`sweduc-responsible-${selected.matricula_id}`} checked={responsibleIndex===index} onChange={()=>setResponsibleIndex(index)}/><span><strong>{responsible.nome||`Responsável ${index+1}`}{isFinancialResponsible(responsible)?<em className="sweduc-suggested-responsible"><Check size={13}/>Responsável financeiro</em>:isTrueFlag(responsible.responsavel_pedagogico)&&<em className="sweduc-suggested-responsible"><Check size={13}/>Sugerido pela SWeduc</em>}</strong><small>{responsibleDocument(responsible)} · {responsibleContact(responsible)}</small></span></label>)}</div>:<p>A SWeduc não retornou responsável para esta matrícula. Confira com o suporte antes de carregar para a nota.</p>}<div className="sweduc-financial-preview"><strong>Financeiro retornado pela SWeduc</strong>{selected.financeiro?.length?<div>{selected.financeiro.slice(0,5).map((item,index)=><span key={`${financialLabel(item,index)}-${index}`}><small>{financialLabel(item,index)}{isMonthlyFinancial(item)?" · mensalidade":""}{financialStatus(item)?` · ${financialStatus(item)}`:""}{financialDueDate(item)?` · venc. ${financialDueDate(item)}`:""}</small><b>{financialValue(item)}</b></span>)}</div>:<small>Nenhum valor financeiro foi retornado para esta matrícula.</small>}</div><div><button type="button" className="secondary" onClick={()=>setSelected(null)}>Cancelar</button><button type="button" className="primary" disabled={Boolean(busy)||selected.responsaveis.length===0} onClick={()=>void loadForNote()}>{busy===`import-${selected.matricula_id}`?"Preparando…":<><Check size={15}/>Preparar para a nota</>}</button></div><small>Nada será gravado agora. O cadastro fiscal só será salvo quando a emissão for confirmada.</small></div>:null;
+  const responsibleCard=selected?<div className="responsible-match-card sweduc-responsible-confirm" role="dialog" aria-label="Confirmar responsável financeiro SWeduc"><div><UserCheck/><span><strong>Confirmar responsável da nota</strong><small>{selected.nome} · matrícula {selected.numero_matricula||selected.matricula_id}</small></span></div>{busy===`details-${selected.matricula_id}`?<p>Carregando responsáveis vinculados a este aluno…</p>:selected.responsaveis.length>0?<div className="sweduc-responsible-options">{selected.responsaveis.map((responsible,index)=><label key={`${responsible.nome||"responsavel"}-${index}`} className="sweduc-responsible-option"><input type="radio" name={`sweduc-responsible-${selected.matricula_id}`} checked={responsibleIndex===index} onChange={()=>setResponsibleIndex(index)}/><span><strong>{responsible.nome||`Responsável ${index+1}`}{isFinancialResponsible(responsible)?<em className="sweduc-financial-responsible"><Check size={13}/>Responsável financeiro</em>:isTrueFlag(responsible.responsavel_pedagogico)&&<em className="sweduc-suggested-responsible"><Check size={13}/>Sugerido pela SWeduc</em>}</strong><small>{responsibleRoleText(responsible)} · {responsibleDocument(responsible)} · {responsibleContact(responsible)}</small></span></label>)}</div>:<p>A SWeduc não retornou responsável para esta matrícula. Confira com o suporte antes de carregar para a nota.</p>}<div><button type="button" className="secondary" onClick={()=>setSelected(null)}>Cancelar</button><button type="button" className="primary" disabled={Boolean(busy)||selected.responsaveis.length===0} onClick={()=>void loadForNote()}>{busy===`import-${selected.matricula_id}`?"Preparando…":<><Check size={15}/>Preparar para a nota</>}</button></div><small>Nada será gravado agora. O cadastro fiscal só será salvo quando a emissão for confirmada.</small></div>:null;
 
   return <section className="notice compact sweduc-operational-picker"><UsersRound/><div><strong>Buscar aluno na SWeduc</strong><span>Filtre por ano, segmento, série e turma. Depois busque o aluno pelo nome para preparar a nota.</span>
     <div className="sweduc-student-search-panel">

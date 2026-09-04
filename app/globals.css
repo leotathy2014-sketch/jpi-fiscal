@@ -850,6 +850,8 @@
 .sweduc-inline-financial-test.error small{color:#8a4a40}
 .sweduc-suggested-responsible{display:inline-flex;align-items:center;gap:4px;margin-left:8px;padding:3px 7px;border-radius:999px;background:#e8f8ef;color:#087044;font-style:normal;font-size:10.5px;font-weight:900;vertical-align:middle}
 .sweduc-suggested-responsible svg{width:13px;height:13px;stroke-width:3}
+.sweduc-financial-responsible{display:inline-flex;align-items:center;gap:4px;margin-left:8px;padding:3px 8px;border-radius:999px;background:#dcfce7;color:#047857;border:1px solid #86efac;font-style:normal;font-size:10.5px;font-weight:900;vertical-align:middle}
+.sweduc-financial-responsible svg{width:13px;height:13px;stroke-width:3}
 @media(max-width:850px){
  .sweduc-grid-pagination{flex-wrap:wrap!important;gap:5px!important;padding:6px 8px!important;white-space:normal;font-size:10.8px;line-height:1.15}
  .sweduc-grid-pagination>span{flex-basis:100%;margin-right:0}

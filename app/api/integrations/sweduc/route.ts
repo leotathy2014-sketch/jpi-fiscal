@@ -229,7 +229,7 @@ function financialResponsibleCandidates(responsaveis:Array<Record<string,unknown
       responsibleDocument(responsible)?"tem documento":"",
       responsibleContact(responsible)?"tem contato":"",
     ].filter(Boolean) as string[];
-    return {index,nome:financialText(responsible,["nome","responsavel","name"])||`Responsável ${index+1}`,documento:responsibleDocument(responsible)||null,contato:responsibleContact(responsible)||null,responsavel_pedagogico:isTrueFlag(responsible.responsavel_pedagogico),provavel_financeiro:signals.some(signal=>signal.includes("financeiro")),pistas:signals,raw:responsible};
+    return {index,nome:financialText(responsible,["nome","responsavel","name"])||`Responsável ${index+1}`,parentesco:financialText(responsible,["parentesco","grau_parentesco","grauParentesco"])||null,documento:responsibleDocument(responsible)||null,contato:responsibleContact(responsible)||null,responsavel_pedagogico:isTrueFlag(responsible.responsavel_pedagogico),responsavel_financeiro:isTrueFlag(responsible.responsavel_financeiro)||isTrueFlag(responsible.financeiro)||isTrueFlag(responsible.eh_financeiro),provavel_financeiro:signals.some(signal=>signal.includes("financeiro")),pistas:signals,raw:responsible};
   }).sort((a,b)=>Number(b.provavel_financeiro)-Number(a.provavel_financeiro)||Number(b.responsavel_pedagogico)-Number(a.responsavel_pedagogico)||b.pistas.length-a.pistas.length);
 }
 
