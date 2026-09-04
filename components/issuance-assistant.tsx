@@ -705,6 +705,7 @@ export function IssuanceAssistant({onNavigate}:{onNavigate:(page:AppPage)=>void}
   }
   function startNewEmission(){
     setNewEmissionOpen(true);
+    setPendingSweducStudent(null);
     setNewStudentId(null);
     setNewCompetence(currentCompetenceInput());
     setNewValue("");
@@ -721,6 +722,19 @@ export function IssuanceAssistant({onNavigate}:{onNavigate:(page:AppPage)=>void}
         if(input instanceof HTMLInputElement)input.focus();
       });
     });
+  }
+
+  function resetPreparedStudent(){
+    sessionStorage.removeItem("jpi-assistant-prepared-sweduc-student");
+    sessionStorage.removeItem("jpi-assistant-student-focus");
+    setPendingSweducStudent(null);
+    setNewStudentId(null);
+    setStudentQuery("");
+    setNewValue("");
+    setNewDescription("");
+    setNewDescriptionEdited(false);
+    setError("");
+    setMessage("Escolha outro aluno para preparar a emissão.");
   }
 
   function continueProcess(){
@@ -761,7 +775,7 @@ export function IssuanceAssistant({onNavigate}:{onNavigate:(page:AppPage)=>void}
       </div>}
       <div className="assistant-new-start-grid">
         <div className="assistant-new-students">
-          {pendingSweducStudent?<div className="assistant-sweduc-prepared"><span>ALUNO PREPARADO PELA SWEDUC</span><strong>{pendingSweducStudent.nome}</strong><small>{pendingSweducStudent.responsavel||"Responsável não informado"} · {pendingSweducStudent.turma||"Sem turma"} · {pendingSweducStudent.segmento}{pendingSweducStudent.valor_mensalidade_sugerido?` · Valor sugerido: R$ ${pendingSweducStudent.valor_mensalidade_sugerido}`:""}</small><button type="button" className="secondary" onClick={()=>{setPendingSweducStudent(null);setNewStudentId(null);setMessage("Escolha outro aluno para preparar a emissão.")}}>Trocar aluno</button></div>:<><SweducOperationalPicker onStudentReady={student=>{const prepared=student as AssistantStudent;setPendingSweducStudent(prepared);setNewStudentId(prepared.id);setStudentQuery("");if(prepared.valor_mensalidade_sugerido)setNewValue(prepared.valor_mensalidade_sugerido);setNewDescriptionEdited(false);setNewDescription(defaultServiceDescription(newCompetence,prepared));setMessage(prepared.valor_mensalidade_sugerido?`${prepared.nome} foi preparado pela SWeduc com valor sugerido. Confira responsável, competência e valor; o cadastro só será gravado ao iniciar a emissão.`:`${prepared.nome} foi preparado pela SWeduc. Confira responsável, competência e valor; o cadastro só será gravado ao iniciar a emissão.`)}}/>
+          {pendingSweducStudent?<div className="assistant-sweduc-prepared"><span>ALUNO PREPARADO PELA SWEDUC</span><strong>{pendingSweducStudent.nome}</strong><small>{pendingSweducStudent.responsavel||"Responsável não informado"} · {pendingSweducStudent.turma||"Sem turma"} · {pendingSweducStudent.segmento}{pendingSweducStudent.valor_mensalidade_sugerido?` · Valor sugerido: R$ ${pendingSweducStudent.valor_mensalidade_sugerido}`:""}</small><button type="button" className="secondary" onClick={resetPreparedStudent}>Trocar aluno</button></div>:<><SweducOperationalPicker onStudentReady={student=>{const prepared=student as AssistantStudent;setPendingSweducStudent(prepared);setNewStudentId(prepared.id);setStudentQuery("");if(prepared.valor_mensalidade_sugerido)setNewValue(prepared.valor_mensalidade_sugerido);setNewDescriptionEdited(false);setNewDescription(defaultServiceDescription(newCompetence,prepared));setMessage(prepared.valor_mensalidade_sugerido?`${prepared.nome} foi preparado pela SWeduc com valor sugerido. Confira responsável, competência e valor; o cadastro só será gravado ao iniciar a emissão.`:`${prepared.nome} foi preparado pela SWeduc. Confira responsável, competência e valor; o cadastro só será gravado ao iniciar a emissão.`)}}/>
           <div className="search-input"><Search/><input value={studentQuery} onChange={e=>setStudentQuery(e.target.value)} placeholder="Buscar aluno, responsável, turma ou CPF"/></div>
           {loading?<div className="assistant-loading">Carregando alunos…</div>:filteredStudents.length===0?<div className="assistant-empty">Nenhum aluno cadastrado encontrado.</div>:<div className="assistant-payment-list">
             {filteredStudents.slice(0,50).map(student=><button key={student.id} className={newStudentId===student.id?"assistant-payment selected":"assistant-payment"} onClick={()=>{setNewStudentId(student.id);setNewDescriptionEdited(false);setNewDescription(defaultServiceDescription(newCompetence,student));setError("");setMessage("")}}>
@@ -794,7 +808,7 @@ export function IssuanceAssistant({onNavigate}:{onNavigate:(page:AppPage)=>void}
             {!canCreatePayment&&<div className="notice compact"><ShieldCheck/><span>Seu perfil pode visualizar o Assistente, mas não possui permissão para criar mensalidades.</span></div>}
             <div className="assistant-actions">
               <button className="primary assistant-main-action" onClick={continueProcess} disabled={Boolean(busyAction)||!canCreatePayment}>{busyAction==="create-payment"?"Criando mensalidade…":"Criar mensalidade e iniciar nota"} <ChevronRight size={18}/></button>
-              <button className="secondary" onClick={()=>setNewStudentId(null)}>Trocar aluno</button>
+              <button className="secondary" onClick={resetPreparedStudent}>Trocar aluno</button>
             </div>
           </>}
         </div>
