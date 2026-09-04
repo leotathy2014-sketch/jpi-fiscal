@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { CalendarDays, Check, ChevronRight, CircleAlert, Eye, FileCode2, FileText, GraduationCap, Mail, MailCheck, MessageCircle, Plus, ReceiptText, RefreshCw, Search, Send, ShieldCheck, Sparkles, WalletCards } from "lucide-react";
+import { CalendarDays, Check, ChevronRight, CircleAlert, Eye, FileCode2, FileText, GraduationCap, Mail, MailCheck, MessageCircle, Plus, ReceiptText, RefreshCw, Search, Send, ShieldCheck, Sparkles, UsersRound, WalletCards, X } from "lucide-react";
 import { createSupabaseBrowserClient } from "@/lib/supabase";
 import { authenticatedFetch } from "@/lib/authenticated-fetch";
 import { buildDpsDraft, isValidCpfCnpj, NFSE_OWN_APP_SERIES } from "@/lib/nfse-dps";
@@ -35,8 +35,13 @@ type AssistantPayment={
     cep:string|null;
     logradouro:string|null;
     numero:string|null;
+    complemento?:string|null;
+    bairro?:string|null;
     cidade:string|null;
     uf:string|null;
+    sweduc_matricula_id?:number|null;
+    sweduc_aluno_id?:number|null;
+    sweduc_ano_letivo?:string|null;
   }|null;
 };
 type AssistantStudent={
@@ -84,6 +89,8 @@ const fiscalServiceForSegment=(segment?:string|null)=>{const normalized=normaliz
 const defaultServiceDescription=(competence:string,student?:{nome?:string|null;turma?:string|null;segmento?:string|null}|null)=>["MENSALIDADE ESCOLAR",student?.nome?"ALUNO: "+upper(student.nome):null,student?.turma?"TURMA: "+upper(student.turma):null,student?.segmento?"SEGMENTO: "+upper(student.segmento):null,"COMPETÊNCIA "+formatCompetence(competence)].filter(Boolean).join(" - ");
 const parseMoneyInput=(value:string)=>{const clean=value.replace(/R\$/g,"").replace(/\s/g,"");if(clean.includes(","))return Number(clean.replace(/\./g,"").replace(",","."));return Number(clean)};
 const dpsDraftVersionPath=(paymentId:number,draftId:string)=>{const timestamp=new Date().toISOString().replace(/\D/g,"").slice(0,17);const revision=timestamp+"-"+crypto.randomUUID().slice(0,8);return "dps/"+paymentId+"/rascunhos/"+revision+"/"+draftId+".xml"};
+
+function Modal({title,onClose,children}:{title:string;onClose:()=>void;children:React.ReactNode}){return <div className="modal-backdrop"><div className="modal-card"><div className="modal-head"><h2>{title}</h2><button className="icon-button" onClick={onClose}><X/></button></div>{children}</div></div>}
 
 function statusOrder(payment:AssistantPayment){
   const status=normalize(payment.status_nfse||"");
@@ -165,13 +172,16 @@ export function IssuanceAssistant({onNavigate}:{onNavigate:(page:AppPage)=>void}
   const [manualSenderId,setManualSenderId]=useState<number|null>(null);
   const [manualPending,setManualPending]=useState<ManualPending|null>(null);
   const [agendaEduInfo,setAgendaEduInfo]=useState<AgendaEduInfo|null>(null);
+  const [responsibleSwitchOpen,setResponsibleSwitchOpen]=useState(false);
+  const [responsibleSwitchBusy,setResponsibleSwitchBusy]=useState("");
+  const [responsibleSwitchOptions,setResponsibleSwitchOptions]=useState<SweducResponsible[]>([]);
 
   const load=useCallback(async(silent=false)=>{
     if(!supabase)return;
     if(!silent)setLoading(true);else setRefreshing(true);
     setError("");
     const [paymentsResult,studentsResult,deliveriesResult]=await Promise.all([
-      supabase.from("mensalidades").select("id,aluno_id,competencia,valor_nfse,descricao_servico,status_pagamento,status_nfse,dps_xml_path,dps_xml_id,nfse_homologacao_xml_path,chave_nfse_homologacao,homologacao_emitida_em,alunos(nome,turma,responsavel,segmento,cpf_cnpj,email,whatsapp,agenda_edu_student_id,agenda_edu_use_external_id,cep,logradouro,numero,cidade,uf)").order("created_at",{ascending:false}),
+      supabase.from("mensalidades").select("id,aluno_id,competencia,valor_nfse,descricao_servico,status_pagamento,status_nfse,dps_xml_path,dps_xml_id,nfse_homologacao_xml_path,chave_nfse_homologacao,homologacao_emitida_em,alunos(nome,turma,responsavel,segmento,cpf_cnpj,email,whatsapp,agenda_edu_student_id,agenda_edu_use_external_id,cep,logradouro,numero,complemento,bairro,cidade,uf,sweduc_matricula_id,sweduc_aluno_id,sweduc_ano_letivo)").order("created_at",{ascending:false}),
       supabase.from("alunos").select("id,nome,turma,segmento,responsavel,cpf_cnpj,email,whatsapp,cep,logradouro,numero,complemento,bairro,cidade,uf").order("nome"),
       supabase.from("nfse_entregas").select("mensalidade_id,status,canal,created_at").order("created_at",{ascending:false}),
     ]);
@@ -732,6 +742,36 @@ export function IssuanceAssistant({onNavigate}:{onNavigate:(page:AppPage)=>void}
     }
     onNavigate(target);
   }
+  async function openResponsibleSwitch(){
+    if(!supabase||!selected?.alunos?.sweduc_matricula_id)return;
+    setResponsibleSwitchOpen(true);setResponsibleSwitchBusy("Carregando responsáveis da SWeduc…");setResponsibleSwitchOptions([]);setError("");
+    try{
+      const {data:{session}}=await supabase.auth.getSession();
+      if(!session)throw new Error("Sua sessão expirou. Entre novamente.");
+      const student={matricula_id:selected.alunos.sweduc_matricula_id,aluno_id:selected.alunos.sweduc_aluno_id||0,nome:selected.alunos.nome,num_matricula:"",status:null,unidade:null,curso:selected.alunos.segmento,serie:null,turma:selected.alunos.turma,ano_letivo:selected.alunos.sweduc_ano_letivo||null};
+      const response=await authenticatedFetch("/api/integrations/sweduc",{method:"POST",headers:{Authorization:`Bearer ${session.access_token}`,"Content-Type":"application/json"},body:JSON.stringify({action:"details",matriculaId:selected.alunos.sweduc_matricula_id,student}),cache:"no-store"});
+      const data=await response.json().catch(()=>({})) as {responsaveis?:SweducResponsible[];error?:string};
+      if(!response.ok)throw new Error(data.error||"Não foi possível carregar os responsáveis da SWeduc.");
+      const options=data.responsaveis||[];
+      if(!options.length)throw new Error("A SWeduc não retornou outros responsáveis para esta matrícula.");
+      setResponsibleSwitchOptions(options);
+      setResponsibleSwitchBusy("");
+    }catch(cause){setResponsibleSwitchBusy("");setError(cause instanceof Error?cause.message:"Não foi possível trocar o responsável.")}
+  }
+  async function applyResponsibleToCurrentEmission(responsible:SweducResponsible,index:number){
+    if(!supabase||!selected?.alunos||!canPrepare)return;
+    setResponsibleSwitchBusy("Salvando responsável da nota…");setError("");
+    try{
+      const base:AssistantStudent={id:selected.aluno_id,nome:selected.alunos.nome,turma:selected.alunos.turma,segmento:selected.alunos.segmento,responsavel:selected.alunos.responsavel,cpf_cnpj:selected.alunos.cpf_cnpj,email:selected.alunos.email,whatsapp:selected.alunos.whatsapp,cep:selected.alunos.cep,logradouro:selected.alunos.logradouro,numero:selected.alunos.numero,complemento:selected.alunos.complemento||null,bairro:selected.alunos.bairro||null,cidade:selected.alunos.cidade,uf:selected.alunos.uf,sweduc_matricula_id:selected.alunos.sweduc_matricula_id||null,sweduc_aluno_id:selected.alunos.sweduc_aluno_id||null,sweduc_ano_letivo:selected.alunos.sweduc_ano_letivo||null};
+      const updated=applySweducResponsible(base,responsible,index);
+      if(!updated.responsavel||!updated.cpf_cnpj)throw new Error("O responsável escolhido precisa ter nome e CPF/CNPJ para emissão.");
+      const result=await supabase.from("alunos").update({responsavel:updated.responsavel,cpf_cnpj:updated.cpf_cnpj,email:updated.email,whatsapp:updated.whatsapp,cep:updated.cep,logradouro:updated.logradouro,numero:updated.numero,complemento:updated.complemento||null,bairro:updated.bairro||null,cidade:updated.cidade,uf:updated.uf}).eq("id",selected.aluno_id);
+      if(result.error)throw new Error(result.error.message);
+      setResponsibleSwitchOpen(false);setResponsibleSwitchOptions([]);setResponsibleSwitchBusy("");
+      setMessage("Responsável da nota atualizado. Continue a validação do assistente.");
+      await load(true);
+    }catch(cause){setResponsibleSwitchBusy("");setError(cause instanceof Error?cause.message:"Não foi possível salvar o responsável da nota.")}
+  }
   function openOfficialHomologation(){
     if(!selected)return;
     const focus=String(selected.id);
@@ -1070,9 +1110,21 @@ export function IssuanceAssistant({onNavigate}:{onNavigate:(page:AppPage)=>void}
             <button className="primary assistant-main-action" onClick={continueProcess} disabled={Boolean(busyAction)||(!canPrepare&&effectiveCurrent>=2&&effectiveCurrent<8)}>
               {busyAction==="validate"?"Validando…":busyAction==="save-dps"?"Salvando DPS…":busyAction==="approve"?"Aprovando…":busyAction==="xml"?"Gerando XML…":effectiveCurrent===2&&missing.length?"Corrigir cadastro":effectiveCurrent===2?"Validar nota":effectiveCurrent===3?"Salvar DPS e ver prévia":effectiveCurrent===4?"Aprovar prévia":effectiveCurrent===5?"Gerar e validar XML":effectiveCurrent===6?"Abrir homologação NFS-e":effectiveCurrent>=8?"Ir para envio":"Continuar processo"} <ChevronRight size={18}/>
             </button>
+            {effectiveCurrent<=2&&selected.alunos?.sweduc_matricula_id&&<button className="secondary" type="button" onClick={()=>void openResponsibleSwitch()} disabled={Boolean(responsibleSwitchBusy)||!canPrepare}><UsersRound size={17}/>Trocar responsável</button>}
             {effectiveCurrent>2&&effectiveCurrent<8&&<button className="secondary" onClick={()=>effectiveCurrent===6?openOfficialHomologation():focusAndNavigate("NFS-e")}>{effectiveCurrent===6?"Abrir homologação oficial":"Abrir NFS-e atual"}</button>}
             {progress?.finished&&<button className="secondary" onClick={()=>focusAndNavigate("Enviar notas")}>Abrir central de envios</button>}
           </div>}
+          {responsibleSwitchOpen&&<Modal title="Trocar responsável da nota" onClose={()=>{setResponsibleSwitchOpen(false);setResponsibleSwitchOptions([]);setResponsibleSwitchBusy("")}}>
+            <div className="assistant-responsible-modal">
+              <div className="notice compact"><UsersRound/><span>Escolha o responsável correto para esta emissão. O cadastro usado pela nota será atualizado antes da validação.</span></div>
+              {responsibleSwitchBusy?<div className="assistant-loading">{responsibleSwitchBusy}</div>:responsibleSwitchOptions.length===0?<div className="assistant-empty">Nenhum responsável disponível para trocar.</div>:<div className="assistant-responsible-list">
+                {responsibleSwitchOptions.map((responsible,index)=><button key={`${responsible.nome||"responsavel"}-${index}`} type="button" onClick={()=>void applyResponsibleToCurrentEmission(responsible,index)}>
+                  <span><strong>{responsible.nome||`Responsável ${index+1}`}</strong>{responsible.responsavel_pedagogico&&<em>Sugerido pela SWeduc</em>}</span>
+                  <small>{sweducResponsibleDocument(responsible)} · {sweducResponsibleContact(responsible)}</small>
+                </button>)}
+              </div>}
+            </div>
+          </Modal>}
         </>}
       </article>
     </section>}
