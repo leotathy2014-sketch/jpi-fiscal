@@ -460,7 +460,8 @@ export function SettingsPage({accessToken,onNavigate}:{accessToken:string|null;o
     {name:"Integrações" as Tab,label:"Integrações",Icon:Link2,permissions:["settings.integrations.view","settings.integrations.edit"]},
     {name:"Usuários e Permissões" as Tab,label:"Usuários e Permissões",Icon:UserCog,permissions:["settings.users.view","settings.users.manage"]},
   ].filter(item=>canAny(item.permissions)),[canAny]);
-  const [tab,setTab]=useState<Tab>("Empresa");
+  const [tab,setTab]=useState<Tab>(()=>typeof window==="undefined"?"Empresa":(sessionStorage.getItem("jpi-settings-tab") as Tab)||"Empresa");
+  useEffect(()=>{const target=sessionStorage.getItem("jpi-settings-tab") as Tab|null;if(target){sessionStorage.removeItem("jpi-settings-tab");setTab(target)}},[]);
   useEffect(()=>{if(availableTabs.length&&!availableTabs.some(item=>item.name===tab))setTab(availableTabs[0].name)},[availableTabs,tab]);
   if(!availableTabs.length)return <><Heading title="Configurações" desc="Seu perfil não possui módulos de configuração liberados."/><div className="notice warning"><ShieldCheck/><span>Solicite ao Master a liberação das permissões necessárias.</span></div></>;
   return (
@@ -1448,7 +1449,8 @@ type IntegrationSection="overview"|"nfse"|"email"|"whatsapp"|"manual-whatsapp"|"
 function Integrations({accessToken,onNavigate}:{accessToken:string|null;onNavigate?:(page:AppPage)=>void}) {
   const supabase=useMemo(()=>createSupabaseBrowserClient(),[]);
   const {can,isMaster}=useAccess();const canEdit=can("settings.integrations.edit");const canTestFiscal=can("nfse.test_connection");
-  const [section,setSection]=useState<IntegrationSection>("overview");
+  const [section,setSection]=useState<IntegrationSection>(()=>typeof window==="undefined"?"overview":(sessionStorage.getItem("jpi-integrations-section") as IntegrationSection)||"overview");
+  useEffect(()=>{const target=sessionStorage.getItem("jpi-integrations-section") as IntegrationSection|null;if(target){sessionStorage.removeItem("jpi-integrations-section");setSection(target)}},[]);
   const [sefinAvailability,setSefinAvailability]=useState<"checking"|"available"|"unstable"|"unavailable"|"unknown"|"session">("checking");
   const [sefinCheckedAt,setSefinCheckedAt]=useState<Date|null>(null);
   const [productionEnabled,setProductionEnabled]=useState(false);

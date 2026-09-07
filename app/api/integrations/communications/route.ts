@@ -179,7 +179,9 @@ export async function POST(request:NextRequest){
       const result=await searchAgendaEduStudents({accessToken,schoolToken:credentials.schoolToken,name:String(student.nome||""),className:String(student.turma||""),grade:String(student.segmento||""),externalId:student.sweduc_matricula_id?String(student.sweduc_matricula_id):null});
       const best=result.candidates[0];const autoLinked=Boolean(best&&best.score>=95);
       if(autoLinked){
-        const {error:updateError}=await auth.supabase.from("alunos").update({agenda_edu_student_id:best.id,agenda_edu_use_external_id:false}).eq("id",studentId);
+        let updateRequest=auth.supabase.from("alunos").update({agenda_edu_student_id:best.id,agenda_edu_use_external_id:false});
+        updateRequest=student.sweduc_matricula_id?updateRequest.eq("sweduc_matricula_id",student.sweduc_matricula_id):updateRequest.eq("id",studentId);
+        const {error:updateError}=await updateRequest;
         if(updateError)return json({error:"Aluno encontrado na Agenda Edu, mas não foi possível salvar o vínculo."},500);
       }
       return json({ok:true,autoLinked,candidates:result.candidates,attempted:result.attempted,message:autoLinked?`Vínculo Agenda Edu salvo para ${student.nome}.`:`Encontramos ${result.candidates.length} possível(is) aluno(s). Confira antes de salvar.`});
