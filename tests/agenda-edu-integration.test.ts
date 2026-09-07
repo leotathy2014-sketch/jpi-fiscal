@@ -48,6 +48,8 @@ test("oferece configuração e vínculo administrativo sem expor segredos",()=>{
   assert.match(communicationsApiSource,/store_communication_secret/);
   assert.match(studentLinksSource,/Vincular alunos à Agenda Edu/);
   assert.match(studentLinksSource,/agenda_edu_student_id/);
+  assert.match(studentLinksSource,/Localizar na Agenda Edu/);
+  assert.match(communicationsApiSource,/find-agenda-student/);
 });
 
 test("oferece lote, histórico e reenvio no canal Agenda Edu",()=>{
@@ -63,6 +65,8 @@ test("usa os endpoints e o contrato oficial da Agenda Edu v2",()=>{
   assert.match(agendaClientSource,/grant_type:"client_credentials"/);
   assert.match(agendaClientSource,/"x-school-token"/);
   assert.match(agendaClientSource,/kind:"family"/);
+  assert.match(agendaClientSource,/searchAgendaEduStudents/);
+  assert.match(agendaClientSource,/\/students\?/);
   assert.match(agendaClientSource,/chatIds\[\]/);
   assert.match(agendaClientSource,/form\.append\("attachment"/);
 });

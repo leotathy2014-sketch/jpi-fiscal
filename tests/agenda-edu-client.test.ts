@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { parseAgendaEduCredentials, resolveAgendaEduFamilyChat, sendAgendaEduAttachment, serializeAgendaEduCredentials, testAgendaEduConnection } from "../lib/agenda-edu.ts";
+import { parseAgendaEduCredentials, resolveAgendaEduFamilyChat, searchAgendaEduStudents, sendAgendaEduAttachment, serializeAgendaEduCredentials, testAgendaEduConnection } from "../lib/agenda-edu.ts";
 
 test("mantém as três credenciais juntas no segredo protegido",()=>{
   const credentials={clientId:"cliente-teste",clientSecret:"segredo-teste",schoolToken:"escola-teste"};
@@ -38,4 +38,17 @@ test("gera o OAuth e consulta canais no Sandbox sem criar mensagem",async()=>{
   assert.match(String(calls[0].init?.body),/grant_type=client_credentials/);
   assert.equal((calls[1].init?.headers as Record<string,string>)["x-school-token"],"escola");
   assert.doesNotMatch(calls.map(call=>call.url).join(" "),/\/messages/);
+});
+
+test("localiza aluno na Agenda Edu por nome e turma antes de abrir chat familiar",async()=>{
+  const calls:Array<{url:string;init?:RequestInit}>=[];
+  const fakeFetch:typeof fetch=async(input,init)=>{
+    const url=String(input);calls.push({url,init});
+    return new Response(JSON.stringify({data:[{id:"stu-9193",attributes:{name:"ZION FERREIRA DA COSTA ANDRADE",className:"601",grade:"Ensino Fundamental 2",externalId:"9193"}}]}),{status:200,headers:{"Content-Type":"application/json"}});
+  };
+  const result=await searchAgendaEduStudents({accessToken:"token",schoolToken:"school",name:"Zion Ferreira da Costa Andrade",className:"601",grade:"Ensino Fundamental 2",externalId:"9193"},fakeFetch);
+  assert.equal(result.candidates[0].id,"stu-9193");
+  assert.ok(result.candidates[0].score>=95);
+  assert.match(calls[0].url,/\/students\?/);
+  assert.equal((calls[0].init?.headers as Record<string,string>)["x-school-token"],"school");
 });

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { sendSmtpEmail } from "@/lib/smtp";
-import { serializeAgendaEduCredentials, parseAgendaEduCredentials, testAgendaEduConnection } from "@/lib/agenda-edu";
+import { createAgendaEduAccessToken, serializeAgendaEduCredentials, parseAgendaEduCredentials, searchAgendaEduStudents, testAgendaEduConnection } from "@/lib/agenda-edu";
 import { hasServerPermission } from "@/lib/server-permissions";
 
 export const runtime = "nodejs";
@@ -163,6 +163,28 @@ export async function POST(request:NextRequest){
     }catch(testError){
       await auth.supabase.from("integracoes_comunicacao").update({agenda_edu_ultimo_status:"erro",updated_at:new Date().toISOString(),updated_by:auth.user.id}).eq("id",true);
       return json({error:testError instanceof Error?testError.message:"A Agenda Edu não confirmou a conexão com o Sandbox."},400);
+    }
+  }
+
+  if(action==="find-agenda-student"){
+    if(!await hasServerPermission(auth.supabase,"settings.integrations.edit"))return json({error:"Seu usuário não possui permissão para vincular alunos da Agenda Edu."},403);
+    const studentId=Number(body.studentId);
+    if(!Number.isSafeInteger(studentId)||studentId<=0)return json({error:"Selecione um aluno válido para localizar na Agenda Edu."},400);
+    const {data:student,error:studentError}=await auth.supabase.from("alunos").select("id,nome,turma,segmento,sweduc_matricula_id,agenda_edu_student_id").eq("id",studentId).maybeSingle();
+    if(studentError||!student)return json({error:"Aluno não encontrado no cadastro fiscal."},404);
+    const {data:storedSecret,error:secretError}=await auth.supabase.rpc("get_communication_secret",{p_channel:"agenda_edu",p_backend_secret:backendSecret});
+    if(secretError||!storedSecret)return json({error:"Cadastre primeiro as credenciais da Agenda Edu."},400);
+    try{
+      const credentials=parseAgendaEduCredentials(String(storedSecret));const {accessToken}=await createAgendaEduAccessToken(credentials);
+      const result=await searchAgendaEduStudents({accessToken,schoolToken:credentials.schoolToken,name:String(student.nome||""),className:String(student.turma||""),grade:String(student.segmento||""),externalId:student.sweduc_matricula_id?String(student.sweduc_matricula_id):null});
+      const best=result.candidates[0];const autoLinked=Boolean(best&&best.score>=95);
+      if(autoLinked){
+        const {error:updateError}=await auth.supabase.from("alunos").update({agenda_edu_student_id:best.id,agenda_edu_use_external_id:false}).eq("id",studentId);
+        if(updateError)return json({error:"Aluno encontrado na Agenda Edu, mas não foi possível salvar o vínculo."},500);
+      }
+      return json({ok:true,autoLinked,candidates:result.candidates,attempted:result.attempted,message:autoLinked?`Vínculo Agenda Edu salvo para ${student.nome}.`:`Encontramos ${result.candidates.length} possível(is) aluno(s). Confira antes de salvar.`});
+    }catch(testError){
+      return json({error:testError instanceof Error?testError.message:"A Agenda Edu não permitiu localizar o aluno."},400);
     }
   }
 
