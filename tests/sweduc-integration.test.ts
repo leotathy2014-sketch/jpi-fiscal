@@ -98,12 +98,14 @@ test("permite buscar aluno SWeduc no cadastro e no assistente sem abrir configur
   assert.match(operationalPicker,/isFinancialResponsible/);
   assert.match(assistant,/isSweducFinancialResponsible/);
   assert.match(operationalPicker,/Selecionar aluno/);
-  assert.match(operationalPicker,/preparar a nota/);
+  assert.match(operationalPicker,/Preparar para a nota/);
   assert.match(operationalPicker,/syncYears/);
   assert.match(operationalPicker,/filteredYears/);
   assert.match(operationalPicker,/action:"lookup"/);
-  assert.match(operationalPicker,/Digite pelo menos 2 letras/);
-  assert.match(operationalPicker,/DIGITE O NOME DO ALUNO E APERTE ENTER/);
+  assert.match(operationalPicker,/hasAcademicFilter/);
+  assert.match(operationalPicker,/lastAutoConsultRef/);
+  assert.match(operationalPicker,/void consult\(\)/);
+  assert.match(operationalPicker,/DIGITE O NOME OU BUSQUE A TURMA SELECIONADA/);
   assert.doesNotMatch(appPage,/jpi-sweduc-login-preload/);
   assert.doesNotMatch(appPage,/Atualizando alunos SWeduc/);
   assert.match(operationalPicker,/action:"details"/);

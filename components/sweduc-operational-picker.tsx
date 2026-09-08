@@ -1,5 +1,5 @@
 "use client";
-import {Fragment,useCallback,useEffect,useMemo,useState} from "react";
+import {Fragment,useCallback,useEffect,useMemo,useRef,useState} from "react";
 import {Check,RefreshCw,Search,UserCheck,UsersRound} from "lucide-react";
 import {createSupabaseBrowserClient} from "@/lib/supabase";
 import {authenticatedFetch} from "@/lib/authenticated-fetch";
@@ -51,6 +51,7 @@ export function SweducOperationalPicker({onStudentReady}:{onStudentReady:(studen
   const [busy,setBusy]=useState("");
   const [error,setError]=useState("");
   const [message,setMessage]=useState("");
+  const lastAutoConsultRef=useRef("");
 
   const token=useCallback(async()=>{
     if(!supabase)throw new Error("Sessão indisponível. Entre novamente.");
@@ -97,13 +98,15 @@ export function SweducOperationalPicker({onStudentReady}:{onStudentReady:(studen
   const safeGridPage=Math.min(gridPage,totalGridPages);
   const pagedVisible=visible.slice((safeGridPage-1)*pageSize,safeGridPage*pageSize);
   useEffect(()=>{setGridPage(1)},[query,courseFilter,serieFilter,turmaFilter,selectedYear]);
+  const hasAcademicFilter=Boolean(courseFilter||serieFilter||turmaFilter);
+  const canConsult=Boolean(selectedYear&&(query.trim().length>=2||hasAcademicFilter));
 
   async function consult(yearOverride?:number){
     const activeYear=yearOverride||selectedYear;
     if(!activeYear)return;
     const term=query.trim();
-    if(term.length<2){setError("Digite pelo menos 2 letras do nome do aluno para buscar na SWeduc.");return}
-    setBusy("consult");setError("");setMessage(`Buscando "${term}" em ${activeYear} na SWeduc…`);
+    if(term.length<2&&!hasAcademicFilter){setMessage("Digite o nome ou selecione segmento, série ou turma para consultar.");return}
+    setBusy("consult");setError("");setMessage(term?`Buscando "${term}" em ${activeYear} na SWeduc…`:`Buscando alunos pelos filtros selecionados em ${activeYear}…`);
     setStudents([]);setSelected(null);setResponsibleIndex(0);setGridPage(1);
     let page=1;let total=0;
     try{
@@ -119,6 +122,14 @@ export function SweducOperationalPicker({onStudentReady}:{onStudentReady:(studen
       }
     }catch(e){setError(e instanceof Error?e.message:"Não foi possível consultar a SWeduc.")}finally{setBusy("")}
   }
+
+  useEffect(()=>{
+    if(!selectedYear||!courseFilter||!serieFilter||!turmaFilter||busy)return;
+    const key=[selectedYear,courseFilter,serieFilter,turmaFilter].join("|");
+    if(lastAutoConsultRef.current===key)return;
+    lastAutoConsultRef.current=key;
+    void consult();
+  },[selectedYear,courseFilter,serieFilter,turmaFilter,busy]);
 
   async function openResponsibleChoice(student:SweducStudent){
     setSelected(student);setBusy(`details-${student.matricula_id}`);setError("");setMessage("Carregando responsáveis da SWeduc para conferência…");setResponsibleIndex(0);
@@ -150,15 +161,15 @@ export function SweducOperationalPicker({onStudentReady}:{onStudentReady:(studen
 
   const responsibleCard=selected?<div className="responsible-match-card sweduc-responsible-confirm" role="dialog" aria-label="Confirmar responsável financeiro SWeduc"><div><UserCheck/><span><strong>Confirmar responsável da nota</strong><small>{selected.nome} · matrícula {selected.numero_matricula||selected.matricula_id}</small></span></div>{busy===`details-${selected.matricula_id}`?<p>Carregando responsáveis vinculados a este aluno…</p>:selected.responsaveis.length>0?<div className="sweduc-responsible-options">{selected.responsaveis.map((responsible,index)=><label key={`${responsible.nome||"responsavel"}-${index}`} className="sweduc-responsible-option"><input type="radio" name={`sweduc-responsible-${selected.matricula_id}`} checked={responsibleIndex===index} onChange={()=>setResponsibleIndex(index)}/><span><strong>{responsible.nome||`Responsável ${index+1}`}{isFinancialResponsible(responsible)?<em className="sweduc-financial-responsible"><Check size={13}/>Responsável financeiro</em>:isTrueFlag(responsible.responsavel_pedagogico)&&<em className="sweduc-suggested-responsible"><Check size={13}/>Sugerido pela SWeduc</em>}</strong><small>{responsibleRoleText(responsible)} · {responsibleDocument(responsible)} · {responsibleContact(responsible)}</small></span></label>)}</div>:<p>A SWeduc não retornou responsável para esta matrícula. Confira com o suporte antes de carregar para a nota.</p>}<div><button type="button" className="secondary" onClick={()=>setSelected(null)}>Cancelar</button><button type="button" className="primary" disabled={Boolean(busy)||selected.responsaveis.length===0} onClick={()=>void loadForNote()}>{busy===`import-${selected.matricula_id}`?"Preparando…":<><Check size={15}/>Preparar para a nota</>}</button></div><small>Nada será gravado agora. O cadastro fiscal só será salvo quando a emissão for confirmada.</small></div>:null;
 
-  return <section className="notice compact sweduc-operational-picker"><UsersRound/><div><strong>Buscar aluno na SWeduc</strong><span>Filtre por ano, segmento, série e turma. Depois busque o aluno pelo nome para preparar a nota.</span>
+  return <section className="notice compact sweduc-operational-picker"><UsersRound/><div><strong>Buscar aluno na SWeduc</strong><span>Escolha os filtros e pesquise pelo nome, ou deixe o nome vazio para listar a turma selecionada.</span>
     <div className="sweduc-student-search-panel">
       <div className="sweduc-filter-row">
-        <label>Ano letivo<select value={selectedYear||""} disabled={!years.length} onChange={event=>{const year=Number(event.target.value);setSelectedYear(year);setStudents([]);setSelected(null);setResponsibleIndex(0);setQuery("");setCourseFilter("");setSerieFilter("");setTurmaFilter("");setMessage("Ano selecionado. Agora escolha os filtros e pesquise o aluno pelo nome.")}}>{years.map(year=><option key={year.year} value={year.year}>{year.year}</option>)}</select></label>
-        <label>Segmento / curso<select value={courseFilter} disabled={Boolean(busy)||!selectedYear||!courseOptions.length} onChange={event=>{setCourseFilter(event.target.value);setSerieFilter("");setTurmaFilter("")}}><option value="">Todos</option>{courseOptions.map(option=><option key={option} value={option}>{option}</option>)}</select></label>
-        <label>Série<select value={serieFilter} disabled={Boolean(busy)||!courseFilter} onChange={event=>{setSerieFilter(event.target.value);setTurmaFilter("")}}><option value="">Todas</option>{serieOptions.map(option=><option key={option} value={option}>{option}</option>)}</select></label>
+        <label>Ano letivo<select value={selectedYear||""} disabled={!years.length} onChange={event=>{const year=Number(event.target.value);lastAutoConsultRef.current="";setSelectedYear(year);setStudents([]);setSelected(null);setResponsibleIndex(0);setQuery("");setCourseFilter("");setSerieFilter("");setTurmaFilter("");setMessage("Ano selecionado. Agora escolha os filtros e pesquise o aluno pelo nome.")}}>{years.map(year=><option key={year.year} value={year.year}>{year.year}</option>)}</select></label>
+        <label>Segmento / curso<select value={courseFilter} disabled={Boolean(busy)||!selectedYear||!courseOptions.length} onChange={event=>{lastAutoConsultRef.current="";setCourseFilter(event.target.value);setSerieFilter("");setTurmaFilter("")}}><option value="">Todos</option>{courseOptions.map(option=><option key={option} value={option}>{option}</option>)}</select></label>
+        <label>Série<select value={serieFilter} disabled={Boolean(busy)||!courseFilter} onChange={event=>{lastAutoConsultRef.current="";setSerieFilter(event.target.value);setTurmaFilter("")}}><option value="">Todas</option>{serieOptions.map(option=><option key={option} value={option}>{option}</option>)}</select></label>
         <label>Turma<select value={turmaFilter} disabled={Boolean(busy)||!serieFilter} onChange={event=>setTurmaFilter(event.target.value)}><option value="">Todas</option>{turmaOptions.map(option=><option key={option} value={option}>{option}</option>)}</select></label>
       </div>
-      <label className="sweduc-search-row sweduc-search-label">Pesquisar aluno<div className="search-input sweduc-student-name-search"><Search/><input value={query} disabled={Boolean(busy)} onChange={event=>setQuery(event.target.value.toLocaleUpperCase("pt-BR"))} onKeyDown={event=>{if(event.key==="Enter"){event.preventDefault();void consult()}}} placeholder="DIGITE O NOME DO ALUNO E APERTE ENTER"/><button type="button" aria-label="Pesquisar aluno" disabled={Boolean(busy)||!selectedYear||query.trim().length<2} onClick={()=>void consult()}>{busy==="consult"?<RefreshCw size={15}/>:<Search size={16}/>}</button></div></label>
+      <label className="sweduc-search-row sweduc-search-label">Pesquisar aluno<div className="search-input sweduc-student-name-search"><Search/><input value={query} disabled={Boolean(busy)} onChange={event=>setQuery(event.target.value.toLocaleUpperCase("pt-BR"))} onKeyDown={event=>{if(event.key==="Enter"){event.preventDefault();void consult()}}} placeholder="DIGITE O NOME OU BUSQUE A TURMA SELECIONADA"/><button type="button" aria-label="Pesquisar aluno" disabled={Boolean(busy)||!canConsult} onClick={()=>void consult()}>{busy==="consult"?<RefreshCw size={15}/>:<Search size={16}/>}</button></div></label>
     </div>
     {error&&<span className="agenda-secret-error">{error}</span>}{message&&<small>{message}</small>}
     {visible.length>0&&<div className="table-card"><div className="sweduc-grid-pagination"><span>Página {safeGridPage} de {totalGridPages} · {visible.length} aluno(s) encontrado(s) · 25 por página</span><button type="button" className="secondary mini" disabled={safeGridPage<=1} onClick={()=>setGridPage(page=>Math.max(1,page-1))}>Anterior</button><button type="button" className="secondary mini" disabled={safeGridPage>=totalGridPages} onClick={()=>setGridPage(page=>Math.min(totalGridPages,page+1))}>Próxima</button></div><table><thead><tr><th>Ano letivo</th><th>Matrícula</th><th>Aluno</th><th>Segmento / curso</th><th>Turma / série</th><th></th></tr></thead><tbody>{pagedVisible.map(student=><Fragment key={student.matricula_id}><tr className={selected?.matricula_id===student.matricula_id?"selected-row":""} onClick={()=>{if(!busy)void openResponsibleChoice(student)}}><td>{student.ano_letivo||selectedYear}</td><td>{student.numero_matricula||student.matricula_id}</td><td><strong>{student.nome}</strong><span className="subcell">{student.unidade||"Unidade não informada"}</span></td><td>{student.curso||"—"}</td><td>{[student.turma,student.serie].filter(Boolean).join(" · ")||"—"}</td><td><button type="button" className="primary mini sweduc-select-student-button" aria-label={`Selecionar aluno ${student.nome}`} disabled={Boolean(busy)||visible.length<1} onClick={event=>{event.stopPropagation();void openResponsibleChoice(student)}}>{busy===`details-${student.matricula_id}`?"Carregando…":"Selecionar"}</button></td></tr>{selected?.matricula_id===student.matricula_id&&<tr className="sweduc-responsible-row"><td colSpan={6}>{responsibleCard}</td></tr>}</Fragment>)}</tbody></table>{visible.length>pageSize&&<small>Grade em ordem alfabética. Use a paginação ou refine os filtros para localizar mais rápido.</small>}</div>}
