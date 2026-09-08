@@ -27,6 +27,8 @@ test("protege a rota e separa credenciais, documentos e destinatário",()=>{
   assert.match(deliveryApiSource,/get_communication_secret/);
   assert.match(deliveryApiSource,/documentos-nfse/);
   assert.match(deliveryApiSource,/sandbox:student:/);
+  assert.match(deliveryApiSource,/sweduc_matricula_id/);
+  assert.match(deliveryApiSource,/useExternalId/);
   assert.doesNotMatch(deliveryUiSource,/clientSecret/);
 });
 

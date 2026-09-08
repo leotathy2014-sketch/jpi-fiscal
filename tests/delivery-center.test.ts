@@ -26,6 +26,8 @@ test("organiza os envios por e-mail, WhatsApp e Agenda Edu",()=>{
   assert.match(uiSource,/channel==="agenda-edu"\?"\/api\/deliveries\/agenda-edu"/);
   assert.match(uiSource,/authenticatedFetch\("\/api\/deliveries\/whatsapp-manual"/);
   assert.match(uiSource,/ID Agenda Edu do aluno não vinculado/);
+  assert.match(uiSource,/Matrícula SWeduc/);
+  assert.match(uiSource,/Localizar ID/);
 });
 
 test("impede que homologações sejam enviadas aos responsáveis",()=>{

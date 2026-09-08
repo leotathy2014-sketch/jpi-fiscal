@@ -15,7 +15,7 @@ const json=(body:Record<string,unknown>,status=200)=>NextResponse.json(body,{sta
 const safeKey=(value:string)=>value.replace(/[^a-z0-9]/gi,"").slice(0,60)||"documento";
 
 type AgendaConfig={agenda_edu_channel_id:string|null;agenda_edu_environment:string;agenda_edu_credencial_configurada:boolean;agenda_edu_ultimo_status:string};
-type PaymentSource={id:number;competencia:string;valor_nfse:number;alunos:{nome:string;responsavel:string;agenda_edu_student_id:string|null;agenda_edu_use_external_id:boolean}|null};
+type PaymentSource={id:number;competencia:string;valor_nfse:number;alunos:{nome:string;responsavel:string;agenda_edu_student_id:string|null;agenda_edu_use_external_id:boolean;sweduc_matricula_id:number|null}|null};
 type DocumentSource={id:number;mensalidade_id:number;versao:number;chave_acesso:string;nfse_xml_path:string;estado:string};
 
 async function authorizedClient(request:NextRequest){
@@ -64,7 +64,7 @@ export async function POST(request:NextRequest){
   if(existing)return json({ok:existing.status==="enviado",alreadyProcessed:true,status:existing.status,sentAt:existing.enviado_em,error:existing.erro_mensagem},existing.status==="erro"?409:200);
 
   const [paymentResult,documentResult,configResult]=await Promise.all([
-    auth.supabase.from("mensalidades").select("id,competencia,valor_nfse,alunos(nome,responsavel,agenda_edu_student_id,agenda_edu_use_external_id)").eq("id",monthlyId).maybeSingle(),
+    auth.supabase.from("mensalidades").select("id,competencia,valor_nfse,alunos(nome,responsavel,agenda_edu_student_id,agenda_edu_use_external_id,sweduc_matricula_id)").eq("id",monthlyId).maybeSingle(),
     auth.supabase.from("nfse_documentos_homologacao").select("id,mensalidade_id,versao,chave_acesso,nfse_xml_path,estado").eq("id",documentId).eq("mensalidade_id",monthlyId).eq("estado","ativa").maybeSingle(),
     readConfig(auth.supabase,backendSecret),
   ]);
@@ -74,8 +74,11 @@ export async function POST(request:NextRequest){
   if(configResult.error||!config)return json({error:"Não foi possível carregar a configuração segura da Agenda Edu."},503);
   if(config.agenda_edu_environment!=="homologacao")return json({error:"A entrega pela Agenda Edu está autorizada somente no Sandbox."},403);
   if(!config.agenda_edu_credencial_configurada||config.agenda_edu_ultimo_status!=="conectado"||!config.agenda_edu_channel_id)return json({error:"A integração da Agenda Edu precisa estar configurada e testada."},400);
-  const studentId=String(payment.alunos?.agenda_edu_student_id||"").trim();
-  if(!studentIdPattern.test(studentId))return json({error:"Cadastre o ID deste aluno na Agenda Edu antes do envio."},400);
+  const linkedStudentId=String(payment.alunos?.agenda_edu_student_id||"").trim();
+  const sweducExternalId=payment.alunos?.sweduc_matricula_id?String(payment.alunos.sweduc_matricula_id).trim():"";
+  const useExternalId=!linkedStudentId&&Boolean(sweducExternalId)||Boolean(payment.alunos?.agenda_edu_use_external_id);
+  const studentId=linkedStudentId||sweducExternalId;
+  if(!studentIdPattern.test(studentId))return json({error:"Este aluno não possui ID Agenda Edu nem matrícula SWeduc válida para usar como ID externo."},400);
 
   const subject=`TESTE — NFS-e de homologação · ${payment.alunos?.nome||"Aluno"} · ${payment.competencia}`;
   const usedRecipient=`sandbox:student:${studentId}`;
@@ -101,7 +104,7 @@ export async function POST(request:NextRequest){
     if(accessResult.error)throw new Error("Não foi possível criar o link protegido da NFS-e.");
     const protectedUrl=new URL(`/nota/${accessTokenValue}`,request.nextUrl.origin).toString();
     protectedSecret=String(storedSecret);const credentials=parseAgendaEduCredentials(protectedSecret);const {accessToken}=await createAgendaEduAccessToken(credentials);
-    const common={accessToken,schoolToken:credentials.schoolToken,channelId:config.agenda_edu_channel_id,studentId,useExternalId:Boolean(payment.alunos?.agenda_edu_use_external_id)};
+    const common={accessToken,schoolToken:credentials.schoolToken,channelId:config.agenda_edu_channel_id,studentId,useExternalId};
     const chatId=await resolveAgendaEduFamilyChat(common);
     const prefix="TESTE DE HOMOLOGAÇÃO — SEM VALIDADE FISCAL";
     providerIds.pdf=await sendAgendaEduAttachment({accessToken,schoolToken:credentials.schoolToken,channelId:config.agenda_edu_channel_id,chatId,content:`${prefix}\nNFS-e de ${payment.alunos?.nome||"aluno"}, competência ${payment.competencia}. DANFSe em PDF.\n\nAcesso individual protegido: ${protectedUrl}`,filename:`danfse-homologacao-${safeKey(document.chave_acesso)}.pdf`,contentType:"application/pdf",bytes:new Uint8Array(pdfBuffer)});
