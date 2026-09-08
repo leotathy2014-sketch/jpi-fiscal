@@ -904,6 +904,20 @@
 .sweduc-suggested-responsible svg{width:13px;height:13px;stroke-width:3}
 .sweduc-financial-responsible{display:inline-flex;align-items:center;gap:4px;margin-left:8px;padding:3px 8px;border-radius:999px;background:#dcfce7;color:#047857;border:1px solid #86efac;font-style:normal;font-size:10.5px;font-weight:900;vertical-align:middle}
 .sweduc-financial-responsible svg{width:13px;height:13px;stroke-width:3}
+.agenda-collapsible{display:grid;gap:12px}
+.agenda-collapsible>summary{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:14px;border:1px solid #d8e3f0;border-radius:14px;background:#f8fbff;cursor:pointer;list-style:none}
+.agenda-collapsible>summary::-webkit-details-marker{display:none}
+.agenda-collapsible>summary span{display:grid;gap:3px}
+.agenda-collapsible>summary b{color:#17233a}
+.agenda-collapsible>summary small{color:#68768a;font-size:12px}
+.agenda-collapsible[open]>summary{border-color:#9cc8f5;background:#eef6ff}
+.agenda-structure-results{display:grid;gap:12px;margin-top:12px}
+.agenda-structure-counts{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:8px}
+.agenda-structure-counts span{display:grid;gap:3px;padding:10px 12px;border:1px solid #e2e9f2;border-radius:12px;background:#fff;color:#607086;font-size:12px}
+.agenda-structure-counts b{font-size:18px;color:#0f5132}
+.agenda-structure-issues{display:grid;gap:6px;padding:12px;border:1px solid #f4c784;border-radius:12px;background:#fff7ed;color:#7c3f0c}
+.agenda-structure-issues strong{font-size:13px}
+.agenda-structure-issues small{font-size:12px;line-height:1.35}
 @media(max-width:850px){
  .sweduc-grid-pagination{flex-wrap:wrap!important;gap:5px!important;padding:6px 8px!important;white-space:normal;font-size:10.8px;line-height:1.15}
  .sweduc-grid-pagination>span{flex-basis:100%;margin-right:0}

@@ -53,7 +53,10 @@ test("oferece configuração e vínculo administrativo sem expor segredos",()=>{
   assert.match(studentLinksSource,/Localizar na Agenda Edu/);
   assert.match(communicationsApiSource,/find-agenda-student/);
   assert.match(communicationsApiSource,/diagnose-agenda/);
+  assert.match(communicationsApiSource,/prepare-agenda-structure/);
   assert.match(settingsUiSource,/Diagnóstico da API Agenda Edu/);
+  assert.match(settingsUiSource,/Estrutura escolar Agenda Edu/);
+  assert.match(settingsUiSource,/Preparar estrutura SWeduc sem gravar/);
   assert.match(settingsUiSource,/Nome do aluno/);
   assert.match(settingsUiSource,/Matrícula SWeduc/);
 });
@@ -75,6 +78,15 @@ test("usa os endpoints e o contrato oficial da Agenda Edu v2",()=>{
   assert.match(agendaClientSource,/\/students\?/);
   assert.match(agendaClientSource,/chatIds\[\]/);
   assert.match(agendaClientSource,/form\.append\("attachment"/);
+});
+
+test("prepara estrutura escolar da Agenda Edu a partir da SWeduc sem gravar",()=>{
+  assert.match(communicationsApiSource,/buildAgendaStructure/);
+  assert.match(communicationsApiSource,/legacy_id/);
+  assert.match(communicationsApiSource,/classroom_id/);
+  assert.match(communicationsApiSource,/financial:isFinancialResponsible/);
+  assert.match(communicationsApiSource,/Nada foi gravado na Agenda Edu/);
+  assert.match(communicationsApiSource,/Listar alunos — doc suporte/);
 });
 
 test("não promete leitura inexistente na API pública de Mensagens",()=>{

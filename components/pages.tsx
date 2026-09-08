@@ -1213,6 +1213,7 @@ type CommunicationConfig = {
 };
 type AgendaDiagnosticProbe={label:string;method:string;endpoint:string;status:number;ok:boolean;durationMs:number;count:number|null;sample:unknown};
 type AgendaDiagnosticResult={message:string;baseUrl:string;channelId:string|null;sweducMatriculaId:string|null;studentName:string|null;probes:AgendaDiagnosticProbe[]};
+type AgendaStructurePreview={message:string;filters:Record<string,string|null>;counts:{units:number;classrooms:number;students:number;responsibles:number;links:number;issues:number};samples:Record<string,unknown[]>;issues:string[]};
 
 function CommunicationsSettings({accessToken,onChanged,canEdit,section}:{accessToken:string|null;onChanged:(config:CommunicationConfig)=>void;canEdit:boolean;section:"email"|"whatsapp"|"manual-whatsapp"|"agenda"}) {
   const supabase=useMemo(()=>createSupabaseBrowserClient(),[]);
@@ -1252,6 +1253,12 @@ function CommunicationsSettings({accessToken,onChanged,canEdit,section}:{accessT
   const [agendaDiagnosticName,setAgendaDiagnosticName]=useState("");
   const [agendaDiagnosticMatricula,setAgendaDiagnosticMatricula]=useState("");
   const [agendaDiagnostic,setAgendaDiagnostic]=useState<AgendaDiagnosticResult|null>(null);
+  const [agendaStructure,setAgendaStructure]=useState<AgendaStructurePreview|null>(null);
+  const [agendaStructureYear,setAgendaStructureYear]=useState(String(new Date().getFullYear()));
+  const [agendaStructureUnit,setAgendaStructureUnit]=useState("JPI - Matriz");
+  const [agendaStructureCourse,setAgendaStructureCourse]=useState("");
+  const [agendaStructureSerie,setAgendaStructureSerie]=useState("");
+  const [agendaStructureTurma,setAgendaStructureTurma]=useState("");
 
   useEffect(()=>{
     if(!agendaMasterSecrets)return;
@@ -1337,6 +1344,7 @@ function CommunicationsSettings({accessToken,onChanged,canEdit,section}:{accessT
   async function saveAgenda(event:FormEvent<HTMLFormElement>){event.preventDefault();setBusy("save-agenda");setError("");setMessage("");try{setMessage(await run("save-agenda",{schoolIdentifier:agendaEduSchoolIdentifier,channelId:agendaEduChannelId,clientId:agendaEduClientId,clientSecret:agendaEduClientSecret,schoolToken:agendaEduSchoolToken}));setAgendaEduClientId("");setAgendaEduClientSecret("");setAgendaEduSchoolToken("");await load();}catch(requestError){setError(requestError instanceof Error?requestError.message:"Não foi possível salvar a Agenda Edu.");}finally{setBusy("");}}
   async function testAgenda(){setBusy("test-agenda");setError("");setMessage("");try{setMessage(await run("test-agenda",{}));await load();}catch(requestError){setError(requestError instanceof Error?requestError.message:"Não foi possível testar a Agenda Edu.");}finally{setBusy("");}}
   async function diagnoseAgenda(){setBusy("diagnose-agenda");setError("");setMessage("");setAgendaDiagnostic(null);try{if(!accessToken)throw new Error("Sessão expirada. Entre novamente.");const response=await authenticatedFetch("/api/integrations/communications",{method:"POST",headers:{Authorization:`Bearer ${accessToken}`,"Content-Type":"application/json"},body:JSON.stringify({action:"diagnose-agenda",channelId:agendaEduChannelId,sweducMatriculaId:agendaDiagnosticMatricula,studentName:agendaDiagnosticName}),cache:"no-store"});const data=await response.json().catch(()=>({})) as AgendaDiagnosticResult&{error?:string};if(response.status===401)window.dispatchEvent(new Event("jpi-session-invalid"));if(!response.ok)throw new Error(data.error||"Não foi possível diagnosticar a Agenda Edu.");setAgendaDiagnostic(data);setMessage(data.message||"Diagnóstico Agenda Edu concluído. Nada foi gravado.");}catch(requestError){setError(requestError instanceof Error?requestError.message:"Não foi possível diagnosticar a Agenda Edu.");}finally{setBusy("");}}
+  async function prepareAgendaStructure(){setBusy("prepare-agenda-structure");setError("");setMessage("");setAgendaStructure(null);try{if(!accessToken)throw new Error("Sessão expirada. Entre novamente.");const response=await authenticatedFetch("/api/integrations/communications",{method:"POST",headers:{Authorization:`Bearer ${accessToken}`,"Content-Type":"application/json"},body:JSON.stringify({action:"prepare-agenda-structure",year:agendaStructureYear,unit:agendaStructureUnit,course:agendaStructureCourse,serie:agendaStructureSerie,turma:agendaStructureTurma}),cache:"no-store"});const data=await response.json().catch(()=>({})) as AgendaStructurePreview&{error?:string};if(response.status===401)window.dispatchEvent(new Event("jpi-session-invalid"));if(!response.ok)throw new Error(data.error||"Não foi possível preparar a estrutura Agenda Edu.");setAgendaStructure(data);setMessage(data.message||"Estrutura Agenda Edu preparada. Nada foi gravado.");}catch(requestError){setError(requestError instanceof Error?requestError.message:"Não foi possível preparar a estrutura Agenda Edu.");}finally{setBusy("");}}
   const disabled=loading||Boolean(busy)||!canEdit;
   const sectionCopy={
     email:{title:"E-mail",description:"Servidor, remetente, credencial e teste de entrega por e-mail.",Icon:Mail},
@@ -1400,6 +1408,17 @@ function CommunicationsSettings({accessToken,onChanged,canEdit,section}:{accessT
           <button type="button" className="secondary full" onClick={testAgenda} disabled={disabled||!config?.agenda_edu_credencial_configurada}>{busy==="test-agenda"?"Testando conexão…":"Testar conexão sem enviar mensagem"}</button>
           {config?.agenda_edu_testada_em&&<small className="last-test">Último teste: {new Date(config.agenda_edu_testada_em).toLocaleString("pt-BR")}</small>}
         </form>
+          {isMaster&&canEdit&&<section className="communication-channel-card agenda-structure-card">
+            <div className="communication-channel-head"><span className="integration-icon green"><Building2/></span><div><h3>Estrutura escolar Agenda Edu</h3><small>Prepare unidade, turma, aluno e responsável usando a SWeduc como origem.</small></div><IntegrationStateBadge label="Teste antes de gravar" tone="pending"/></div>
+            <details className="agenda-collapsible" open={false}>
+              <summary><span><b>Teste antes de gravar</b><small>Abre somente quando precisar conferir a estrutura.</small></span><ArrowUpRight size={16}/></summary>
+              <div className="notice compact"><ShieldCheck/><span>Este passo apenas monta os dados que seriam enviados para a Agenda Edu. Não cria unidade, turma, aluno, responsável, chat e não envia nota.</span></div>
+              <div className="form-row"><label>Ano letivo<input inputMode="numeric" value={agendaStructureYear} onChange={event=>setAgendaStructureYear(event.target.value.replace(/\D/g,"").slice(0,4))}/></label><label>Unidade<select value={agendaStructureUnit} onChange={event=>setAgendaStructureUnit(event.target.value)}><option>JPI - Matriz</option><option>JPI - Filial</option></select></label></div>
+              <div className="form-row"><label>Segmento / curso<input value={agendaStructureCourse} onChange={event=>setAgendaStructureCourse(event.target.value)} placeholder="Opcional"/></label><label>Série<input value={agendaStructureSerie} onChange={event=>setAgendaStructureSerie(event.target.value)} placeholder="Opcional"/></label><label>Turma<input value={agendaStructureTurma} onChange={event=>setAgendaStructureTurma(event.target.value)} placeholder="Opcional"/></label></div>
+              <button type="button" className="secondary full" onClick={()=>void prepareAgendaStructure()} disabled={disabled}>{busy==="prepare-agenda-structure"?"Preparando estrutura…":"Preparar estrutura SWeduc sem gravar"}</button>
+              {agendaStructure&&<div className="agenda-structure-results"><div className="agenda-structure-counts"><span><b>{agendaStructure.counts.units}</b> unidade(s)</span><span><b>{agendaStructure.counts.classrooms}</b> turma(s)</span><span><b>{agendaStructure.counts.students}</b> aluno(s)</span><span><b>{agendaStructure.counts.responsibles}</b> responsável(is)</span><span><b>{agendaStructure.counts.issues}</b> atenção</span></div>{agendaStructure.issues.length>0&&<div className="agenda-structure-issues"><strong>Pontos para conferir</strong>{agendaStructure.issues.slice(0,6).map((issue,index)=><small key={index}>{issue}</small>)}</div>}<details className="agenda-diagnostic-probe ok"><summary><span><b>Prévia dos dados</b><small>Campos preparados para a Agenda Edu</small></span><em>sem gravar</em></summary><pre>{JSON.stringify(agendaStructure.samples,null,2)}</pre></details></div>}
+            </details>
+          </section>}
           {isMaster&&canEdit&&<section className="communication-channel-card agenda-diagnostic-card">
             <div className="communication-channel-head"><span className="integration-icon purple"><Search/></span><div><h3>Diagnóstico da API Agenda Edu</h3><small>Veja o que a API retorna antes de decidir o caminho do módulo.</small></div><IntegrationStateBadge label={agendaDiagnostic?"Testado":"Seguro"} tone={agendaDiagnostic?"connected":"pending"}/></div>
             <div className="notice compact"><ShieldCheck/><span>Este teste consulta canais, alunos, chats e busca por nome/matrícula. Não envia mensagem, não cria chat e não grava vínculo.</span></div>

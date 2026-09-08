@@ -41,6 +41,53 @@ async function agendaProbe(accessToken:string,schoolToken:string,label:string,pa
     return {label,method:init?.method||"GET",endpoint:path,status:0,ok:false,durationMs:Date.now()-started,count:null,sample:{error:error instanceof Error?error.message:"Falha de rede ao consultar a Agenda Edu."}};
   }
 }
+const normalizeText=(value:unknown)=>String(value||"").normalize("NFD").replace(/[\u0300-\u036f]/g,"").replace(/[^\p{L}\p{N}\s/-]/gu," ").replace(/\s+/g," ").trim();
+const normalizeKey=(value:unknown)=>normalizeText(value).toLocaleUpperCase("pt-BR").replace(/[^A-Z0-9]+/g,"_").replace(/^_+|_+$/g,"")||"NAO_INFORMADO";
+const firstEmail=(responsible:unknown)=>Array.isArray((responsible as {emails?:unknown[]})?.emails)?String(((responsible as {emails:unknown[]}).emails[0] as {email?:unknown})?.email||"").trim().toLowerCase():"";
+const firstPhone=(responsible:unknown)=>Array.isArray((responsible as {telefones?:unknown[]})?.telefones)?digits(String(((responsible as {telefones:unknown[]}).telefones[0] as {telefone?:unknown;numero?:unknown})?.telefone||((responsible as {telefones:unknown[]}).telefones[0] as {numero?:unknown})?.numero||"")):"";
+const isFinancialResponsible=(responsible:unknown)=>{
+  const row=responsible as Record<string,unknown>;
+  return row?.responsavel_financeiro===1||row?.responsavel_financeiro===true||row?.segundo_responsavel_financeiro===1||row?.segundo_responsavel_financeiro===true;
+};
+const inferPeriod=(turma:unknown)=>{
+  const value=normalizeText(turma).toLocaleLowerCase("pt-BR");
+  if(/integral|integ/.test(value))return "integral";
+  if(/tarde|vesp|\/\s*t\b|\bt\b/.test(value))return "afternoon";
+  return "morning";
+};
+function buildAgendaStructure(rows:Array<Record<string,unknown>>){
+  const units=new Map<string,Record<string,unknown>>();
+  const classrooms=new Map<string,Record<string,unknown>>();
+  const students:Array<Record<string,unknown>>=[];
+  const responsibles=new Map<string,Record<string,unknown>>();
+  const links:Array<Record<string,unknown>>=[];
+  const issues:string[]=[];
+  for(const row of rows){
+    const studentLegacyId=String(row.matricula_id||row.numero_matricula||"").trim();
+    if(!studentLegacyId){issues.push(`Aluno ${row.nome||"sem nome"} sem matrícula/legacy_id.`);continue}
+    const unitName=normalizeText(row.unidade)||"JPI - Matriz";
+    const unitLegacyId=normalizeKey(unitName);
+    units.set(unitLegacyId,{legacy_id:unitLegacyId,name:unitName});
+    const classroomLegacyId=[row.ano_letivo,unitName,row.curso,row.serie,row.turma].map(normalizeKey).join("|");
+    classrooms.set(classroomLegacyId,{legacy_id:classroomLegacyId,unit_id:unitLegacyId,name:normalizeText(row.turma)||"Turma não informada",grade:normalizeText(row.serie)||normalizeText(row.curso)||"Série não informada",course:normalizeText(row.curso)||"Curso não informado",school_year:String(row.ano_letivo||""),period:inferPeriod(row.turma)});
+    if(!row.data_nascimento)issues.push(`${row.nome||studentLegacyId}: data de nascimento ausente; a Agenda Edu pode exigir este campo.`);
+    students.push({legacy_id:studentLegacyId,classroom_id:classroomLegacyId,name:normalizeText(row.nome)||"Aluno sem nome",date_of_birth:row.data_nascimento||null,period:inferPeriod(row.turma)});
+    const responsibleRows=Array.isArray(row.responsaveis)?row.responsaveis as unknown[]:[];
+    const ordered=[...responsibleRows].sort((a,b)=>Number(isFinancialResponsible(b))-Number(isFinancialResponsible(a)));
+    if(!ordered.length)issues.push(`${row.nome||studentLegacyId}: sem responsáveis no espelho SWeduc.`);
+    for(const responsible of ordered){
+      const data=responsible as Record<string,unknown>;
+      const cpf=digits(String(data.cpf||data.cpf_cnpj||""));
+      const email=firstEmail(responsible);
+      const phone=firstPhone(responsible);
+      const responsibleLegacyId=cpf||email||normalizeKey(data.nome);
+      if(!responsibleLegacyId){issues.push(`${row.nome||studentLegacyId}: responsável sem CPF, e-mail ou nome.`);continue}
+      if(!responsibles.has(responsibleLegacyId))responsibles.set(responsibleLegacyId,{legacy_id:responsibleLegacyId,name:normalizeText(data.nome)||"Responsável sem nome",cpf:cpf||null,email:email||null,phone:phone||null,kinship:data.parentesco||null,financial:isFinancialResponsible(responsible),pedagogical:data.responsavel_pedagogico===1||data.responsavel_pedagogico===true});
+      links.push({student_id:studentLegacyId,responsible_id:responsibleLegacyId,financial:isFinancialResponsible(responsible),pedagogical:data.responsavel_pedagogico===1||data.responsavel_pedagogico===true});
+    }
+  }
+  return {counts:{units:units.size,classrooms:classrooms.size,students:students.length,responsibles:responsibles.size,links:links.length,issues:issues.length},samples:{units:Array.from(units.values()).slice(0,3),classrooms:Array.from(classrooms.values()).slice(0,3),students:students.slice(0,3),responsibles:Array.from(responsibles.values()).slice(0,3),links:links.slice(0,3)},issues:issues.slice(0,20)};
+}
 
 async function authorizedClient(request:NextRequest){
   const supabaseUrl=process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -207,6 +254,7 @@ export async function POST(request:NextRequest){
       const probes:AgendaDiagnosticProbe[]=[{label:"OAuth/token",method:"POST",endpoint:"/oauth/v2/token",status:200,ok:true,durationMs:0,count:null,sample:{access_token:"[protegido]",expires_in:token.expiresIn}}];
       probes.push(await agendaProbe(token.accessToken,credentials.schoolToken,"Canais de mensagens","/channels?page%5Bsize%5D=10"));
       probes.push(await agendaProbe(token.accessToken,credentials.schoolToken,"Alunos gerais","/students?page%5Bsize%5D=10"));
+      probes.push(await agendaProbe(token.accessToken,credentials.schoolToken,"Listar alunos — doc suporte","/students?page=1&perPage=10"));
       if(studentName)probes.push(await agendaProbe(token.accessToken,credentials.schoolToken,"Busca aluno por nome",`/students?filter%5Bname%5D=${encodeURIComponent(studentName)}&page%5Bsize%5D=10`));
       if(studentName)probes.push(await agendaProbe(token.accessToken,credentials.schoolToken,"Busca livre por nome",`/students?filter%5Bsearch%5D=${encodeURIComponent(studentName)}&page%5Bsize%5D=10`));
       if(studentName)probes.push(await agendaProbe(token.accessToken,credentials.schoolToken,"Busca parâmetro q",`/students?q=${encodeURIComponent(studentName)}&page%5Bsize%5D=10`));
@@ -222,6 +270,26 @@ export async function POST(request:NextRequest){
     }catch(testError){
       return json({error:testError instanceof Error?testError.message:"Não foi possível diagnosticar a Agenda Edu."},400);
     }
+  }
+
+  if(action==="prepare-agenda-structure"){
+    if(!await hasServerPermission(auth.supabase,"settings.integrations.edit"))return json({error:"Seu usuário não possui permissão para preparar a estrutura Agenda Edu."},403);
+    const year=String(body.year||new Date().getFullYear()).replace(/\D/g,"").trim();
+    const unit=String(body.unit||"JPI - Matriz").replace(/\s+/g," ").trim();
+    const course=String(body.course||"").replace(/\s+/g," ").trim();
+    const serie=String(body.serie||"").replace(/\s+/g," ").trim();
+    const turma=String(body.turma||"").replace(/\s+/g," ").trim();
+    let query=auth.supabase.from("sweduc_alunos").select("matricula_id,nome,data_nascimento,numero_matricula,ano_letivo,unidade,curso,serie,turma,responsaveis").limit(1000);
+    if(year)query=query.eq("ano_letivo",year);
+    if(unit)query=query.eq("unidade",unit);
+    if(course)query=query.eq("curso",course);
+    if(serie)query=query.eq("serie",serie);
+    if(turma)query=query.eq("turma",turma);
+    const {data,error}=await query.order("nome",{ascending:true});
+    if(error)return json({error:"Não foi possível carregar o espelho SWeduc para preparar a estrutura Agenda Edu."},500);
+    const rows=(data||[]) as Array<Record<string,unknown>>;
+    const structure=buildAgendaStructure(rows);
+    return json({ok:true,message:`Estrutura preparada com ${structure.counts.students} aluno(s) do espelho SWeduc. Nada foi gravado na Agenda Edu.`,filters:{year:year||null,unit:unit||null,course:course||null,serie:serie||null,turma:turma||null},...structure});
   }
 
   if(action==="find-agenda-student"){
