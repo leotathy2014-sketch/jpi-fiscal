@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { createHash, randomBytes } from "node:crypto";
 import { buildDanfsePdf } from "@/lib/danfse-pdf";
-import { createAgendaEduAccessToken, parseAgendaEduCredentials, resolveAgendaEduFamilyChat, sendAgendaEduAttachment } from "@/lib/agenda-edu";
+import { createAgendaEduAccessToken, parseAgendaEduCredentials, resolveAgendaEduFamilyChat, sendAgendaEduAttachment, type AgendaEduEnvironment } from "@/lib/agenda-edu";
 import { hasServerPermission } from "@/lib/server-permissions";
 
 export const runtime="nodejs";
@@ -38,7 +38,7 @@ async function readConfig(supabase:SupabaseClient,backendSecret:string){
 
 function safeDeliveryError(error:unknown){
   const message=error instanceof Error?error.message:String(error||"");
-  if(/token|oauth|credencia|unauthorized|forbidden|permission/i.test(message))return "A Agenda Edu recusou as credenciais ou permissões do Sandbox. Revise a integração.";
+  if(/token|oauth|credencia|unauthorized|forbidden|permission/i.test(message))return "A Agenda Edu recusou as credenciais ou permissões. Revise a integração.";
   if(/chat|aluno|student|respons/i.test(message))return "Não foi possível localizar a mensagem dos responsáveis vinculada a este aluno na Agenda Edu.";
   if(/anexo|attachment|document|arquivo|PDF|XML/i.test(message))return "A Agenda Edu não aceitou um dos documentos. A NFS-e e o histórico anterior foram preservados.";
   return "A Agenda Edu não concluiu a entrega. Confira o canal Mensagens com os responsáveis e tente novamente.";
@@ -49,8 +49,9 @@ export async function GET(request:NextRequest){
   const backendSecret=process.env.JPI_BACKEND_SECRET;if(!backendSecret)return json({error:"O cofre de credenciais ainda não está configurado no servidor."},503);
   const {config,error}=await readConfig(auth.supabase,backendSecret);
   if(error||!config)return json({error:"Não foi possível carregar a configuração segura da Agenda Edu."},503);
-  const ready=Boolean(config.agenda_edu_environment==="homologacao"&&config.agenda_edu_credencial_configurada&&config.agenda_edu_ultimo_status==="conectado"&&config.agenda_edu_channel_id);
-  return json({ok:true,ready,environment:"sandbox",channelConfigured:Boolean(config.agenda_edu_channel_id),message:ready?"Agenda Edu pronta para testar Mensagens com os responsáveis no Sandbox.":"Configure, salve e teste a Agenda Edu antes do primeiro envio."});
+  const environment=(config.agenda_edu_environment==="producao"?"producao":"homologacao") as AgendaEduEnvironment;
+  const ready=Boolean(config.agenda_edu_credencial_configurada&&config.agenda_edu_ultimo_status==="conectado"&&config.agenda_edu_channel_id);
+  return json({ok:true,ready,environment:environment==="producao"?"production":"sandbox",channelConfigured:Boolean(config.agenda_edu_channel_id),message:ready?`Agenda Edu pronta na ${environment==="producao"?"plataforma oficial":"homologação"}.`:"Configure, salve e teste a Agenda Edu antes do primeiro envio."});
 }
 
 export async function POST(request:NextRequest){
@@ -72,16 +73,16 @@ export async function POST(request:NextRequest){
   if(paymentResult.error||!payment)return json({error:"Mensalidade não encontrada."},404);
   if(documentResult.error||!document)return json({error:"A versão ativa da NFS-e de teste não foi encontrada."},404);
   if(configResult.error||!config)return json({error:"Não foi possível carregar a configuração segura da Agenda Edu."},503);
-  if(config.agenda_edu_environment!=="homologacao")return json({error:"A entrega pela Agenda Edu está autorizada somente no Sandbox."},403);
   if(!config.agenda_edu_credencial_configurada||config.agenda_edu_ultimo_status!=="conectado"||!config.agenda_edu_channel_id)return json({error:"A integração da Agenda Edu precisa estar configurada e testada."},400);
+  const environment=(config.agenda_edu_environment==="producao"?"producao":"homologacao") as AgendaEduEnvironment;
   const linkedStudentId=String(payment.alunos?.agenda_edu_student_id||"").trim();
   const sweducExternalId=payment.alunos?.sweduc_matricula_id?String(payment.alunos.sweduc_matricula_id).trim():"";
   const useExternalId=!linkedStudentId&&Boolean(sweducExternalId)||Boolean(payment.alunos?.agenda_edu_use_external_id);
   const studentId=linkedStudentId||sweducExternalId;
   if(!studentIdPattern.test(studentId))return json({error:"Este aluno não possui ID Agenda Edu nem matrícula SWeduc válida para usar como ID externo."},400);
 
-  const subject=`TESTE — NFS-e de homologação · ${payment.alunos?.nome||"Aluno"} · ${payment.competencia}`;
-  const usedRecipient=`sandbox:student:${studentId}`;
+  const subject=`NFS-e · ${payment.alunos?.nome||"Aluno"} · ${payment.competencia}`;
+  const usedRecipient=`agenda:${environment}:student:${studentId}`;
   const intendedRecipient=`${payment.alunos?.responsavel||"Responsáveis"} · ${payment.alunos?.nome||"Aluno"}`.slice(0,250);
   const insert=await auth.supabase.from("nfse_entregas").insert({mensalidade_id:monthlyId,documento_homologacao_id:documentId,request_id:requestId,canal:"agenda_edu",ambiente:"homologacao",destinatario_pretendido:intendedRecipient,destinatario_utilizado:usedRecipient,assunto:subject,status:"enviando",created_by:auth.user.id,updated_at:new Date().toISOString()}).select("id").single();
   if(insert.error){
@@ -103,15 +104,15 @@ export async function POST(request:NextRequest){
     const accessResult=await auth.supabase.rpc("create_nfse_delivery_access",{p_delivery_id:deliveryId,p_token_hash:accessTokenHash,p_xml_base64:xmlBuffer.toString("base64"),p_chave_acesso:document.chave_acesso,p_backend_secret:backendSecret});
     if(accessResult.error)throw new Error("Não foi possível criar o link protegido da NFS-e.");
     const protectedUrl=new URL(`/nota/${accessTokenValue}`,request.nextUrl.origin).toString();
-    protectedSecret=String(storedSecret);const credentials=parseAgendaEduCredentials(protectedSecret);const {accessToken}=await createAgendaEduAccessToken(credentials);
+    protectedSecret=String(storedSecret);const credentials=parseAgendaEduCredentials(protectedSecret);const {accessToken}=await createAgendaEduAccessToken(credentials,fetch,environment);
     const common={accessToken,schoolToken:credentials.schoolToken,channelId:config.agenda_edu_channel_id,studentId,useExternalId};
-    const chatId=await resolveAgendaEduFamilyChat(common);
-    const prefix="TESTE DE HOMOLOGAÇÃO — SEM VALIDADE FISCAL";
-    providerIds.pdf=await sendAgendaEduAttachment({accessToken,schoolToken:credentials.schoolToken,channelId:config.agenda_edu_channel_id,chatId,content:`${prefix}\nNFS-e de ${payment.alunos?.nome||"aluno"}, competência ${payment.competencia}. DANFSe em PDF.\n\nAcesso individual protegido: ${protectedUrl}`,filename:`danfse-homologacao-${safeKey(document.chave_acesso)}.pdf`,contentType:"application/pdf",bytes:new Uint8Array(pdfBuffer)});
-    providerIds.xml=await sendAgendaEduAttachment({accessToken,schoolToken:credentials.schoolToken,channelId:config.agenda_edu_channel_id,chatId,content:`${prefix}\nArquivo XML da mesma NFS-e, competência ${payment.competencia}.`,filename:`nfse-homologacao-${safeKey(document.chave_acesso)}.xml`,contentType:"application/xml",bytes:new Uint8Array(xmlBuffer)});
+    const chatId=await resolveAgendaEduFamilyChat({...common,environment});
+    const prefix=environment==="producao"?"JPI Fiscal":"TESTE DE HOMOLOGAÇÃO — SEM VALIDADE FISCAL";
+    providerIds.pdf=await sendAgendaEduAttachment({accessToken,schoolToken:credentials.schoolToken,channelId:config.agenda_edu_channel_id,chatId,content:`${prefix}\nNFS-e de ${payment.alunos?.nome||"aluno"}, competência ${payment.competencia}. DANFSe em PDF.\n\nAcesso individual protegido: ${protectedUrl}`,filename:`danfse-homologacao-${safeKey(document.chave_acesso)}.pdf`,contentType:"application/pdf",bytes:new Uint8Array(pdfBuffer),environment});
+    providerIds.xml=await sendAgendaEduAttachment({accessToken,schoolToken:credentials.schoolToken,channelId:config.agenda_edu_channel_id,chatId,content:`${prefix}\nArquivo XML da mesma NFS-e, competência ${payment.competencia}.`,filename:`nfse-homologacao-${safeKey(document.chave_acesso)}.xml`,contentType:"application/xml",bytes:new Uint8Array(xmlBuffer),environment});
     const sentAt=new Date().toISOString();const update=await auth.supabase.from("nfse_entregas").update({status:"enviado",provider_message_id:providerIds.pdf,provider_message_ids:providerIds,erro_mensagem:null,enviado_em:sentAt,provider_aceito_em:sentAt,updated_at:sentAt}).eq("id",deliveryId).select("id").maybeSingle();
     if(update.error||!update.data)return json({error:"A Agenda Edu aceitou os documentos, mas o histórico precisa ser conferido.",sent:true},500);
-    return json({ok:true,status:"enviado",sentAt,providerMessages:providerIds,message:"PDF e XML aceitos em duas mensagens para os responsáveis do aluno no Sandbox."});
+    return json({ok:true,status:"enviado",sentAt,providerMessages:providerIds,message:`PDF e XML aceitos em duas mensagens para os responsáveis do aluno na ${environment==="producao"?"plataforma oficial":"homologação"}.`});
   }catch(error){
     const safeError=providerIds.pdf&&!providerIds.xml?"O PDF foi aceito, mas o XML não foi concluído. A tentativa parcial foi registrada para conferência.":safeDeliveryError(error);
     await auth.supabase.from("nfse_entregas").update({status:"erro",provider_message_id:providerIds.pdf||null,provider_message_ids:providerIds,erro_mensagem:safeError,updated_at:new Date().toISOString()}).eq("id",deliveryId);

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { sendSmtpEmail } from "@/lib/smtp";
-import { AGENDA_EDU_ENDPOINTS, createAgendaEduAccessToken, serializeAgendaEduCredentials, parseAgendaEduCredentials, searchAgendaEduStudents, testAgendaEduConnection } from "@/lib/agenda-edu";
+import { AGENDA_EDU_ENDPOINTS, createAgendaEduAccessToken, serializeAgendaEduCredentials, parseAgendaEduCredentials, searchAgendaEduStudents, testAgendaEduConnection, type AgendaEduEnvironment } from "@/lib/agenda-edu";
 import { hasServerPermission } from "@/lib/server-permissions";
 
 export const runtime = "nodejs";
@@ -28,8 +28,11 @@ const safeSample=(value:unknown,depth=0):unknown=>{
   return value;
 };
 type AgendaDiagnosticProbe={label:string;method:string;endpoint:string;status:number;ok:boolean;durationMs:number;count:number|null;sample:unknown};
-async function agendaProbe(accessToken:string,schoolToken:string,label:string,path:string,init?:RequestInit){
-  const url=`${AGENDA_EDU_ENDPOINTS.sandboxBaseUrl}${path}`;
+const agendaEnvironment=(value:unknown):AgendaEduEnvironment=>String(value)==="producao"?"producao":"homologacao";
+const agendaBaseUrl=(environment:AgendaEduEnvironment)=>environment==="producao"?AGENDA_EDU_ENDPOINTS.productionBaseUrl:AGENDA_EDU_ENDPOINTS.sandboxBaseUrl;
+const agendaEnvironmentLabel=(environment:AgendaEduEnvironment)=>environment==="producao"?"Plataforma oficial":"Sandbox";
+async function agendaProbe(accessToken:string,schoolToken:string,label:string,path:string,environment:AgendaEduEnvironment,init?:RequestInit){
+  const url=`${agendaBaseUrl(environment)}${path}`;
   const started=Date.now();
   try{
     const response=await fetch(url,{...init,headers:{Accept:"application/json",Authorization:`Bearer ${accessToken}`,"x-school-token":schoolToken,...(init?.headers||{})},cache:"no-store"});
@@ -212,6 +215,7 @@ export async function POST(request:NextRequest){
 
   if(action==="save-agenda"){
     const schoolIdentifier=String(body.schoolIdentifier||"").trim();const channelId=String(body.channelId||"").trim();let clientId=String(body.clientId||"").trim();let clientSecret=String(body.clientSecret||"").trim();let schoolToken=String(body.schoolToken||"").trim();
+    const environment=agendaEnvironment(body.environment);
     if(schoolIdentifier.length>100||!/^[-_. a-z0-9À-ÿ]*$/i.test(schoolIdentifier))return json({error:"O identificador da escola contém caracteres inválidos."},400);
     if(channelId&&!/^[a-z0-9_-]{1,100}$/i.test(channelId))return json({error:"O ID do canal da Agenda Edu é inválido."},400);
     const supplied=[clientId,clientSecret,schoolToken].filter(Boolean).length;
@@ -219,25 +223,27 @@ export async function POST(request:NextRequest){
     if(supplied===3&&(clientId.length>300||clientSecret.length>1000||schoolToken.length>1000))return json({error:"Uma das credenciais da Agenda Edu ultrapassa o tamanho permitido."},400);
     const {data:current}=await readConfig(auth.supabase);
     if(!current?.agenda_edu_credencial_configurada&&supplied===0)return json({error:"Informe as três credenciais de homologação da Agenda Edu."},400);
-    const {error:updateError}=await auth.supabase.from("integracoes_comunicacao").update({agenda_edu_school_identifier:schoolIdentifier||null,agenda_edu_channel_id:channelId||null,agenda_edu_environment:"homologacao",agenda_edu_documentacao_confirmada:true,agenda_edu_ultimo_status:"pendente",updated_at:new Date().toISOString(),updated_by:auth.user.id}).eq("id",true);
+    const {error:updateError}=await auth.supabase.from("integracoes_comunicacao").update({agenda_edu_school_identifier:schoolIdentifier||null,agenda_edu_channel_id:channelId||null,agenda_edu_environment:environment,agenda_edu_documentacao_confirmada:true,agenda_edu_ultimo_status:"pendente",updated_at:new Date().toISOString(),updated_by:auth.user.id}).eq("id",true);
     if(updateError)return json({error:"A configuração local da Agenda Edu ainda não foi aplicada ao banco."},503);
     if(supplied===3){const protectedCredential=serializeAgendaEduCredentials({clientId,clientSecret,schoolToken});const {error:vaultError}=await auth.supabase.rpc("store_communication_secret",{p_channel:"agenda_edu",p_secret:protectedCredential,p_backend_secret:backendSecret});clientId="";clientSecret="";schoolToken="";if(vaultError)return json({error:"Não foi possível guardar as credenciais da Agenda Edu no cofre seguro."},500)}
-    return json({ok:true,message:"Configuração da Agenda Edu salva para o Sandbox. Nenhuma mensagem foi enviada."});
+    return json({ok:true,message:`Configuração da Agenda Edu salva para ${agendaEnvironmentLabel(environment)}. Nenhuma mensagem foi enviada.`});
   }
 
   if(action==="test-agenda"){
+    const {data:currentConfig}=await readConfig(auth.supabase);
+    const environment=agendaEnvironment(currentConfig?.agenda_edu_environment);
     const {data:storedSecret,error:secretError}=await auth.supabase.rpc("get_communication_secret",{p_channel:"agenda_edu",p_backend_secret:backendSecret});
     if(secretError||!storedSecret)return json({error:"Cadastre primeiro as credenciais da Agenda Edu."},400);
     try{
-      const result=await testAgendaEduConnection(parseAgendaEduCredentials(String(storedSecret)));
+      const result=await testAgendaEduConnection(parseAgendaEduCredentials(String(storedSecret)),fetch,environment);
       if(!result.channelId)throw new Error("A Agenda Edu confirmou a conexão, mas não retornou nenhum canal de Mensagens disponível para esta escola.");
       const testedAt=new Date().toISOString();
       const {error:updateError}=await auth.supabase.from("integracoes_comunicacao").update({agenda_edu_channel_id:String(result.channelId),agenda_edu_documentacao_confirmada:true,agenda_edu_ultimo_status:"conectado",agenda_edu_testada_em:testedAt,updated_at:testedAt,updated_by:auth.user.id}).eq("id",true);
       if(updateError)return json({error:"A conexão foi confirmada, mas não foi possível salvar automaticamente o canal da Agenda Edu."},500);
-      return json({ok:true,ready:true,channelId:String(result.channelId),message:`Conexão com o Sandbox da Agenda Edu confirmada${result.channelName?` · canal encontrado: ${result.channelName}`:""}. Canal salvo automaticamente. Nenhuma mensagem foi enviada.`});
+      return json({ok:true,ready:true,channelId:String(result.channelId),message:`Conexão com ${agendaEnvironmentLabel(environment)} da Agenda Edu confirmada${result.channelName?` · canal encontrado: ${result.channelName}`:""}. Canal salvo automaticamente. Nenhuma mensagem foi enviada.`});
     }catch(testError){
       await auth.supabase.from("integracoes_comunicacao").update({agenda_edu_ultimo_status:"erro",updated_at:new Date().toISOString(),updated_by:auth.user.id}).eq("id",true);
-      return json({error:testError instanceof Error?testError.message:"A Agenda Edu não confirmou a conexão com o Sandbox."},400);
+      return json({error:testError instanceof Error?testError.message:`A Agenda Edu não confirmou a conexão com ${agendaEnvironmentLabel(environment)}.`},400);
     }
   }
 
@@ -245,28 +251,30 @@ export async function POST(request:NextRequest){
     if(!await hasServerPermission(auth.supabase,"settings.integrations.edit"))return json({error:"Seu usuário não possui permissão para diagnosticar a Agenda Edu."},403);
     const {data:storedSecret,error:secretError}=await auth.supabase.rpc("get_communication_secret",{p_channel:"agenda_edu",p_backend_secret:backendSecret});
     if(secretError||!storedSecret)return json({error:"Cadastre primeiro as credenciais da Agenda Edu."},400);
+    const {data:currentConfig}=await readConfig(auth.supabase);
+    const environment=agendaEnvironment(currentConfig?.agenda_edu_environment);
     const channelId=String(body.channelId||"").trim();
     const sweducMatriculaId=String(body.sweducMatriculaId||"").replace(/\D/g,"").trim();
     const studentName=String(body.studentName||"").trim();
     try{
       const credentials=parseAgendaEduCredentials(String(storedSecret));
-      const token=await createAgendaEduAccessToken(credentials);
+      const token=await createAgendaEduAccessToken(credentials,fetch,environment);
       const probes:AgendaDiagnosticProbe[]=[{label:"OAuth/token",method:"POST",endpoint:"/oauth/v2/token",status:200,ok:true,durationMs:0,count:null,sample:{access_token:"[protegido]",expires_in:token.expiresIn}}];
-      probes.push(await agendaProbe(token.accessToken,credentials.schoolToken,"Canais de mensagens","/channels?page%5Bsize%5D=10"));
-      probes.push(await agendaProbe(token.accessToken,credentials.schoolToken,"Alunos gerais","/students?page%5Bsize%5D=10"));
-      probes.push(await agendaProbe(token.accessToken,credentials.schoolToken,"Listar alunos — doc suporte","/students?page=1&perPage=10"));
-      if(studentName)probes.push(await agendaProbe(token.accessToken,credentials.schoolToken,"Busca aluno por nome",`/students?filter%5Bname%5D=${encodeURIComponent(studentName)}&page%5Bsize%5D=10`));
-      if(studentName)probes.push(await agendaProbe(token.accessToken,credentials.schoolToken,"Busca livre por nome",`/students?filter%5Bsearch%5D=${encodeURIComponent(studentName)}&page%5Bsize%5D=10`));
-      if(studentName)probes.push(await agendaProbe(token.accessToken,credentials.schoolToken,"Busca parâmetro q",`/students?q=${encodeURIComponent(studentName)}&page%5Bsize%5D=10`));
-      if(studentName)probes.push(await agendaProbe(token.accessToken,credentials.schoolToken,"Busca parâmetro search",`/students?search=${encodeURIComponent(studentName)}&page%5Bsize%5D=10`));
-      if(sweducMatriculaId)probes.push(await agendaProbe(token.accessToken,credentials.schoolToken,"Busca aluno por matrícula SWeduc",`/students?filter%5BexternalId%5D=${encodeURIComponent(sweducMatriculaId)}&page%5Bsize%5D=10`));
-      if(sweducMatriculaId)probes.push(await agendaProbe(token.accessToken,credentials.schoolToken,"Aluno por ID/matrícula direta",`/students/${encodeURIComponent(sweducMatriculaId)}`));
+      probes.push(await agendaProbe(token.accessToken,credentials.schoolToken,"Canais de mensagens","/channels?page%5Bsize%5D=10",environment));
+      probes.push(await agendaProbe(token.accessToken,credentials.schoolToken,"Alunos gerais","/students?page%5Bsize%5D=10",environment));
+      probes.push(await agendaProbe(token.accessToken,credentials.schoolToken,"Listar alunos — doc suporte","/students?page=1&perPage=10",environment));
+      if(studentName)probes.push(await agendaProbe(token.accessToken,credentials.schoolToken,"Busca aluno por nome",`/students?filter%5Bname%5D=${encodeURIComponent(studentName)}&page%5Bsize%5D=10`,environment));
+      if(studentName)probes.push(await agendaProbe(token.accessToken,credentials.schoolToken,"Busca livre por nome",`/students?filter%5Bsearch%5D=${encodeURIComponent(studentName)}&page%5Bsize%5D=10`,environment));
+      if(studentName)probes.push(await agendaProbe(token.accessToken,credentials.schoolToken,"Busca parâmetro q",`/students?q=${encodeURIComponent(studentName)}&page%5Bsize%5D=10`,environment));
+      if(studentName)probes.push(await agendaProbe(token.accessToken,credentials.schoolToken,"Busca parâmetro search",`/students?search=${encodeURIComponent(studentName)}&page%5Bsize%5D=10`,environment));
+      if(sweducMatriculaId)probes.push(await agendaProbe(token.accessToken,credentials.schoolToken,"Busca aluno por matrícula SWeduc",`/students?filter%5BexternalId%5D=${encodeURIComponent(sweducMatriculaId)}&page%5Bsize%5D=10`,environment));
+      if(sweducMatriculaId)probes.push(await agendaProbe(token.accessToken,credentials.schoolToken,"Aluno por ID/matrícula direta",`/students/${encodeURIComponent(sweducMatriculaId)}`,environment));
       if(channelId){
-        probes.push(await agendaProbe(token.accessToken,credentials.schoolToken,"Chats do canal",`/channels/${encodeURIComponent(channelId)}/chats?page%5Bsize%5D=10`));
-        if(studentName)probes.push(await agendaProbe(token.accessToken,credentials.schoolToken,"Chats por nome do aluno",`/channels/${encodeURIComponent(channelId)}/chats?filter%5Bsearch%5D=${encodeURIComponent(studentName)}&page%5Bsize%5D=10`));
-        if(sweducMatriculaId)probes.push(await agendaProbe(token.accessToken,credentials.schoolToken,"Chat familiar por matrícula externa",`/channels/${encodeURIComponent(channelId)}/chats?filter%5Bkind%5D=family&filter%5BstudentId%5D=${encodeURIComponent(sweducMatriculaId)}&filter%5BuseExternalId%5D=true&page%5Bsize%5D=5`));
+        probes.push(await agendaProbe(token.accessToken,credentials.schoolToken,"Chats do canal",`/channels/${encodeURIComponent(channelId)}/chats?page%5Bsize%5D=10`,environment));
+        if(studentName)probes.push(await agendaProbe(token.accessToken,credentials.schoolToken,"Chats por nome do aluno",`/channels/${encodeURIComponent(channelId)}/chats?filter%5Bsearch%5D=${encodeURIComponent(studentName)}&page%5Bsize%5D=10`,environment));
+        if(sweducMatriculaId)probes.push(await agendaProbe(token.accessToken,credentials.schoolToken,"Chat familiar por matrícula externa",`/channels/${encodeURIComponent(channelId)}/chats?filter%5Bkind%5D=family&filter%5BstudentId%5D=${encodeURIComponent(sweducMatriculaId)}&filter%5BuseExternalId%5D=true&page%5Bsize%5D=5`,environment));
       }
-      return json({ok:true,message:"Diagnóstico Agenda Edu concluído. Nenhuma mensagem foi enviada e nada foi gravado.",baseUrl:AGENDA_EDU_ENDPOINTS.sandboxBaseUrl,channelId:channelId||null,sweducMatriculaId:sweducMatriculaId||null,studentName:studentName||null,probes});
+      return json({ok:true,message:"Diagnóstico Agenda Edu concluído. Nenhuma mensagem foi enviada e nada foi gravado.",baseUrl:agendaBaseUrl(environment),environment,channelId:channelId||null,sweducMatriculaId:sweducMatriculaId||null,studentName:studentName||null,probes});
     }catch(testError){
       return json({error:testError instanceof Error?testError.message:"Não foi possível diagnosticar a Agenda Edu."},400);
     }
@@ -301,8 +309,10 @@ export async function POST(request:NextRequest){
     const {data:storedSecret,error:secretError}=await auth.supabase.rpc("get_communication_secret",{p_channel:"agenda_edu",p_backend_secret:backendSecret});
     if(secretError||!storedSecret)return json({error:"Cadastre primeiro as credenciais da Agenda Edu."},400);
     try{
-      const credentials=parseAgendaEduCredentials(String(storedSecret));const {accessToken}=await createAgendaEduAccessToken(credentials);
-      const result=await searchAgendaEduStudents({accessToken,schoolToken:credentials.schoolToken,name:String(student.nome||""),className:String(student.turma||""),grade:String(student.segmento||""),externalId:student.sweduc_matricula_id?String(student.sweduc_matricula_id):null});
+      const {data:currentConfig}=await readConfig(auth.supabase);
+      const environment=agendaEnvironment(currentConfig?.agenda_edu_environment);
+      const credentials=parseAgendaEduCredentials(String(storedSecret));const {accessToken}=await createAgendaEduAccessToken(credentials,fetch,environment);
+      const result=await searchAgendaEduStudents({accessToken,schoolToken:credentials.schoolToken,name:String(student.nome||""),className:String(student.turma||""),grade:String(student.segmento||""),externalId:student.sweduc_matricula_id?String(student.sweduc_matricula_id):null,environment});
       const best=result.candidates[0];const autoLinked=Boolean(best&&best.score>=95);
       if(autoLinked){
         let updateRequest=auth.supabase.from("alunos").update({agenda_edu_student_id:best.id,agenda_edu_use_external_id:false});

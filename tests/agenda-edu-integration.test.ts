@@ -10,11 +10,12 @@ const studentLinksSource=readFileSync(new URL("../components/agenda-edu-student-
 const migrationSource=readFileSync(new URL("../supabase/migrations/20260827171000_preparar_integracao_agenda_edu.sql",import.meta.url),"utf8");
 const agendaClientSource=readFileSync(new URL("../lib/agenda-edu.ts",import.meta.url),"utf8");
 const accessMigrationSource=readFileSync(new URL("../supabase/migrations/20260828184500_registrar_visualizacao_nfse_agenda_edu.sql",import.meta.url),"utf8");
+const agendaProductionMigrationSource=readFileSync(new URL("../supabase/migrations/20260908143000_habilitar_agenda_edu_producao.sql",import.meta.url),"utf8");
 const protectedPageSource=readFileSync(new URL("../app/nota/[token]/protected-note.tsx",import.meta.url),"utf8");
 const protectedAccessSource=readFileSync(new URL("../lib/protected-delivery.ts",import.meta.url),"utf8");
 
-test("envia pelo módulo Mensagens com os responsáveis somente no Sandbox",()=>{
-  assert.match(deliveryApiSource,/agenda_edu_environment!=="homologacao"/);
+test("envia pelo módulo Mensagens com os responsáveis no ambiente configurado",()=>{
+  assert.match(deliveryApiSource,/agenda_edu_environment==="producao"/);
   assert.match(deliveryApiSource,/resolveAgendaEduFamilyChat/);
   assert.match(deliveryApiSource,/sendAgendaEduAttachment/);
   assert.match(deliveryApiSource,/providerIds\.pdf/);
@@ -26,7 +27,7 @@ test("protege a rota e separa credenciais, documentos e destinatário",()=>{
   assert.match(deliveryApiSource,/supabase\.auth\.getUser\(token\)/);
   assert.match(deliveryApiSource,/get_communication_secret/);
   assert.match(deliveryApiSource,/documentos-nfse/);
-  assert.match(deliveryApiSource,/sandbox:student:/);
+  assert.match(deliveryApiSource,/agenda:\$\{environment\}:student:/);
   assert.match(deliveryApiSource,/sweduc_matricula_id/);
   assert.match(deliveryApiSource,/useExternalId/);
   assert.doesNotMatch(deliveryUiSource,/clientSecret/);
@@ -37,7 +38,8 @@ test("prepara vínculo por aluno, histórico duplo e políticas RLS",()=>{
   assert.match(migrationSource,/agenda_edu_use_external_id boolean/);
   assert.match(migrationSource,/provider_message_ids jsonb/);
   assert.match(migrationSource,/p_channel = 'agenda_edu'/);
-  assert.match(migrationSource,/\^sandbox:student:/);
+  assert.match(agendaProductionMigrationSource,/agenda_edu_environment in \('homologacao','producao'\)/);
+  assert.match(agendaProductionMigrationSource,/\^agenda:\(homologacao\|producao\):student:/);
   assert.match(migrationSource,/get_agenda_edu_delivery_config/);
 });
 
@@ -47,6 +49,7 @@ test("oferece configuração e vínculo administrativo sem expor segredos",()=>{
   assert.match(settingsUiSource,/Client ID/);
   assert.match(settingsUiSource,/Client Secret/);
   assert.match(settingsUiSource,/X-School-Token/);
+  assert.match(settingsUiSource,/Plataforma oficial/);
   assert.match(communicationsApiSource,/store_communication_secret/);
   assert.match(studentLinksSource,/Vincular alunos à Agenda Edu/);
   assert.match(studentLinksSource,/agenda_edu_student_id/);
@@ -71,6 +74,8 @@ test("oferece lote, histórico e reenvio no canal Agenda Edu",()=>{
 
 test("usa os endpoints e o contrato oficial da Agenda Edu v2",()=>{
   assert.match(agendaClientSource,/https:\/\/sandbox-api\.agendaedu\.dev\/v2/);
+  assert.match(agendaClientSource,/https:\/\/api\.agendaedu\.com\/v2/);
+  assert.match(agendaClientSource,/AgendaEduEnvironment/);
   assert.match(agendaClientSource,/grant_type:"client_credentials"/);
   assert.match(agendaClientSource,/"x-school-token"/);
   assert.match(agendaClientSource,/kind:"family"/);

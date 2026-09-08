@@ -1149,7 +1149,7 @@ export function IssuanceAssistant({onNavigate}:{onNavigate:(page:AppPage)=>void}
                 <span><MessageCircle size={20}/></span><div><strong>WhatsApp</strong><small>{whatsappInfo?.ready?"Manual gratuito":"Configuração necessária"}</small></div>
               </button>
               <button type="button" className={deliveryChannel==="agenda-edu"?"active agenda":"agenda"} onClick={()=>{setDeliveryChannel("agenda-edu");setError("");setMessage("")}}>
-                <span><CalendarDays size={20}/></span><div><strong>Agenda Edu</strong><small>{agendaEduInfo?.ready?"Sandbox disponível":"Aguardando Agenda Edu"}</small></div>
+                <span><CalendarDays size={20}/></span><div><strong>Agenda Edu</strong><small>{agendaEduInfo?.ready?(agendaEduInfo.environment==="production"?"Plataforma oficial":"Homologação"):"Aguardando Agenda Edu"}</small></div>
               </button>
             </div>
 
@@ -1168,7 +1168,7 @@ export function IssuanceAssistant({onNavigate}:{onNavigate:(page:AppPage)=>void}
               </>}
 
               {deliveryChannel==="agenda-edu"&&!agendaEduInfo?.ready&&<div className="assistant-warning-box"><CircleAlert/><div><strong>Aguardando Agenda Edu</strong><span>{agendaEduInfo?.message||"A integração ainda depende das informações que a Agenda Edu precisa liberar."}</span></div></div>}
-              {deliveryChannel==="agenda-edu"&&agendaEduInfo?.ready&&agendaEduStudentId&&<div className="assistant-agenda-ready"><Check/><div><strong>Agenda Edu pronta para teste</strong><span>O aluno está vinculado. Ao enviar, o PDF e o XML seguem pelo Sandbox e o histórico fica registrado.</span></div></div>}
+              {deliveryChannel==="agenda-edu"&&agendaEduInfo?.ready&&agendaEduStudentId&&<div className="assistant-agenda-ready"><Check/><div><strong>Agenda Edu pronta</strong><span>O aluno está vinculado. Ao enviar, o PDF e o XML seguem pela {agendaEduInfo.environment==="production"?"plataforma oficial":"homologação"} e o histórico fica registrado.</span></div></div>}
               {deliveryChannel==="agenda-edu"&&agendaEduInfo?.ready&&!agendaEduStudentId&&<div className="assistant-warning-box"><CircleAlert/><div><strong>Aluno sem vínculo Agenda Edu</strong><span>Informe o ID Agenda Edu no cadastro do aluno para liberar o envio por este canal.</span><button className="secondary" type="button" onClick={()=>focusAndNavigate("Alunos e Responsáveis")}>Abrir cadastro do aluno</button></div></div>}
 
               {manualPending&&deliveryChannel==="whatsapp-manual"&&<div className="assistant-manual-confirm">
