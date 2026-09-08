@@ -19,6 +19,7 @@ const assistant=readFileSync(new URL("../components/issuance-assistant.tsx",impo
 const agenda=readFileSync(new URL("../lib/agenda-edu.ts",import.meta.url),"utf8");
 const livePages=readFileSync(new URL("../components/live-pages.tsx",import.meta.url),"utf8");
 const operationalPicker=readFileSync(new URL("../components/sweduc-operational-picker.tsx",import.meta.url),"utf8");
+const appPage=readFileSync(new URL("../app/page.tsx",import.meta.url),"utf8");
 
 test("cria uma integração SWeduc separada da Agenda Edu",()=>{
   assert.match(settings,/section==="sweduc"/);assert.match(settings,/Agenda Edu/);
@@ -101,6 +102,10 @@ test("permite buscar aluno SWeduc no cadastro e no assistente sem abrir configur
   assert.match(operationalPicker,/syncYears/);
   assert.match(operationalPicker,/filteredYears/);
   assert.match(operationalPicker,/action:"lookup"/);
+  assert.match(operationalPicker,/Digite pelo menos 2 letras/);
+  assert.match(operationalPicker,/DIGITE O NOME DO ALUNO E APERTE ENTER/);
+  assert.doesNotMatch(appPage,/jpi-sweduc-login-preload/);
+  assert.doesNotMatch(appPage,/Atualizando alunos SWeduc/);
   assert.match(operationalPicker,/action:"details"/);
   assert.match(operationalPicker,/action:"import"/);
   assert.match(operationalPicker,/Segmento \/ curso/);
