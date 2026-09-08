@@ -80,7 +80,7 @@ test("usa os endpoints e o contrato oficial da Agenda Edu v2",()=>{
   assert.match(agendaClientSource,/"x-school-token"/);
   assert.match(agendaClientSource,/kind:"family"/);
   assert.match(agendaClientSource,/searchAgendaEduStudents/);
-  assert.match(agendaClientSource,/\/students\?/);
+  assert.match(agendaClientSource,/\/student_profiles/);
   assert.match(agendaClientSource,/chatIds\[\]/);
   assert.match(agendaClientSource,/form\.append\("attachment"/);
 });
@@ -91,7 +91,7 @@ test("prepara estrutura escolar da Agenda Edu a partir da SWeduc sem gravar",()=
   assert.match(communicationsApiSource,/classroom_id/);
   assert.match(communicationsApiSource,/financial:isFinancialResponsible/);
   assert.match(communicationsApiSource,/Nada foi gravado na Agenda Edu/);
-  assert.match(communicationsApiSource,/Listar alunos — doc suporte/);
+  assert.match(communicationsApiSource,/Listar alunos — student_profiles/);
 });
 
 test("não promete leitura inexistente na API pública de Mensagens",()=>{

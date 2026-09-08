@@ -60,11 +60,12 @@ test("localiza aluno na Agenda Edu por nome e turma antes de abrir chat familiar
   const calls:Array<{url:string;init?:RequestInit}>=[];
   const fakeFetch:typeof fetch=async(input,init)=>{
     const url=String(input);calls.push({url,init});
-    return new Response(JSON.stringify({data:[{id:"stu-9193",attributes:{name:"ZION FERREIRA DA COSTA ANDRADE",className:"601",grade:"Ensino Fundamental 2",externalId:"9193"}}]}),{status:200,headers:{"Content-Type":"application/json"}});
+    return new Response(JSON.stringify({student_profiles:[{id:"stu-9193",nome:"ZION FERREIRA DA COSTA ANDRADE",nome_da_turma:"601",nome_da_serie:"Ensino Fundamental 2",external_ids:"9193"}]}),{status:200,headers:{"Content-Type":"application/json"}});
   };
   const result=await searchAgendaEduStudents({accessToken:"token",schoolToken:"school",name:"Zion Ferreira da Costa Andrade",className:"601",grade:"Ensino Fundamental 2",externalId:"9193"},fakeFetch);
   assert.equal(result.candidates[0].id,"stu-9193");
   assert.ok(result.candidates[0].score>=95);
-  assert.match(calls[0].url,/\/students\?/);
+  assert.match(calls[0].url,/\/student_profiles\?/);
+  assert.match(calls[0].url,/nome=/);
   assert.equal((calls[0].init?.headers as Record<string,string>)["x-school-token"],"school");
 });

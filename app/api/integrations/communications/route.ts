@@ -261,14 +261,12 @@ export async function POST(request:NextRequest){
       const token=await createAgendaEduAccessToken(credentials,fetch,environment);
       const probes:AgendaDiagnosticProbe[]=[{label:"OAuth/token",method:"POST",endpoint:"/oauth/v2/token",status:200,ok:true,durationMs:0,count:null,sample:{access_token:"[protegido]",expires_in:token.expiresIn}}];
       probes.push(await agendaProbe(token.accessToken,credentials.schoolToken,"Canais de mensagens","/channels?page%5Bsize%5D=10",environment));
-      probes.push(await agendaProbe(token.accessToken,credentials.schoolToken,"Alunos gerais","/students?page%5Bsize%5D=10",environment));
-      probes.push(await agendaProbe(token.accessToken,credentials.schoolToken,"Listar alunos — doc suporte","/students?page=1&perPage=10",environment));
-      if(studentName)probes.push(await agendaProbe(token.accessToken,credentials.schoolToken,"Busca aluno por nome",`/students?filter%5Bname%5D=${encodeURIComponent(studentName)}&page%5Bsize%5D=10`,environment));
-      if(studentName)probes.push(await agendaProbe(token.accessToken,credentials.schoolToken,"Busca livre por nome",`/students?filter%5Bsearch%5D=${encodeURIComponent(studentName)}&page%5Bsize%5D=10`,environment));
-      if(studentName)probes.push(await agendaProbe(token.accessToken,credentials.schoolToken,"Busca parâmetro q",`/students?q=${encodeURIComponent(studentName)}&page%5Bsize%5D=10`,environment));
-      if(studentName)probes.push(await agendaProbe(token.accessToken,credentials.schoolToken,"Busca parâmetro search",`/students?search=${encodeURIComponent(studentName)}&page%5Bsize%5D=10`,environment));
-      if(sweducMatriculaId)probes.push(await agendaProbe(token.accessToken,credentials.schoolToken,"Busca aluno por matrícula SWeduc",`/students?filter%5BexternalId%5D=${encodeURIComponent(sweducMatriculaId)}&page%5Bsize%5D=10`,environment));
-      if(sweducMatriculaId)probes.push(await agendaProbe(token.accessToken,credentials.schoolToken,"Aluno por ID/matrícula direta",`/students/${encodeURIComponent(sweducMatriculaId)}`,environment));
+      probes.push(await agendaProbe(token.accessToken,credentials.schoolToken,"Listar alunos — student_profiles","/student_profiles?pagina=1&por_pagina=10",environment));
+      probes.push(await agendaProbe(token.accessToken,credentials.schoolToken,"Listar alunos com sede 23","/student_profiles?id_da_sede=23&pagina=1&por_pagina=10",environment));
+      if(studentName)probes.push(await agendaProbe(token.accessToken,credentials.schoolToken,"Busca aluno por nome — student_profiles",`/student_profiles?nome=${encodeURIComponent(studentName)}&pagina=1&por_pagina=10`,environment));
+      if(studentName)probes.push(await agendaProbe(token.accessToken,credentials.schoolToken,"Busca aluno parâmetro search",`/student_profiles?search=${encodeURIComponent(studentName)}&pagina=1&por_pagina=10`,environment));
+      if(sweducMatriculaId)probes.push(await agendaProbe(token.accessToken,credentials.schoolToken,"Busca aluno por external_ids",`/student_profiles?external_ids%5B%5D=${encodeURIComponent(sweducMatriculaId)}&pagina=1&por_pagina=10`,environment));
+      if(sweducMatriculaId)probes.push(await agendaProbe(token.accessToken,credentials.schoolToken,"Aluno por ID direto",`/student_profiles/${encodeURIComponent(sweducMatriculaId)}`,environment));
       if(channelId){
         probes.push(await agendaProbe(token.accessToken,credentials.schoolToken,"Chats do canal",`/channels/${encodeURIComponent(channelId)}/chats?page%5Bsize%5D=10`,environment));
         if(studentName)probes.push(await agendaProbe(token.accessToken,credentials.schoolToken,"Chats por nome do aluno",`/channels/${encodeURIComponent(channelId)}/chats?filter%5Bsearch%5D=${encodeURIComponent(studentName)}&page%5Bsize%5D=10`,environment));
