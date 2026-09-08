@@ -30,6 +30,15 @@ async function responseMessage(response:Response,fallback:string){
   return data.error_description||data.message||data.error||fallback;
 }
 
+async function agendaTokenResponse(credentials:AgendaEduCredentials,fetchImpl:FetchLike,environment:AgendaEduEnvironment,mode:"body"|"basic"){
+  const body=mode==="body"
+    ?new URLSearchParams({grant_type:"client_credentials",client_id:credentials.clientId,client_secret:credentials.clientSecret})
+    :new URLSearchParams({grant_type:"client_credentials"});
+  const headers:Record<string,string>={Accept:"application/json","Content-Type":"application/x-www-form-urlencoded"};
+  if(mode==="basic")headers.Authorization=`Basic ${Buffer.from(`${credentials.clientId}:${credentials.clientSecret}`,"utf8").toString("base64")}`;
+  return fetchImpl(agendaTokenUrl(environment),{method:"POST",headers,body,cache:"no-store"});
+}
+
 function agendaBaseUrl(environment:AgendaEduEnvironment="homologacao"){
   return environment==="producao"?AGENDA_EDU_ENDPOINTS.productionBaseUrl:AGENDA_EDU_ENDPOINTS.sandboxBaseUrl;
 }
@@ -39,8 +48,15 @@ function agendaTokenUrl(environment:AgendaEduEnvironment="homologacao"){
 }
 
 export async function createAgendaEduAccessToken(credentials:AgendaEduCredentials,fetchImpl:FetchLike=fetch,environment:AgendaEduEnvironment="homologacao"){
-  const body=new URLSearchParams({grant_type:"client_credentials",client_id:credentials.clientId,client_secret:credentials.clientSecret});
-  const response=await fetchImpl(agendaTokenUrl(environment),{method:"POST",headers:{Accept:"application/json","Content-Type":"application/x-www-form-urlencoded"},body,cache:"no-store"});
+  let response=await agendaTokenResponse(credentials,fetchImpl,environment,"body");
+  if(!response.ok&&environment==="producao"){
+    const firstError=await responseMessage(response,"A Agenda Edu não aceitou as credenciais no corpo da requisição.");
+    response=await agendaTokenResponse(credentials,fetchImpl,environment,"basic");
+    if(!response.ok){
+      const secondError=await responseMessage(response,"A Agenda Edu não aceitou as credenciais em Basic Auth.");
+      throw new Error(`A Agenda Edu não aceitou o Client ID/Secret da plataforma oficial. Corpo: ${firstError} Basic Auth: ${secondError}`);
+    }
+  }
   if(!response.ok)throw new Error(await responseMessage(response,environment==="producao"?"A Agenda Edu não aceitou as credenciais da plataforma oficial.":"A Agenda Edu não aceitou as credenciais de homologação."));
   const result=await response.json() as {access_token?:string;expires_in?:number};
   if(!result.access_token)throw new Error("A Agenda Edu não retornou o token de acesso esperado.");

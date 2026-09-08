@@ -40,6 +40,22 @@ test("gera o OAuth e consulta canais no Sandbox sem criar mensagem",async()=>{
   assert.doesNotMatch(calls.map(call=>call.url).join(" "),/\/messages/);
 });
 
+test("na plataforma oficial tenta Basic Auth se o token no corpo falhar",async()=>{
+  const calls:Array<{url:string;init?:RequestInit}>=[];
+  const fakeFetch:typeof fetch=async(input,init)=>{
+    const url=String(input);calls.push({url,init});
+    if(url.endsWith("/oauth/v2/token")&&calls.length===1)return new Response(JSON.stringify({error_description:"cliente desconhecido"}),{status:401,headers:{"Content-Type":"application/json"}});
+    if(url.endsWith("/oauth/v2/token"))return new Response(JSON.stringify({access_token:"token-oficial",expires_in:7200}),{status:200,headers:{"Content-Type":"application/json"}});
+    return new Response(JSON.stringify({data:[{id:"2000",attributes:{name:"Famílias"}}]}),{status:200,headers:{"Content-Type":"application/json"}});
+  };
+  const result=await testAgendaEduConnection({clientId:"cliente",clientSecret:"segredo",schoolToken:"escola"},fakeFetch,"producao");
+  assert.equal(result.channelId,"2000");
+  assert.match(calls[0].url,/api\.agendaedu\.com\/oauth\/v2\/token/);
+  assert.equal(String((calls[0].init?.body as URLSearchParams).get("client_id")),"cliente");
+  assert.match(String((calls[1].init?.headers as Record<string,string>).Authorization),/^Basic /);
+  assert.match(calls[2].url,/api\.agendaedu\.com\/v2\/channels/);
+});
+
 test("localiza aluno na Agenda Edu por nome e turma antes de abrir chat familiar",async()=>{
   const calls:Array<{url:string;init?:RequestInit}>=[];
   const fakeFetch:typeof fetch=async(input,init)=>{
