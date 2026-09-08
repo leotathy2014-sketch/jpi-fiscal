@@ -31,11 +31,15 @@ type AgendaDiagnosticProbe={label:string;method:string;endpoint:string;status:nu
 async function agendaProbe(accessToken:string,schoolToken:string,label:string,path:string,init?:RequestInit){
   const url=`${AGENDA_EDU_ENDPOINTS.sandboxBaseUrl}${path}`;
   const started=Date.now();
-  const response=await fetch(url,{...init,headers:{Accept:"application/json",Authorization:`Bearer ${accessToken}`,"x-school-token":schoolToken,...(init?.headers||{})},cache:"no-store"});
-  const text=await response.text();
-  let body:unknown=text;try{body=text?JSON.parse(text):null}catch{}
-  const data=body&&typeof body==="object"&&(body as {data?:unknown}).data;
-  return {label,method:init?.method||"GET",endpoint:path,status:response.status,ok:response.ok,durationMs:Date.now()-started,count:Array.isArray(data)?data.length:null,sample:safeSample(body)};
+  try{
+    const response=await fetch(url,{...init,headers:{Accept:"application/json",Authorization:`Bearer ${accessToken}`,"x-school-token":schoolToken,...(init?.headers||{})},cache:"no-store"});
+    const text=await response.text();
+    let body:unknown=text;try{body=text?JSON.parse(text):null}catch{}
+    const data=body&&typeof body==="object"&&(body as {data?:unknown}).data;
+    return {label,method:init?.method||"GET",endpoint:path,status:response.status,ok:response.ok,durationMs:Date.now()-started,count:Array.isArray(data)?data.length:null,sample:safeSample(body)};
+  }catch(error){
+    return {label,method:init?.method||"GET",endpoint:path,status:0,ok:false,durationMs:Date.now()-started,count:null,sample:{error:error instanceof Error?error.message:"Falha de rede ao consultar a Agenda Edu."}};
+  }
 }
 
 async function authorizedClient(request:NextRequest){
@@ -205,9 +209,13 @@ export async function POST(request:NextRequest){
       probes.push(await agendaProbe(token.accessToken,credentials.schoolToken,"Alunos gerais","/students?page%5Bsize%5D=10"));
       if(studentName)probes.push(await agendaProbe(token.accessToken,credentials.schoolToken,"Busca aluno por nome",`/students?filter%5Bname%5D=${encodeURIComponent(studentName)}&page%5Bsize%5D=10`));
       if(studentName)probes.push(await agendaProbe(token.accessToken,credentials.schoolToken,"Busca livre por nome",`/students?filter%5Bsearch%5D=${encodeURIComponent(studentName)}&page%5Bsize%5D=10`));
+      if(studentName)probes.push(await agendaProbe(token.accessToken,credentials.schoolToken,"Busca parâmetro q",`/students?q=${encodeURIComponent(studentName)}&page%5Bsize%5D=10`));
+      if(studentName)probes.push(await agendaProbe(token.accessToken,credentials.schoolToken,"Busca parâmetro search",`/students?search=${encodeURIComponent(studentName)}&page%5Bsize%5D=10`));
       if(sweducMatriculaId)probes.push(await agendaProbe(token.accessToken,credentials.schoolToken,"Busca aluno por matrícula SWeduc",`/students?filter%5BexternalId%5D=${encodeURIComponent(sweducMatriculaId)}&page%5Bsize%5D=10`));
+      if(sweducMatriculaId)probes.push(await agendaProbe(token.accessToken,credentials.schoolToken,"Aluno por ID/matrícula direta",`/students/${encodeURIComponent(sweducMatriculaId)}`));
       if(channelId){
         probes.push(await agendaProbe(token.accessToken,credentials.schoolToken,"Chats do canal",`/channels/${encodeURIComponent(channelId)}/chats?page%5Bsize%5D=10`));
+        if(studentName)probes.push(await agendaProbe(token.accessToken,credentials.schoolToken,"Chats por nome do aluno",`/channels/${encodeURIComponent(channelId)}/chats?filter%5Bsearch%5D=${encodeURIComponent(studentName)}&page%5Bsize%5D=10`));
         if(sweducMatriculaId)probes.push(await agendaProbe(token.accessToken,credentials.schoolToken,"Chat familiar por matrícula externa",`/channels/${encodeURIComponent(channelId)}/chats?filter%5Bkind%5D=family&filter%5BstudentId%5D=${encodeURIComponent(sweducMatriculaId)}&filter%5BuseExternalId%5D=true&page%5Bsize%5D=5`));
       }
       return json({ok:true,message:"Diagnóstico Agenda Edu concluído. Nenhuma mensagem foi enviada e nada foi gravado.",baseUrl:AGENDA_EDU_ENDPOINTS.sandboxBaseUrl,channelId:channelId||null,sweducMatriculaId:sweducMatriculaId||null,studentName:studentName||null,probes});
