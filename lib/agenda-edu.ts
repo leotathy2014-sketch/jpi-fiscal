@@ -79,6 +79,7 @@ function agendaHeaders(accessToken:string,schoolToken:string){
 function normalize(value:string){
   return value.normalize("NFD").replace(/[\u0300-\u036f]/g,"").replace(/[^a-z0-9]+/gi," ").trim().toLocaleLowerCase("pt-BR");
 }
+const normalizeDigits=(value:string|null|undefined)=>String(value||"").replace(/\D/g,"");
 
 function agendaAttr(resource:AgendaResource,key:string){
   const attributes=resource.attributes||{};
@@ -91,7 +92,8 @@ function mapAgendaStudent(resource:AgendaResource):AgendaEduStudentCandidate|nul
   if(!id||!name)return null;
   const className=agendaAttr(resource,"className")||agendaAttr(resource,"classroom")||agendaAttr(resource,"turma")||agendaAttr(resource,"class")||agendaAttr(resource,"nome_da_turma")||agendaAttr(resource,"classroom_name")||null;
   const grade=agendaAttr(resource,"grade")||agendaAttr(resource,"serie")||agendaAttr(resource,"segment")||agendaAttr(resource,"nome_da_serie")||null;
-  const externalId=agendaAttr(resource,"externalId")||agendaAttr(resource,"external_id")||agendaAttr(resource,"external_ids")||agendaAttr(resource,"registration")||agendaAttr(resource,"matricula")||null;
+  const rawExternalIds=(resource as Record<string,unknown>).external_ids??resource.attributes?.external_ids;
+  const externalId=Array.isArray(rawExternalIds)?rawExternalIds.map(String).join(" "):agendaAttr(resource,"externalId")||agendaAttr(resource,"external_id")||agendaAttr(resource,"external_ids")||agendaAttr(resource,"registration")||agendaAttr(resource,"matricula")||null;
   return {id,name,className,grade,externalId,raw:{id,attributes:resource.attributes||{}}};
 }
 
@@ -109,7 +111,12 @@ function agendaList(value:unknown):AgendaResource[]{
 function scoreAgendaStudent(candidate:AgendaEduStudentCandidate,input:{name:string;className?:string|null;grade?:string|null;externalId?:string|null}){
   let score=0;
   const candidateName=normalize(candidate.name);const inputName=normalize(input.name);
-  if(candidateName===inputName)score+=80;else if(candidateName.includes(inputName)||inputName.includes(candidateName))score+=55;
+  const candidateExternalDigits=normalizeDigits(candidate.externalId);const inputExternalDigits=normalizeDigits(input.externalId);
+  if(inputExternalDigits&&candidateExternalDigits){
+    if(candidateExternalDigits.split(/\D+/).includes(inputExternalDigits)||candidateExternalDigits===inputExternalDigits)score+=120;
+    else return 0;
+  }
+  if(candidateName===inputName)score+=80;else if(candidateName.includes(inputName)||inputName.includes(candidateName))score+=35;else return inputExternalDigits&&score>=120?score:0;
   const candidateClass=normalize(candidate.className||"");const inputClass=normalize(input.className||"");
   if(candidateClass&&inputClass&&(candidateClass===inputClass||candidateClass.includes(inputClass)||inputClass.includes(candidateClass)))score+=15;
   const candidateGrade=normalize(candidate.grade||"");const inputGrade=normalize(input.grade||"");
@@ -120,9 +127,8 @@ function scoreAgendaStudent(candidate:AgendaEduStudentCandidate,input:{name:stri
 
 export async function searchAgendaEduStudents(input:{accessToken:string;schoolToken:string;name:string;className?:string|null;grade?:string|null;externalId?:string|null;environment?:AgendaEduEnvironment},fetchImpl:FetchLike=fetch){
   const terms=[
-    {endpoint:"/student_profiles",params:{"nome":input.name,"pagina":"1","por_pagina":"20"}},
-    {endpoint:"/student_profiles",params:{"e-mail":"","pagina":"1","por_pagina":"20"}},
     {endpoint:"/student_profiles",params:{"external_ids[]":input.externalId||"","pagina":"1","por_pagina":"20"}},
+    {endpoint:"/student_profiles",params:{"nome":input.name,"pagina":"1","por_pagina":"20"}},
   ];
   const attempted:string[]=[];let lastError="";
   for(const term of terms){
@@ -134,7 +140,7 @@ export async function searchAgendaEduStudents(input:{accessToken:string;schoolTo
     if(!response.ok){lastError=await responseMessage(response,"A Agenda Edu não permitiu consultar alunos.");continue}
     const result=await response.json().catch(()=>({}));
     const candidates=agendaList(result).map(mapAgendaStudent).filter(Boolean) as AgendaEduStudentCandidate[];
-    const scored=candidates.map(candidate=>({...candidate,score:scoreAgendaStudent(candidate,input)})).filter(candidate=>candidate.score>=55).sort((a,b)=>b.score-a.score||a.name.localeCompare(b.name,"pt-BR")).slice(0,8);
+    const scored=candidates.map(candidate=>({...candidate,score:scoreAgendaStudent(candidate,input)})).filter(candidate=>candidate.score>=80).sort((a,b)=>b.score-a.score||a.name.localeCompare(b.name,"pt-BR")).slice(0,8);
     if(scored.length)return {candidates:scored,attempted};
   }
   if(lastError)throw new Error(lastError);

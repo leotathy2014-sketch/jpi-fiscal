@@ -66,6 +66,16 @@ test("localiza aluno na Agenda Edu por nome e turma antes de abrir chat familiar
   assert.equal(result.candidates[0].id,"stu-9193");
   assert.ok(result.candidates[0].score>=95);
   assert.match(calls[0].url,/\/student_profiles\?/);
-  assert.match(calls[0].url,/nome=/);
+  assert.match(calls[0].url,/external_ids/);
   assert.equal((calls[0].init?.headers as Record<string,string>)["x-school-token"],"school");
+});
+
+test("não aceita candidato de aluno com nome diferente quando a busca retorna lista ampla",async()=>{
+  const fakeFetch:typeof fetch=async()=>new Response(JSON.stringify({student_profiles:[
+    {id:"stu-errado",nome:"ANA CLARA ABREU DA SILVA",nome_da_turma:"701",external_ids:["1111"]},
+    {id:"stu-certo",nome:"ANA LUIZA ABREU DA SILVA",nome_da_turma:"701",external_ids:["8945"]},
+  ]}),{status:200,headers:{"Content-Type":"application/json"}});
+  const result=await searchAgendaEduStudents({accessToken:"token",schoolToken:"school",name:"ANA LUIZA ABREU DA SILVA",className:"701",externalId:"8945",environment:"producao"},fakeFetch);
+  assert.equal(result.candidates[0].id,"stu-certo");
+  assert.equal(result.candidates.length,1);
 });

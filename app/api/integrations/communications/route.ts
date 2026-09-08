@@ -311,7 +311,7 @@ export async function POST(request:NextRequest){
       const environment=agendaEnvironment(currentConfig?.agenda_edu_environment);
       const credentials=parseAgendaEduCredentials(String(storedSecret));const {accessToken}=await createAgendaEduAccessToken(credentials,fetch,environment);
       const result=await searchAgendaEduStudents({accessToken,schoolToken:credentials.schoolToken,name:String(student.nome||""),className:String(student.turma||""),grade:String(student.segmento||""),externalId:student.sweduc_matricula_id?String(student.sweduc_matricula_id):null,environment});
-      const best=result.candidates[0];const autoLinked=Boolean(best&&best.score>=95);
+      const best=result.candidates[0];const autoLinked=Boolean(best&&best.score>=120&&result.candidates.filter(candidate=>candidate.score>=120).length===1);
       if(autoLinked){
         let updateRequest=auth.supabase.from("alunos").update({agenda_edu_student_id:best.id,agenda_edu_use_external_id:false});
         updateRequest=student.sweduc_matricula_id?updateRequest.eq("sweduc_matricula_id",student.sweduc_matricula_id):updateRequest.eq("id",studentId);
