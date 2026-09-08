@@ -52,6 +52,10 @@ test("oferece configuração e vínculo administrativo sem expor segredos",()=>{
   assert.match(studentLinksSource,/agenda_edu_student_id/);
   assert.match(studentLinksSource,/Localizar na Agenda Edu/);
   assert.match(communicationsApiSource,/find-agenda-student/);
+  assert.match(communicationsApiSource,/diagnose-agenda/);
+  assert.match(settingsUiSource,/Diagnóstico da API Agenda Edu/);
+  assert.match(settingsUiSource,/Nome do aluno/);
+  assert.match(settingsUiSource,/Matrícula SWeduc/);
 });
 
 test("oferece lote, histórico e reenvio no canal Agenda Edu",()=>{

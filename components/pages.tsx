@@ -1211,6 +1211,8 @@ type CommunicationConfig = {
   agenda_edu_testada_em: string | null;
   agenda_edu_ultimo_status: string;
 };
+type AgendaDiagnosticProbe={label:string;method:string;endpoint:string;status:number;ok:boolean;durationMs:number;count:number|null;sample:unknown};
+type AgendaDiagnosticResult={message:string;baseUrl:string;channelId:string|null;sweducMatriculaId:string|null;studentName:string|null;probes:AgendaDiagnosticProbe[]};
 
 function CommunicationsSettings({accessToken,onChanged,canEdit,section}:{accessToken:string|null;onChanged:(config:CommunicationConfig)=>void;canEdit:boolean;section:"email"|"whatsapp"|"manual-whatsapp"|"agenda"}) {
   const supabase=useMemo(()=>createSupabaseBrowserClient(),[]);
@@ -1247,6 +1249,9 @@ function CommunicationsSettings({accessToken,onChanged,canEdit,section}:{accessT
   const [agendaMasterCopied,setAgendaMasterCopied]=useState("");
   const [agendaApiInfoOpen,setAgendaApiInfoOpen]=useState(false);
   const [agendaInfoOpen,setAgendaInfoOpen]=useState(false);
+  const [agendaDiagnosticName,setAgendaDiagnosticName]=useState("");
+  const [agendaDiagnosticMatricula,setAgendaDiagnosticMatricula]=useState("");
+  const [agendaDiagnostic,setAgendaDiagnostic]=useState<AgendaDiagnosticResult|null>(null);
 
   useEffect(()=>{
     if(!agendaMasterSecrets)return;
@@ -1331,6 +1336,7 @@ function CommunicationsSettings({accessToken,onChanged,canEdit,section}:{accessT
   async function testWhatsapp(){setBusy("test-whatsapp");setError("");setMessage("");try{setMessage(await run("test-whatsapp",{}));await load();}catch(requestError){setError(requestError instanceof Error?requestError.message:"Não foi possível testar o WhatsApp.");}finally{setBusy("");}}
   async function saveAgenda(event:FormEvent<HTMLFormElement>){event.preventDefault();setBusy("save-agenda");setError("");setMessage("");try{setMessage(await run("save-agenda",{schoolIdentifier:agendaEduSchoolIdentifier,channelId:agendaEduChannelId,clientId:agendaEduClientId,clientSecret:agendaEduClientSecret,schoolToken:agendaEduSchoolToken}));setAgendaEduClientId("");setAgendaEduClientSecret("");setAgendaEduSchoolToken("");await load();}catch(requestError){setError(requestError instanceof Error?requestError.message:"Não foi possível salvar a Agenda Edu.");}finally{setBusy("");}}
   async function testAgenda(){setBusy("test-agenda");setError("");setMessage("");try{setMessage(await run("test-agenda",{}));await load();}catch(requestError){setError(requestError instanceof Error?requestError.message:"Não foi possível testar a Agenda Edu.");}finally{setBusy("");}}
+  async function diagnoseAgenda(){setBusy("diagnose-agenda");setError("");setMessage("");setAgendaDiagnostic(null);try{if(!accessToken)throw new Error("Sessão expirada. Entre novamente.");const response=await authenticatedFetch("/api/integrations/communications",{method:"POST",headers:{Authorization:`Bearer ${accessToken}`,"Content-Type":"application/json"},body:JSON.stringify({action:"diagnose-agenda",channelId:agendaEduChannelId,sweducMatriculaId:agendaDiagnosticMatricula,studentName:agendaDiagnosticName}),cache:"no-store"});const data=await response.json().catch(()=>({})) as AgendaDiagnosticResult&{error?:string};if(response.status===401)window.dispatchEvent(new Event("jpi-session-invalid"));if(!response.ok)throw new Error(data.error||"Não foi possível diagnosticar a Agenda Edu.");setAgendaDiagnostic(data);setMessage(data.message||"Diagnóstico Agenda Edu concluído. Nada foi gravado.");}catch(requestError){setError(requestError instanceof Error?requestError.message:"Não foi possível diagnosticar a Agenda Edu.");}finally{setBusy("");}}
   const disabled=loading||Boolean(busy)||!canEdit;
   const sectionCopy={
     email:{title:"E-mail",description:"Servidor, remetente, credencial e teste de entrega por e-mail.",Icon:Mail},
@@ -1393,7 +1399,15 @@ function CommunicationsSettings({accessToken,onChanged,canEdit,section}:{accessT
           <button className="primary full" disabled={disabled}>{busy==="save-agenda"?"Salvando…":"Salvar configuração da Agenda Edu"}</button>
           <button type="button" className="secondary full" onClick={testAgenda} disabled={disabled||!config?.agenda_edu_credencial_configurada}>{busy==="test-agenda"?"Testando conexão…":"Testar conexão sem enviar mensagem"}</button>
           {config?.agenda_edu_testada_em&&<small className="last-test">Último teste: {new Date(config.agenda_edu_testada_em).toLocaleString("pt-BR")}</small>}
-        </form></div><AgendaEduStudentLinks/>
+        </form>
+          {isMaster&&canEdit&&<section className="communication-channel-card agenda-diagnostic-card">
+            <div className="communication-channel-head"><span className="integration-icon purple"><Search/></span><div><h3>Diagnóstico da API Agenda Edu</h3><small>Veja o que a API retorna antes de decidir o caminho do módulo.</small></div><IntegrationStateBadge label={agendaDiagnostic?"Testado":"Seguro"} tone={agendaDiagnostic?"connected":"pending"}/></div>
+            <div className="notice compact"><ShieldCheck/><span>Este teste consulta canais, alunos, chats e busca por nome/matrícula. Não envia mensagem, não cria chat e não grava vínculo.</span></div>
+            <div className="form-row"><label>Nome do aluno<input value={agendaDiagnosticName} onChange={event=>setAgendaDiagnosticName(event.target.value)} placeholder="Ex.: RAQUEL ABREU DA SILVA"/></label><label>Matrícula SWeduc / ID externo<input inputMode="numeric" value={agendaDiagnosticMatricula} onChange={event=>setAgendaDiagnosticMatricula(event.target.value.replace(/\D/g,""))} placeholder="Ex.: 9193"/></label></div>
+            <button type="button" className="secondary full" onClick={()=>void diagnoseAgenda()} disabled={disabled||!config?.agenda_edu_credencial_configurada}>{busy==="diagnose-agenda"?"Consultando API…":"Executar diagnóstico sem gravar"}</button>
+            {agendaDiagnostic&&<div className="agenda-diagnostic-results"><div className="agenda-diagnostic-summary"><strong>{agendaDiagnostic.baseUrl}</strong><span>{agendaDiagnostic.probes.length} teste(s) executado(s){agendaDiagnostic.studentName?` · nome: ${agendaDiagnostic.studentName}`:""}{agendaDiagnostic.sweducMatriculaId?` · matrícula: ${agendaDiagnostic.sweducMatriculaId}`:""}</span></div>{agendaDiagnostic.probes.map((probe,index)=><details key={`${probe.label}-${index}`} className={probe.ok?"agenda-diagnostic-probe ok":"agenda-diagnostic-probe error"} open={index<2}><summary><span><b>{probe.label}</b><small>{probe.method} {probe.endpoint}</small></span><em>{probe.status||"erro"}{probe.count!==null?` · ${probe.count} item(ns)`:""}</em></summary><pre>{JSON.stringify(probe.sample,null,2)}</pre></details>)}</div>}
+          </section>}
+        </div><AgendaEduStudentLinks/>
         {isMaster&&agendaApiInfoOpen&&<div className="agenda-api-modal-backdrop" role="presentation" onMouseDown={event=>{if(event.currentTarget===event.target){setAgendaApiInfoOpen(false);hideAgendaMasterSecrets();}}}>
           <section className="agenda-api-modal" role="dialog" aria-modal="true" aria-labelledby="agenda-api-modal-title">
             <header className="agenda-api-modal-head">

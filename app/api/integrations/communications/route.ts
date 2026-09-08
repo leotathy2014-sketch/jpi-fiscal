@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { sendSmtpEmail } from "@/lib/smtp";
-import { createAgendaEduAccessToken, serializeAgendaEduCredentials, parseAgendaEduCredentials, searchAgendaEduStudents, testAgendaEduConnection } from "@/lib/agenda-edu";
+import { AGENDA_EDU_ENDPOINTS, createAgendaEduAccessToken, serializeAgendaEduCredentials, parseAgendaEduCredentials, searchAgendaEduStudents, testAgendaEduConnection } from "@/lib/agenda-edu";
 import { hasServerPermission } from "@/lib/server-permissions";
 
 export const runtime = "nodejs";
@@ -13,6 +13,30 @@ const normalizeBrazilPhone=(value:string)=>{const phone=digits(value);return pho
 const maskPhone=(value:string)=>value.length>=12?`+${value.slice(0,2)} (${value.slice(2,4)}) •••••-${value.slice(-4)}`:"Número interno configurado";
 const json=(body:Record<string,unknown>,status=200)=>NextResponse.json(body,{status,headers:{"Cache-Control":"no-store"}});
 const escapeHtml=(value:string)=>value.replace(/[&<>"']/g,character=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"})[character]||character);
+const safeSample=(value:unknown,depth=0):unknown=>{
+  if(depth>4)return "[limite de profundidade]";
+  if(Array.isArray(value))return value.slice(0,5).map(item=>safeSample(item,depth+1));
+  if(value&&typeof value==="object"){
+    const output:Record<string,unknown>={};
+    for(const [key,raw] of Object.entries(value as Record<string,unknown>).slice(0,30)){
+      if(/token|secret|password|senha|authorization/i.test(key)){output[key]="[protegido]";continue}
+      output[key]=safeSample(raw,depth+1);
+    }
+    return output;
+  }
+  if(typeof value==="string"&&value.length>300)return `${value.slice(0,300)}...`;
+  return value;
+};
+type AgendaDiagnosticProbe={label:string;method:string;endpoint:string;status:number;ok:boolean;durationMs:number;count:number|null;sample:unknown};
+async function agendaProbe(accessToken:string,schoolToken:string,label:string,path:string,init?:RequestInit){
+  const url=`${AGENDA_EDU_ENDPOINTS.sandboxBaseUrl}${path}`;
+  const started=Date.now();
+  const response=await fetch(url,{...init,headers:{Accept:"application/json",Authorization:`Bearer ${accessToken}`,"x-school-token":schoolToken,...(init?.headers||{})},cache:"no-store"});
+  const text=await response.text();
+  let body:unknown=text;try{body=text?JSON.parse(text):null}catch{}
+  const data=body&&typeof body==="object"&&(body as {data?:unknown}).data;
+  return {label,method:init?.method||"GET",endpoint:path,status:response.status,ok:response.ok,durationMs:Date.now()-started,count:Array.isArray(data)?data.length:null,sample:safeSample(body)};
+}
 
 async function authorizedClient(request:NextRequest){
   const supabaseUrl=process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -163,6 +187,32 @@ export async function POST(request:NextRequest){
     }catch(testError){
       await auth.supabase.from("integracoes_comunicacao").update({agenda_edu_ultimo_status:"erro",updated_at:new Date().toISOString(),updated_by:auth.user.id}).eq("id",true);
       return json({error:testError instanceof Error?testError.message:"A Agenda Edu não confirmou a conexão com o Sandbox."},400);
+    }
+  }
+
+  if(action==="diagnose-agenda"){
+    if(!await hasServerPermission(auth.supabase,"settings.integrations.edit"))return json({error:"Seu usuário não possui permissão para diagnosticar a Agenda Edu."},403);
+    const {data:storedSecret,error:secretError}=await auth.supabase.rpc("get_communication_secret",{p_channel:"agenda_edu",p_backend_secret:backendSecret});
+    if(secretError||!storedSecret)return json({error:"Cadastre primeiro as credenciais da Agenda Edu."},400);
+    const channelId=String(body.channelId||"").trim();
+    const sweducMatriculaId=String(body.sweducMatriculaId||"").replace(/\D/g,"").trim();
+    const studentName=String(body.studentName||"").trim();
+    try{
+      const credentials=parseAgendaEduCredentials(String(storedSecret));
+      const token=await createAgendaEduAccessToken(credentials);
+      const probes:AgendaDiagnosticProbe[]=[{label:"OAuth/token",method:"POST",endpoint:"/oauth/v2/token",status:200,ok:true,durationMs:0,count:null,sample:{access_token:"[protegido]",expires_in:token.expiresIn}}];
+      probes.push(await agendaProbe(token.accessToken,credentials.schoolToken,"Canais de mensagens","/channels?page%5Bsize%5D=10"));
+      probes.push(await agendaProbe(token.accessToken,credentials.schoolToken,"Alunos gerais","/students?page%5Bsize%5D=10"));
+      if(studentName)probes.push(await agendaProbe(token.accessToken,credentials.schoolToken,"Busca aluno por nome",`/students?filter%5Bname%5D=${encodeURIComponent(studentName)}&page%5Bsize%5D=10`));
+      if(studentName)probes.push(await agendaProbe(token.accessToken,credentials.schoolToken,"Busca livre por nome",`/students?filter%5Bsearch%5D=${encodeURIComponent(studentName)}&page%5Bsize%5D=10`));
+      if(sweducMatriculaId)probes.push(await agendaProbe(token.accessToken,credentials.schoolToken,"Busca aluno por matrícula SWeduc",`/students?filter%5BexternalId%5D=${encodeURIComponent(sweducMatriculaId)}&page%5Bsize%5D=10`));
+      if(channelId){
+        probes.push(await agendaProbe(token.accessToken,credentials.schoolToken,"Chats do canal",`/channels/${encodeURIComponent(channelId)}/chats?page%5Bsize%5D=10`));
+        if(sweducMatriculaId)probes.push(await agendaProbe(token.accessToken,credentials.schoolToken,"Chat familiar por matrícula externa",`/channels/${encodeURIComponent(channelId)}/chats?filter%5Bkind%5D=family&filter%5BstudentId%5D=${encodeURIComponent(sweducMatriculaId)}&filter%5BuseExternalId%5D=true&page%5Bsize%5D=5`));
+      }
+      return json({ok:true,message:"Diagnóstico Agenda Edu concluído. Nenhuma mensagem foi enviada e nada foi gravado.",baseUrl:AGENDA_EDU_ENDPOINTS.sandboxBaseUrl,channelId:channelId||null,sweducMatriculaId:sweducMatriculaId||null,studentName:studentName||null,probes});
+    }catch(testError){
+      return json({error:testError instanceof Error?testError.message:"Não foi possível diagnosticar a Agenda Edu."},400);
     }
   }
 
