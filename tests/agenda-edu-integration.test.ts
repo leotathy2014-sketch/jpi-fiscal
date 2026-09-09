@@ -21,6 +21,7 @@ test("envia pelo módulo Mensagens com os responsáveis no ambiente configurado"
   assert.match(deliveryApiSource,/providerIds\.pdf/);
   assert.match(deliveryApiSource,/providerIds\.xml/);
   assert.match(deliveryApiSource,/duas mensagens/);
+  assert.doesNotMatch(deliveryApiSource,/agenda_edu_ultimo_status!=="conectado"/);
 });
 
 test("protege a rota e separa credenciais, documentos e destinatário",()=>{

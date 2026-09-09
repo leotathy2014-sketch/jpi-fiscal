@@ -50,7 +50,7 @@ export async function GET(request:NextRequest){
   const {config,error}=await readConfig(auth.supabase,backendSecret);
   if(error||!config)return json({error:"Não foi possível carregar a configuração segura da Agenda Edu."},503);
   const environment=(config.agenda_edu_environment==="producao"?"producao":"homologacao") as AgendaEduEnvironment;
-  const ready=Boolean(config.agenda_edu_credencial_configurada&&config.agenda_edu_ultimo_status==="conectado"&&config.agenda_edu_channel_id);
+  const ready=Boolean(config.agenda_edu_credencial_configurada&&config.agenda_edu_channel_id);
   return json({ok:true,ready,environment:environment==="producao"?"production":"sandbox",channelConfigured:Boolean(config.agenda_edu_channel_id),message:ready?`Agenda Edu pronta na ${environment==="producao"?"plataforma oficial":"homologação"}.`:"Configure, salve e teste a Agenda Edu antes do primeiro envio."});
 }
 
@@ -73,7 +73,7 @@ export async function POST(request:NextRequest){
   if(paymentResult.error||!payment)return json({error:"Mensalidade não encontrada."},404);
   if(documentResult.error||!document)return json({error:"A versão ativa da NFS-e de teste não foi encontrada."},404);
   if(configResult.error||!config)return json({error:"Não foi possível carregar a configuração segura da Agenda Edu."},503);
-  if(!config.agenda_edu_credencial_configurada||config.agenda_edu_ultimo_status!=="conectado"||!config.agenda_edu_channel_id)return json({error:"A integração da Agenda Edu precisa estar configurada e testada."},400);
+  if(!config.agenda_edu_credencial_configurada||!config.agenda_edu_channel_id)return json({error:"A integração da Agenda Edu precisa ter credenciais e canal padrão configurados."},400);
   const environment=(config.agenda_edu_environment==="producao"?"producao":"homologacao") as AgendaEduEnvironment;
   const linkedStudentId=String(payment.alunos?.agenda_edu_student_id||"").trim();
   const sweducExternalId=payment.alunos?.sweduc_matricula_id?String(payment.alunos.sweduc_matricula_id).trim():"";
