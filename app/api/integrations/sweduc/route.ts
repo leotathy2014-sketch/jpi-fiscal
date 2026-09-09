@@ -149,6 +149,8 @@ function defaultRecentYears(academicYears:{year:number}[],currentYear:number){
 
 function normalizeSearchText(value:unknown){return String(value||"").normalize("NFD").replace(/[\u0300-\u036f]/g,"").replace(/[^\p{L}\p{N}\s]/gu," ").replace(/\s+/g," ").trim().toLocaleLowerCase("pt-BR")}
 function matchesSearch(row:Record<string,unknown>,term:string){const normalized=normalizeSearchText(term);if(!normalized)return true;return [row.nome,row.numero_matricula,row.matricula_id,row.turma,row.serie,row.curso].some(value=>normalizeSearchText(value).includes(normalized))}
+function sameAcademic(value:unknown,expected:string){return !expected||normalizeAcademicReference(String(value||""))===normalizeAcademicReference(expected)}
+function matchesAcademic(row:Record<string,unknown>,course:string,serie:string,turma:string){return sameAcademic(row.curso,course)&&sameAcademic(row.serie,serie)&&sameAcademic(row.turma,turma)}
 function financialText(item:Record<string,unknown>,keys:string[]){for(const key of keys){const value=item[key];if(value!==undefined&&value!==null&&String(value).trim())return String(value)}return ""}
 function parseFinancialNumber(value:string){
   const clean=value.replace(/[^\d.,-]/g,"").trim();
@@ -341,16 +343,22 @@ export async function POST(request:NextRequest){
       rows=((broadResult.data||[]) as Array<Record<string,unknown>>).filter(row=>matchesSearch(row,search)).slice(from,to+1);
       if(rows.length)return json({ok:true,students:rows,page,lastPage:1,nextPage:null,totalAvailable:rows.length,message:`Consulta local encontrou ${rows.length} matrícula(s) ignorando acentos e caracteres especiais. Nada foi salvo no cadastro fiscal.`});
     }
-    if(rows.length||(!search&&mirrorTotal>0)||course||serie||turma)return json({ok:true,students:rows,page,lastPage:Math.max(1,Math.ceil(totalLocal/pageSize)),nextPage:to+1<totalLocal?page+1:null,totalAvailable:totalLocal,message:rows.length?`Consulta local concluída com ${totalLocal} matrícula(s) encontrada(s). Nada foi salvo no cadastro fiscal.`:"Nenhum aluno encontrado no espelho SWeduc para estes filtros."});
+    if(rows.length||(!search&&!course&&!serie&&!turma&&mirrorTotal>0))return json({ok:true,students:rows,page,lastPage:Math.max(1,Math.ceil(totalLocal/pageSize)),nextPage:to+1<totalLocal?page+1:null,totalAvailable:totalLocal,message:rows.length?`Consulta local concluída com ${totalLocal} matrícula(s) encontrada(s). Nada foi salvo no cadastro fiscal.`:"Nenhum aluno encontrado no espelho SWeduc para estes filtros."});
     let activeCredentials:SweducCredentials|undefined;let activeAccessToken="";
     try{
       const creds=await credentials(auth.supabase);activeCredentials=creds;const resolved=await resolveSweducAcademicYear(creds.host,Number.isSafeInteger(rawYear)&&rawYear>1900?rawYear:undefined);const activeYear=resolved.selected;const token=await createSweducAccessToken(creds);activeAccessToken=token.accessToken;
-      const listing=await listSweducStudentsWithToken(creds.host,token.accessToken,{page,ano_letivo_id:activeYear.id,search:search||undefined});
-      const apiRows=filterRowsByUnits((listing.data||[]).map(mapSummaryToGrid),syncUnits);
-      await upsertSweducMirror(auth.supabase,apiRows);
-      await upsertSweducAcademicReferences(auth.supabase,apiRows,activeYear.year);
-      const lastPage=Math.min(Math.max(1,Number(listing.last_page||page)),MAX_SWEDUC_PAGES);
-      return json({ok:true,students:apiRows,page,lastPage,nextPage:page<lastPage?page+1:null,academicYear:activeYear.year,totalAvailable:Number(listing.total||0),message:`Espelho SWeduc estava vazio e foi atualizado pela API para ${activeYear.year}. Nada foi salvo no cadastro fiscal.`});
+      const collected:Array<Record<string,unknown>>=[];let remotePage=1;let lastPage=1;let totalApi=0;
+      while(remotePage<=MAX_SWEDUC_PAGES){
+        const listing=await listSweducStudentsWithToken(creds.host,token.accessToken,{page:remotePage,ano_letivo_id:activeYear.id,search:search||undefined});
+        lastPage=Math.min(Math.max(1,Number(listing.last_page||remotePage)),MAX_SWEDUC_PAGES);totalApi=Number(listing.total||totalApi||0);
+        const pageRows=filterRowsByUnits((listing.data||[]).map(mapSummaryToGrid),syncUnits);
+        if(pageRows.length){await upsertSweducMirror(auth.supabase,pageRows);await upsertSweducAcademicReferences(auth.supabase,pageRows,activeYear.year)}
+        collected.push(...pageRows.filter(row=>matchesAcademic(row,course,serie,turma)&&matchesSearch(row,search)));
+        if(collected.length>to||remotePage>=lastPage)break;
+        remotePage++;
+      }
+      const paged=collected.slice(from,to+1);
+      return json({ok:true,students:paged,page,lastPage:Math.max(1,Math.ceil(collected.length/pageSize)),nextPage:to+1<collected.length?page+1:null,academicYear:activeYear.year,totalAvailable:collected.length||totalApi,message:paged.length?`Consulta feita na SWeduc com os filtros selecionados: ${collected.length} matrícula(s) encontrada(s). Nada foi salvo no cadastro fiscal.`:"Nenhum aluno encontrado na SWeduc para estes filtros."});
     }catch(error){return json({error:safeSweducError(error,activeCredentials,[activeAccessToken])},400)}
   }
   if(action==="sync"){
