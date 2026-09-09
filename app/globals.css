@@ -76,6 +76,20 @@
 .agenda-chat-candidates button small{font-size:10.5px;color:#66758a}
 .agenda-chat-candidates button b{font-size:11px;color:#5a3ea2}
 .agenda-chat-candidates button.selected b{color:#15803d}
+.agenda-chat-workbench{display:grid;gap:14px}
+.agenda-chat-search{display:grid;grid-template-columns:1fr 1.3fr 1.3fr auto;gap:12px;align-items:end;padding:16px;border:1px solid var(--line);border-radius:14px;background:#fff}
+.agenda-chat-search label{display:grid;gap:6px;font-size:12px;font-weight:900;color:#334155;text-transform:uppercase;letter-spacing:.04em}
+.agenda-chat-search input{height:42px;border:1px solid #d7e0eb;border-radius:10px;padding:0 12px;font-size:14px;font-weight:700;color:#172033;background:#f8fafc}
+.agenda-chat-search input:focus{outline:2px solid #7aa7ff;border-color:#7aa7ff;background:white}
+.agenda-chat-results{display:grid;gap:10px}
+.agenda-chat-results>button{display:grid;grid-template-columns:auto minmax(0,1fr) auto;align-items:center;gap:12px;padding:14px;border:1px solid var(--line);border-radius:14px;background:white;text-align:left;cursor:pointer;box-shadow:0 6px 18px rgba(15,23,42,.04)}
+.agenda-chat-results>button.selected{border-color:#16a34a;background:#f0fdf4}
+.agenda-chat-result-icon{display:grid;place-items:center;width:38px;height:38px;border-radius:12px;background:#eef6ff;color:#315c91}
+.agenda-chat-result-icon svg{width:19px}
+.agenda-chat-results strong{display:block;color:#172033;font-size:14px}
+.agenda-chat-results small{display:block;color:#64748b;font-size:11px;line-height:1.4}
+.agenda-chat-results b{font-size:12px;color:#5b341c}
+@media(max-width:900px){.agenda-chat-search{grid-template-columns:1fr 1fr}.agenda-chat-search button{grid-column:1/-1}.agenda-chat-results>button{grid-template-columns:auto 1fr}}@media(max-width:640px){.agenda-chat-search,.agenda-chat-results>button{grid-template-columns:1fr}.agenda-chat-result-icon{display:none}.agenda-chat-results b{justify-self:start}}
 .agenda-chat-retry{display:grid;gap:5px;margin-top:8px;padding:9px;border:1px dashed #f0b574;border-radius:9px;background:#fffaf2}
 .agenda-chat-retry span{font-size:10px;font-weight:900;text-transform:uppercase;color:#9a4d05}
 .agenda-chat-retry input{height:36px;border:1px solid #e7bd86;border-radius:8px;padding:0 10px;font-weight:800;color:#1d2b40;background:white}
