@@ -15,7 +15,7 @@ const json=(body:Record<string,unknown>,status=200)=>NextResponse.json(body,{sta
 const safeKey=(value:string)=>value.replace(/[^a-z0-9]/gi,"").slice(0,60)||"documento";
 
 type AgendaConfig={agenda_edu_channel_id:string|null;agenda_edu_environment:string;agenda_edu_credencial_configurada:boolean;agenda_edu_ultimo_status:string};
-type PaymentSource={id:number;competencia:string;valor_nfse:number;alunos:{nome:string;responsavel:string;agenda_edu_student_id:string|null;agenda_edu_use_external_id:boolean;sweduc_matricula_id:number|null}|null};
+type PaymentSource={id:number;competencia:string;valor_nfse:number;alunos:{nome:string;responsavel:string;turma:string|null;segmento:string|null;agenda_edu_student_id:string|null;agenda_edu_use_external_id:boolean;sweduc_matricula_id:number|null}|null};
 type DocumentSource={id:number;mensalidade_id:number;versao:number;chave_acesso:string;nfse_xml_path:string;estado:string};
 
 async function authorizedClient(request:NextRequest){
@@ -65,7 +65,7 @@ export async function POST(request:NextRequest){
   if(existing)return json({ok:existing.status==="enviado",alreadyProcessed:true,status:existing.status,sentAt:existing.enviado_em,error:existing.erro_mensagem},existing.status==="erro"?409:200);
 
   const [paymentResult,documentResult,configResult]=await Promise.all([
-    auth.supabase.from("mensalidades").select("id,competencia,valor_nfse,alunos(nome,responsavel,agenda_edu_student_id,agenda_edu_use_external_id,sweduc_matricula_id)").eq("id",monthlyId).maybeSingle(),
+    auth.supabase.from("mensalidades").select("id,competencia,valor_nfse,alunos(nome,responsavel,turma,segmento,agenda_edu_student_id,agenda_edu_use_external_id,sweduc_matricula_id)").eq("id",monthlyId).maybeSingle(),
     auth.supabase.from("nfse_documentos_homologacao").select("id,mensalidade_id,versao,chave_acesso,nfse_xml_path,estado").eq("id",documentId).eq("mensalidade_id",monthlyId).eq("estado","ativa").maybeSingle(),
     readConfig(auth.supabase,backendSecret),
   ]);
@@ -105,7 +105,7 @@ export async function POST(request:NextRequest){
     if(accessResult.error)throw new Error("Não foi possível criar o link protegido da NFS-e.");
     const protectedUrl=new URL(`/nota/${accessTokenValue}`,request.nextUrl.origin).toString();
     protectedSecret=String(storedSecret);const credentials=parseAgendaEduCredentials(protectedSecret);const {accessToken}=await createAgendaEduAccessToken(credentials,fetch,environment);
-    const common={accessToken,schoolToken:credentials.schoolToken,channelId:config.agenda_edu_channel_id,studentId,useExternalId};
+    const common={accessToken,schoolToken:credentials.schoolToken,channelId:config.agenda_edu_channel_id,studentId,useExternalId,studentName:payment.alunos?.nome||null,classroomName:[payment.alunos?.turma,payment.alunos?.segmento].filter(Boolean).join(" ")||null};
     const chatId=await resolveAgendaEduFamilyChat({...common,environment});
     const prefix=environment==="producao"?"JPI Fiscal":"TESTE DE HOMOLOGAÇÃO — SEM VALIDADE FISCAL";
     providerIds.pdf=await sendAgendaEduAttachment({accessToken,schoolToken:credentials.schoolToken,channelId:config.agenda_edu_channel_id,chatId,content:`${prefix}\nNFS-e de ${payment.alunos?.nome||"aluno"}, competência ${payment.competencia}. DANFSe em PDF.\n\nAcesso individual protegido: ${protectedUrl}`,filename:`danfse-homologacao-${safeKey(document.chave_acesso)}.pdf`,contentType:"application/pdf",bytes:new Uint8Array(pdfBuffer),environment});

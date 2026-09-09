@@ -24,6 +24,22 @@ test("cria chat familiar apenas quando o aluno ainda não possui um",async()=>{
   assert.equal(chatId,"chat-new");assert.equal(call,2);
 });
 
+test("localiza chat familiar existente pelo nome do aluno dentro do canal",async()=>{
+  const calls:Array<{url:string;init?:RequestInit}>=[];
+  const fakeFetch:typeof fetch=async(input,init)=>{
+    const url=String(input);calls.push({url,init});
+    if(url.includes("filter%5BstudentId%5D"))return new Response(JSON.stringify({data:[]}),{status:200});
+    if(url.includes("/chats?"))return new Response(JSON.stringify({data:[
+      {id:"chat-outro",attributes:{title:"Família: OUTRO ALUNO",classroom:"601"}},
+      {id:"chat-raquel",attributes:{title:"Família: RAQUEL ABREU DA SILVA",classroom:"601 - Matriz"}},
+    ]}),{status:200});
+    return new Response(JSON.stringify({data:{id:"chat-criado-indevido"}}),{status:201});
+  };
+  const chatId=await resolveAgendaEduFamilyChat({accessToken:"token",schoolToken:"school",channelId:"68768",studentId:"7202",studentName:"RAQUEL ABREU DA SILVA",classroomName:"601 · 6º ao 9º anos",useExternalId:false},fakeFetch);
+  assert.equal(chatId,"chat-raquel");
+  assert.equal(calls.some(call=>String(call.init?.method||"GET").toUpperCase()==="POST"),false);
+});
+
 test("gera o OAuth e consulta canais no Sandbox sem criar mensagem",async()=>{
   const calls:Array<{url:string;init?:RequestInit}>=[];
   const fakeFetch:typeof fetch=async(input,init)=>{
