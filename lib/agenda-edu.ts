@@ -23,6 +23,8 @@ export type AgendaEduStudentListItem={
 };
 export type AgendaEduResponsibleItem={id:string;name:string;externalId:string|null;legacyId:string|null;email:string|null;phone:string|null;documentNumber:string|null;kinship:string|null;financial:boolean;status:string|null;linkedStatus:string|null};
 export type AgendaEduClassroomItem={id:string;name:string;externalId:string|null;legacyId:string|null;status:string|null};
+export type AgendaEduChannelItem={id:string;name:string;type:string|null;status:string|null;visibility:string|null;kind:string|null;raw:Record<string,unknown>};
+export type AgendaEduChannelListPage={channels:AgendaEduChannelItem[];page:number;nextPage:number|null;totalPages:number|null;totalCount:number|null;attempted:string};
 export type AgendaEduStudentListPage={students:AgendaEduStudentListItem[];page:number;nextPage:number|null;totalPages:number|null;totalCount:number|null;attempted:string};
 export type AgendaEduStudentDetails={student:AgendaEduStudentListItem|null;responsibles:AgendaEduResponsibleItem[];classrooms:AgendaEduClassroomItem[];primaryResponsible:AgendaEduResponsibleItem|null;included:AgendaResource[];raw:unknown;attempted:string};
 
@@ -246,6 +248,40 @@ function mapAgendaClassroomItem(resource:AgendaResource):AgendaEduClassroomItem|
   const name=agendaAttr(resource,"name")||agendaAttr(resource,"nome");
   if(!id||!name)return null;
   return {id,name,externalId:agendaAttr(resource,"external_id")||null,legacyId:agendaAttr(resource,"legacy_id")||null,status:agendaAttr(resource,"status")||null};
+}
+
+function mapAgendaChannelItem(resource:AgendaResource):AgendaEduChannelItem|null{
+  const id=String(resource.id??"").trim();
+  const name=agendaAttr(resource,"name")||agendaAttr(resource,"nome")||agendaAttr(resource,"title");
+  if(!id||!name)return null;
+  return {
+    id,
+    name,
+    type:resource.type||agendaAttr(resource,"type")||null,
+    status:agendaAttr(resource,"status")||null,
+    visibility:agendaAttr(resource,"visibility")||agendaAttr(resource,"privacy")||null,
+    kind:agendaAttr(resource,"kind")||agendaAttr(resource,"channel_type")||null,
+    raw:{id,type:resource.type,attributes:resource.attributes||{}},
+  };
+}
+
+export async function listAgendaEduChannels(input:{accessToken:string;schoolToken:string;page?:number;perPage?:number;environment?:AgendaEduEnvironment},fetchImpl:FetchLike=fetch):Promise<AgendaEduChannelListPage>{
+  const page=Math.max(1,Math.trunc(Number(input.page)||1));
+  const perPage=Math.min(100,Math.max(1,Math.trunc(Number(input.perPage)||50)));
+  const query=new URLSearchParams({pagina:String(page),por_pagina:String(perPage),"page[size]":String(perPage)});
+  const url=`${agendaBaseUrl(input.environment)}/channels?${query}`;
+  const response=await fetchImpl(url,{headers:agendaHeaders(input.accessToken,input.schoolToken),cache:"no-store"});
+  if(!response.ok)throw new Error(await responseMessage(response,"A Agenda Edu não permitiu listar canais."));
+  const result=await response.json().catch(()=>({})) as {meta?:Record<string,unknown>};
+  const meta=result.meta||{};
+  return {
+    channels:agendaList(result).map(mapAgendaChannelItem).filter(Boolean) as AgendaEduChannelItem[],
+    page:numberOrNull(meta.page)??page,
+    nextPage:numberOrNull(meta.next),
+    totalPages:numberOrNull(meta.pages),
+    totalCount:numberOrNull(meta.count),
+    attempted:url,
+  };
 }
 
 export async function listAgendaEduStudents(input:{accessToken:string;schoolToken:string;page?:number;perPage?:number;environment?:AgendaEduEnvironment},fetchImpl:FetchLike=fetch):Promise<AgendaEduStudentListPage>{
