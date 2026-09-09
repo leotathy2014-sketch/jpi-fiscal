@@ -5,7 +5,7 @@ import { AGENDA_EDU_ENDPOINTS, createAgendaEduAccessToken, serializeAgendaEduCre
 import { hasServerPermission } from "@/lib/server-permissions";
 
 export const runtime = "nodejs";
-export const maxDuration = 30;
+export const maxDuration = 60;
 
 const emailPattern=/^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const digits=(value:string)=>value.replace(/\D/g,"");
@@ -120,12 +120,13 @@ export async function GET(request:NextRequest){
 
 export async function POST(request:NextRequest){
   const auth=await authorizedClient(request);if(!auth.ok)return auth.response;
-  if(!await hasServerPermission(auth.supabase,"settings.integrations.edit"))return json({error:"Seu usuário não possui permissão para configurar as integrações."},403);
   const backendSecret=process.env.JPI_BACKEND_SECRET;
   if(!backendSecret)return json({error:"O cofre de credenciais ainda não está configurado no servidor."},503);
   let body:Record<string,unknown>={};
   try{body=await request.json()}catch{return json({error:"Dados da solicitação inválidos."},400)}
   const action=String(body.action||"");
+  const adminActions=new Set(["save-email","test-email","save-whatsapp-manual-message","save-whatsapp-manual","save-whatsapp","test-whatsapp","save-agenda","test-agenda","diagnose-agenda","list-agenda-channels","sync-agenda-mirror","prepare-agenda-structure","find-agenda-student"]);
+  if(adminActions.has(action)&&!await hasServerPermission(auth.supabase,"settings.integrations.edit"))return json({error:"Seu usuário não possui permissão para configurar as integrações."},403);
 
   if(action==="save-email"){
     const provider=String(body.provider||"");const fromName=String(body.fromName||"").trim();const fromAddress=String(body.fromAddress||"").trim().toLowerCase();const replyTo=String(body.replyTo||"").trim().toLowerCase();const smtpUsername=String(body.smtpUsername||"").trim().toLowerCase();let credential=String(body.credential||"").trim();
