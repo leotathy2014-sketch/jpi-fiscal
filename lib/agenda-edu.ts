@@ -25,6 +25,7 @@ export type AgendaEduResponsibleItem={id:string;name:string;externalId:string|nu
 export type AgendaEduClassroomItem={id:string;name:string;externalId:string|null;legacyId:string|null;status:string|null};
 export type AgendaEduChannelItem={id:string;name:string;type:string|null;status:string|null;visibility:string|null;kind:string|null;raw:Record<string,unknown>};
 export type AgendaEduChannelListPage={channels:AgendaEduChannelItem[];page:number;nextPage:number|null;totalPages:number|null;totalCount:number|null;attempted:string};
+export type AgendaEduClassroomListPage={classrooms:AgendaEduClassroomItem[];page:number;nextPage:number|null;totalPages:number|null;totalCount:number|null;attempted:string};
 export type AgendaEduStudentListPage={students:AgendaEduStudentListItem[];page:number;nextPage:number|null;totalPages:number|null;totalCount:number|null;attempted:string};
 export type AgendaEduStudentDetails={student:AgendaEduStudentListItem|null;responsibles:AgendaEduResponsibleItem[];classrooms:AgendaEduClassroomItem[];primaryResponsible:AgendaEduResponsibleItem|null;included:AgendaResource[];raw:unknown;attempted:string};
 export type AgendaEduFamilyChatLookup={chatId:string|null;found:boolean;attempted:string[];raw:unknown};
@@ -305,6 +306,25 @@ export async function listAgendaEduStudents(input:{accessToken:string;schoolToke
   const meta=result.meta||{};
   return {
     students:agendaStudentsFromPayload(result).map(mapAgendaStudentListItem).filter(Boolean) as AgendaEduStudentListItem[],
+    page:numberOrNull(meta.page)??page,
+    nextPage:numberOrNull(meta.next),
+    totalPages:numberOrNull(meta.pages),
+    totalCount:numberOrNull(meta.count),
+    attempted:url,
+  };
+}
+
+export async function listAgendaEduClassrooms(input:{accessToken:string;schoolToken:string;page?:number;perPage?:number;environment?:AgendaEduEnvironment},fetchImpl:FetchLike=fetch):Promise<AgendaEduClassroomListPage>{
+  const page=Math.max(1,Math.trunc(Number(input.page)||1));
+  const perPage=Math.min(100,Math.max(1,Math.trunc(Number(input.perPage)||100)));
+  const query=new URLSearchParams({pagina:String(page),por_pagina:String(perPage)});
+  const url=`${agendaBaseUrl(input.environment)}/classrooms?${query}`;
+  const response=await fetchImpl(url,{headers:agendaHeaders(input.accessToken,input.schoolToken),cache:"no-store"});
+  if(!response.ok)throw new Error(await responseMessage(response,"A Agenda Edu não permitiu listar turmas."));
+  const result=await response.json().catch(()=>({})) as {meta?:Record<string,unknown>};
+  const meta=result.meta||{};
+  return {
+    classrooms:agendaList(result).map(mapAgendaClassroomItem).filter(Boolean) as AgendaEduClassroomItem[],
     page:numberOrNull(meta.page)??page,
     nextPage:numberOrNull(meta.next),
     totalPages:numberOrNull(meta.pages),

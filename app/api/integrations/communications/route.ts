@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { sendSmtpEmail } from "@/lib/smtp";
-import { AGENDA_EDU_ENDPOINTS, createAgendaEduAccessToken, serializeAgendaEduCredentials, parseAgendaEduCredentials, searchAgendaEduStudents, testAgendaEduConnection, listAgendaEduStudents, getAgendaEduStudentDetails, listAgendaEduChannels, lookupAgendaEduFamilyChat, listAgendaEduFamilyChats, type AgendaEduEnvironment } from "@/lib/agenda-edu";
+import { AGENDA_EDU_ENDPOINTS, createAgendaEduAccessToken, serializeAgendaEduCredentials, parseAgendaEduCredentials, searchAgendaEduStudents, testAgendaEduConnection, listAgendaEduStudents, listAgendaEduClassrooms, getAgendaEduStudentDetails, listAgendaEduChannels, lookupAgendaEduFamilyChat, listAgendaEduFamilyChats, type AgendaEduEnvironment } from "@/lib/agenda-edu";
 import { hasServerPermission } from "@/lib/server-permissions";
 
 export const runtime = "nodejs";
@@ -308,6 +308,22 @@ export async function POST(request:NextRequest){
       return json({ok:true,message:`Lista Agenda Edu carregada: página ${result.page}${result.totalPages?` de ${result.totalPages}`:""}. Nada foi gravado.`,baseUrl:agendaBaseUrl(environment),environment,...result});
     }catch(listError){
       return json({error:listError instanceof Error?listError.message:"Não foi possível listar os alunos da Agenda Edu."},400);
+    }
+  }
+
+  if(action==="list-agenda-classrooms"){
+    if(!await hasServerPermission(auth.supabase,"deliveries.send_agenda")&&!await hasServerPermission(auth.supabase,"settings.integrations.edit"))return json({error:"Seu usuário não possui permissão para listar turmas da Agenda Edu."},403);
+    const {data:storedSecret,error:secretError}=await auth.supabase.rpc("get_communication_secret",{p_channel:"agenda_edu",p_backend_secret:backendSecret});
+    if(secretError||!storedSecret)return json({error:"Cadastre primeiro as credenciais da Agenda Edu."},400);
+    try{
+      const {data:currentConfig}=await readConfig(auth.supabase);
+      const environment=agendaEnvironment(currentConfig?.agenda_edu_environment);
+      const credentials=parseAgendaEduCredentials(String(storedSecret));
+      const token=await createAgendaEduAccessToken(credentials,fetch,environment);
+      const result=await listAgendaEduClassrooms({accessToken:token.accessToken,schoolToken:credentials.schoolToken,page:Number(body.page||1),perPage:Number(body.perPage||100),environment},fetch);
+      return json({ok:true,message:`Turmas Agenda Edu carregadas: página ${result.page}${result.totalPages?` de ${result.totalPages}`:""}. Nada foi gravado.`,baseUrl:agendaBaseUrl(environment),environment,...result});
+    }catch(listError){
+      return json({error:listError instanceof Error?listError.message:"Não foi possível listar as turmas da Agenda Edu."},400);
     }
   }
 
