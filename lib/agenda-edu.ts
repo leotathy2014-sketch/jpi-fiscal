@@ -21,8 +21,10 @@ export type AgendaEduStudentListItem={
   linkedStatus:string|null;
   dateOfBirth:string|null;
 };
+export type AgendaEduResponsibleItem={id:string;name:string;externalId:string|null;legacyId:string|null;email:string|null;phone:string|null;documentNumber:string|null;kinship:string|null;financial:boolean;status:string|null;linkedStatus:string|null};
+export type AgendaEduClassroomItem={id:string;name:string;externalId:string|null;legacyId:string|null;status:string|null};
 export type AgendaEduStudentListPage={students:AgendaEduStudentListItem[];page:number;nextPage:number|null;totalPages:number|null;totalCount:number|null;attempted:string};
-export type AgendaEduStudentDetails={student:AgendaEduStudentListItem|null;responsibles:AgendaEduStudentListItem[];classrooms:AgendaEduStudentListItem[];included:AgendaResource[];raw:unknown;attempted:string};
+export type AgendaEduStudentDetails={student:AgendaEduStudentListItem|null;responsibles:AgendaEduResponsibleItem[];classrooms:AgendaEduClassroomItem[];primaryResponsible:AgendaEduResponsibleItem|null;included:AgendaResource[];raw:unknown;attempted:string};
 
 export function serializeAgendaEduCredentials(credentials:AgendaEduCredentials){
   return JSON.stringify(credentials);
@@ -220,6 +222,32 @@ function mapAgendaStudentListItem(resource:AgendaResource):AgendaEduStudentListI
   };
 }
 
+function mapAgendaResponsibleItem(resource:AgendaResource):AgendaEduResponsibleItem|null{
+  const id=String(resource.id??"").trim();
+  const name=agendaAttr(resource,"name")||agendaAttr(resource,"nome");
+  if(!id||!name)return null;
+  return {
+    id,
+    name,
+    externalId:agendaAttr(resource,"external_id")||agendaAttr(resource,"externalId")||null,
+    legacyId:agendaAttr(resource,"legacy_id")||null,
+    email:agendaAttr(resource,"email")||null,
+    phone:agendaAttr(resource,"phone")||null,
+    documentNumber:agendaAttr(resource,"document_number")||null,
+    kinship:agendaAttr(resource,"kinship")||null,
+    financial:agendaValue(resource,"financial")===true||String(agendaValue(resource,"financial")).toLowerCase()==="true",
+    status:agendaAttr(resource,"status")||null,
+    linkedStatus:agendaAttr(resource,"linked_status")||null,
+  };
+}
+
+function mapAgendaClassroomItem(resource:AgendaResource):AgendaEduClassroomItem|null{
+  const id=String(resource.id??"").trim();
+  const name=agendaAttr(resource,"name")||agendaAttr(resource,"nome");
+  if(!id||!name)return null;
+  return {id,name,externalId:agendaAttr(resource,"external_id")||null,legacyId:agendaAttr(resource,"legacy_id")||null,status:agendaAttr(resource,"status")||null};
+}
+
 export async function listAgendaEduStudents(input:{accessToken:string;schoolToken:string;page?:number;perPage?:number;environment?:AgendaEduEnvironment},fetchImpl:FetchLike=fetch):Promise<AgendaEduStudentListPage>{
   const page=Math.max(1,Math.trunc(Number(input.page)||1));
   const perPage=Math.min(100,Math.max(1,Math.trunc(Number(input.perPage)||50)));
@@ -249,10 +277,12 @@ export async function getAgendaEduStudentDetails(input:{accessToken:string;schoo
   const resources=agendaStudentsFromPayload(result);
   const studentResource=resources[0]||null;
   const included=Array.isArray((result as {included?:unknown}).included)?(result as {included:AgendaResource[]}).included:[];
+  const responsibles=(included.filter(item=>item.type==="responsible_profile").map(mapAgendaResponsibleItem).filter(Boolean) as AgendaEduResponsibleItem[]).sort((a,b)=>Number(b.financial)-Number(a.financial)||a.name.localeCompare(b.name,"pt-BR"));
   return {
     student:studentResource?mapAgendaStudentListItem(studentResource):null,
-    responsibles:included.filter(item=>item.type==="responsible_profile").map(mapAgendaStudentListItem).filter(Boolean) as AgendaEduStudentListItem[],
-    classrooms:included.filter(item=>item.type==="classroom").map(mapAgendaStudentListItem).filter(Boolean) as AgendaEduStudentListItem[],
+    responsibles,
+    classrooms:included.filter(item=>item.type==="classroom").map(mapAgendaClassroomItem).filter(Boolean) as AgendaEduClassroomItem[],
+    primaryResponsible:responsibles.find(responsible=>responsible.financial)||responsibles[0]||null,
     included,
     raw:result,
     attempted:url,
