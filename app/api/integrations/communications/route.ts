@@ -327,6 +327,50 @@ export async function POST(request:NextRequest){
     }
   }
 
+  if(action==="sync-agenda-mirror"){
+    if(!await hasServerPermission(auth.supabase,"settings.integrations.edit"))return json({error:"Seu usuário não possui permissão para sincronizar o espelho da Agenda Edu."},403);
+    const {data:storedSecret,error:secretError}=await auth.supabase.rpc("get_communication_secret",{p_channel:"agenda_edu",p_backend_secret:backendSecret});
+    if(secretError||!storedSecret)return json({error:"Cadastre primeiro as credenciais da Agenda Edu."},400);
+    try{
+      const {data:currentConfig}=await readConfig(auth.supabase);
+      const environment=agendaEnvironment(currentConfig?.agenda_edu_environment);
+      const credentials=parseAgendaEduCredentials(String(storedSecret));
+      const token=await createAgendaEduAccessToken(credentials,fetch,environment);
+      const classrooms=[] as Awaited<ReturnType<typeof listAgendaEduClassrooms>>["classrooms"];
+      const students=[] as Awaited<ReturnType<typeof listAgendaEduStudents>>["students"];
+      for(let page=1,next:number|null=1;next&&page<=30;page+=1){
+        const result=await listAgendaEduClassrooms({accessToken:token.accessToken,schoolToken:credentials.schoolToken,page:next,perPage:100,environment},fetch);
+        classrooms.push(...result.classrooms);next=result.nextPage;
+      }
+      for(let page=1,next:number|null=1;next&&page<=50;page+=1){
+        const result=await listAgendaEduStudents({accessToken:token.accessToken,schoolToken:credentials.schoolToken,page:next,perPage:100,environment},fetch);
+        students.push(...result.students);next=result.nextPage;
+      }
+      if(classrooms.length){
+        const {error}=await auth.supabase.from("agenda_edu_turmas").upsert(classrooms.map(classroom=>({id:classroom.id,nome:classroom.name,external_id:classroom.externalId,legacy_id:classroom.legacyId,status:classroom.status,dados_origem:classroom,sincronizado_em:new Date().toISOString()})),{onConflict:"id"});
+        if(error)throw error;
+      }
+      if(students.length){
+        const {error}=await auth.supabase.from("agenda_edu_alunos").upsert(students.map(student=>({id:student.id,nome:student.name,external_id:student.externalId,legacy_id:student.legacyId,turma_principal_id:student.mainClassroomId,periodo:student.period,status:student.status,status_vinculo:student.linkedStatus,data_nascimento:student.dateOfBirth,dados_origem:student,sincronizado_em:new Date().toISOString()})),{onConflict:"id"});
+        if(error)throw error;
+      }
+      await auth.supabase.from("integracoes_comunicacao").update({agenda_edu_sincronizada_em:new Date().toISOString(),agenda_edu_total_alunos:students.length,agenda_edu_total_turmas:classrooms.length,updated_at:new Date().toISOString(),updated_by:auth.user.id}).eq("id",true);
+      return json({ok:true,message:`Espelho Agenda Edu sincronizado: ${classrooms.length} turma(s) e ${students.length} aluno(s).`,classrooms,students});
+    }catch(syncError){
+      return json({error:syncError instanceof Error?syncError.message:"Não foi possível sincronizar o espelho da Agenda Edu."},400);
+    }
+  }
+
+  if(action==="list-agenda-mirror"){
+    if(!await hasServerPermission(auth.supabase,"deliveries.send_agenda")&&!await hasServerPermission(auth.supabase,"settings.integrations.view")&&!await hasServerPermission(auth.supabase,"settings.integrations.edit"))return json({error:"Seu usuário não possui permissão para consultar o espelho da Agenda Edu."},403);
+    const [classroomsResult,studentsResult]=await Promise.all([
+      auth.supabase.from("agenda_edu_turmas").select("id,nome,external_id,legacy_id,status").order("nome").limit(2000),
+      auth.supabase.from("agenda_edu_alunos").select("id,nome,external_id,legacy_id,turma_principal_id,periodo,status,status_vinculo,data_nascimento").order("nome").limit(2000),
+    ]);
+    if(classroomsResult.error||studentsResult.error)return json({error:classroomsResult.error?.message||studentsResult.error?.message||"O espelho da Agenda Edu ainda não foi criado no banco."},400);
+    return json({ok:true,message:`Espelho Agenda Edu carregado: ${studentsResult.data?.length||0} aluno(s), ${classroomsResult.data?.length||0} turma(s).`,classrooms:(classroomsResult.data||[]).map(row=>({id:row.id,name:row.nome,externalId:row.external_id,legacyId:row.legacy_id,status:row.status})),students:(studentsResult.data||[]).map(row=>({id:row.id,name:row.nome,externalId:row.external_id,legacyId:row.legacy_id,mainClassroomId:row.turma_principal_id,period:row.periodo,status:row.status,linkedStatus:row.status_vinculo,dateOfBirth:row.data_nascimento}))});
+  }
+
   if(action==="get-agenda-student-details"){
     if(!await hasServerPermission(auth.supabase,"deliveries.send_agenda")&&!await hasServerPermission(auth.supabase,"settings.integrations.edit"))return json({error:"Seu usuário não possui permissão para consultar detalhes do aluno na Agenda Edu."},403);
     const studentId=String(body.studentId||"").trim();

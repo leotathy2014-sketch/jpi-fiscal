@@ -18,6 +18,33 @@ export function AgendaEduChatPage({accessToken}:{accessToken:string|null}){
   const classroomLabel=useCallback((id:string|null)=>id?(classroomNameById.get(id)||`Turma ${id}`):"Sem turma",[classroomNameById]);
   const turmas=useMemo(()=>Array.from(new Set(students.map(student=>student.mainClassroomId).filter(Boolean) as string[])).sort((a,b)=>(classroomNameById.get(a)||`Turma ${a}`).localeCompare(classroomNameById.get(b)||`Turma ${b}`,"pt-BR")),[students,classroomNameById]);
   const filteredStudents=useMemo(()=>{const q=norm(aluno.trim());return students.filter(student=>(turma==="todas"||student.mainClassroomId===turma)&&(!q||norm(student.name).includes(q)||norm(student.externalId||"").includes(q)||norm(student.legacyId||"").includes(q))).slice(0,30)},[aluno,students,turma]);
+  const applyMirrorData=useCallback((data:{students?:AgendaStudent[];classrooms?:AgendaClassroom[];message?:string})=>{
+    setStudents(data.students||[]);
+    setClassrooms(data.classrooms||[]);
+    setNextPage(null);
+    setClassroomNextPage(null);
+    setMessage(data.message||"Espelho Agenda Edu carregado.");
+  },[]);
+  const loadMirror=useCallback(async()=>{
+    if(!accessToken||busy)return;setBusy("mirror");setError("");setMessage("");
+    try{
+      const response=await authenticatedFetch("/api/integrations/communications",{method:"POST",headers:{Authorization:`Bearer ${accessToken}`,"Content-Type":"application/json"},body:JSON.stringify({action:"list-agenda-mirror"}),cache:"no-store"});
+      const data=await response.json().catch(()=>({})) as {ok?:boolean;error?:string;message?:string;students?:AgendaStudent[];classrooms?:AgendaClassroom[]};
+      if(!response.ok||!data.ok)throw new Error(data.error||"Espelho da Agenda Edu ainda não carregado.");
+      applyMirrorData(data);
+    }catch(cause){setError(cause instanceof Error?cause.message:"Espelho da Agenda Edu ainda não carregado. Clique em Sincronizar Agenda Edu.")}
+    finally{setBusy("")}
+  },[accessToken,applyMirrorData,busy]);
+  const syncMirror=useCallback(async()=>{
+    if(!accessToken||busy)return;setBusy("sync");setError("");setMessage("");
+    try{
+      const response=await authenticatedFetch("/api/integrations/communications",{method:"POST",headers:{Authorization:`Bearer ${accessToken}`,"Content-Type":"application/json"},body:JSON.stringify({action:"sync-agenda-mirror"}),cache:"no-store"});
+      const data=await response.json().catch(()=>({})) as {ok?:boolean;error?:string;message?:string;students?:AgendaStudent[];classrooms?:AgendaClassroom[]};
+      if(!response.ok||!data.ok)throw new Error(data.error||"Não foi possível sincronizar o espelho da Agenda Edu.");
+      applyMirrorData(data);
+    }catch(cause){setError(cause instanceof Error?cause.message:"Não foi possível sincronizar o espelho da Agenda Edu.")}
+    finally{setBusy("")}
+  },[accessToken,applyMirrorData,busy]);
   const loadStudents=useCallback(async(page=studentPage)=>{
     if(!accessToken||busy)return;setBusy("students");setError("");setMessage("");
     try{
@@ -32,16 +59,23 @@ export function AgendaEduChatPage({accessToken}:{accessToken:string|null}){
   const loadClassrooms=useCallback(async(page=1)=>{
     if(!accessToken||busy)return;setBusy("classrooms");setError("");
     try{
-      const response=await authenticatedFetch("/api/integrations/communications",{method:"POST",headers:{Authorization:`Bearer ${accessToken}`,"Content-Type":"application/json"},body:JSON.stringify({action:"list-agenda-classrooms",page,perPage:100}),cache:"no-store"});
-      const data=await response.json().catch(()=>({})) as {ok?:boolean;error?:string;classrooms?:AgendaClassroom[];nextPage?:number|null};
-      if(!response.ok||!data.ok)throw new Error(data.error||"Não foi possível carregar turmas da Agenda Edu.");
-      setClassrooms(current=>page===1?(data.classrooms||[]):[...current,...(data.classrooms||[]).filter(classroom=>!current.some(item=>item.id===classroom.id))]);
-      setClassroomNextPage(data.nextPage||null);
-      if(data.nextPage&&page<3)void loadClassrooms(data.nextPage);
+      let currentPage=page;
+      let next:number|null=page;
+      const loaded:AgendaClassroom[]=[];
+      for(let step=0;next&&step<10;step+=1){
+        currentPage=next;
+        const response=await authenticatedFetch("/api/integrations/communications",{method:"POST",headers:{Authorization:`Bearer ${accessToken}`,"Content-Type":"application/json"},body:JSON.stringify({action:"list-agenda-classrooms",page:currentPage,perPage:100}),cache:"no-store"});
+        const data=await response.json().catch(()=>({})) as {ok?:boolean;error?:string;classrooms?:AgendaClassroom[];nextPage?:number|null};
+        if(!response.ok||!data.ok)throw new Error(data.error||"Não foi possível carregar turmas da Agenda Edu.");
+        loaded.push(...(data.classrooms||[]));
+        next=data.nextPage||null;
+      }
+      setClassrooms(current=>page===1?Array.from(new Map(loaded.map(classroom=>[classroom.id,classroom])).values()):[...current,...loaded.filter(classroom=>!current.some(item=>item.id===classroom.id))]);
+      setClassroomNextPage(next);
     }catch(cause){setError(cause instanceof Error?cause.message:"Não foi possível carregar turmas da Agenda Edu.")}
     finally{setBusy("")}
   },[accessToken,busy]);
-  useEffect(()=>{if(!accessToken||studentsAutoLoaded)return;setStudentsAutoLoaded(true);void loadClassrooms(1);void loadStudents(1)},[accessToken,loadClassrooms,loadStudents,studentsAutoLoaded]);
+  useEffect(()=>{if(!accessToken||studentsAutoLoaded)return;setStudentsAutoLoaded(true);void loadMirror()},[accessToken,loadMirror,studentsAutoLoaded]);
   async function chooseStudent(student:AgendaStudent){
     setSelectedStudent(student);setAluno(student.name);setResponsibles([]);setResponsavel("");setChats([]);setSelected("");
     if(!accessToken)return;setBusy(`student-${student.id}`);setError("");
@@ -67,7 +101,7 @@ export function AgendaEduChatPage({accessToken}:{accessToken:string|null}){
   return <div className="page"><div className="page-heading"><div><h1>Chat Agenda Edu</h1><p>Localize o chat familiar no canal Secretaria usando dados vindos da API.</p></div><button type="button" className="secondary" onClick={openAgenda}><Eye size={17}/>Abrir Agenda Edu</button></div>
     <section className="agenda-chat-workbench">
       <div className="notice compact"><ShieldCheck/><span>Canal usado: <b>MATRIZ - SECRETARIA</b>. Primeiro carregue os alunos da Agenda Edu; depois selecione turma, aluno e responsável. Nada é enviado nesta tela.</span></div>
-      <div className="agenda-chat-loadbar"><button type="button" className="primary" onClick={()=>{void loadClassrooms(1);void loadStudents(1)}} disabled={Boolean(busy)}><UsersRound size={17}/>{busy==="students"||busy==="classrooms"?"Carregando…":"Atualizar API"}</button>{nextPage&&<button type="button" className="secondary" onClick={()=>void loadStudents(nextPage)} disabled={Boolean(busy)}><RefreshCw size={17}/>Carregar mais alunos</button>}{classroomNextPage&&<button type="button" className="secondary" onClick={()=>void loadClassrooms(classroomNextPage)} disabled={Boolean(busy)}><RefreshCw size={17}/>Carregar mais turmas</button>}<span>{students.length} aluno(s) · {classrooms.length} turma(s) carregada(s){nextPage?` · próxima página alunos ${nextPage}`:""}</span></div>
+      <div className="agenda-chat-loadbar"><button type="button" className="primary" onClick={()=>void syncMirror()} disabled={Boolean(busy)}><UsersRound size={17}/>{busy==="sync"?"Sincronizando…":"Sincronizar Agenda Edu"}</button><button type="button" className="secondary" onClick={()=>void loadMirror()} disabled={Boolean(busy)}><RefreshCw size={17}/>{busy==="mirror"?"Carregando…":"Ler espelho"}</button>{nextPage&&<button type="button" className="secondary" onClick={()=>void loadStudents(nextPage)} disabled={Boolean(busy)}><RefreshCw size={17}/>Carregar mais alunos</button>}{classroomNextPage&&<button type="button" className="secondary" onClick={()=>void loadClassrooms(classroomNextPage)} disabled={Boolean(busy)}><RefreshCw size={17}/>Carregar mais turmas</button>}<span>{students.length} aluno(s) · {classrooms.length} turma(s) no espelho</span></div>
       <form onSubmit={search} className="agenda-chat-search">
         <label>Turma<select value={turma} onChange={event=>setTurma(event.target.value)}><option value="todas">Todas as turmas</option>{turmas.map(item=><option key={item} value={item}>{classroomLabel(item)}</option>)}</select></label>
         <label>Aluno<input value={aluno} onChange={event=>{setAluno(event.target.value);setSelectedStudent(null)}} list="agenda-students-list" placeholder="Digite ou selecione o aluno"/><datalist id="agenda-students-list">{filteredStudents.map(student=><option key={student.id} value={student.name}>{classroomLabel(student.mainClassroomId)} · ID {student.id}</option>)}</datalist></label>
@@ -77,7 +111,7 @@ export function AgendaEduChatPage({accessToken}:{accessToken:string|null}){
       {filteredStudents.length>0&&!selectedStudent&&<div className="agenda-student-picks">{filteredStudents.slice(0,8).map(student=><button type="button" key={student.id} onClick={()=>void chooseStudent(student)} disabled={Boolean(busy)}><strong>{student.name}</strong><small>ID {student.id} · {student.externalId||student.legacyId||"sem external_id"} · {classroomLabel(student.mainClassroomId)}</small></button>)}</div>}
       {error&&<div className="error-box">{error}</div>}{message&&<div className="success-box">{message}</div>}
       <div className="agenda-chat-results">
-        {busy==="students"||busy==="classrooms"?<div className="empty-state"><RefreshCw/><strong>Carregando dados da Agenda Edu…</strong><p>Estou montando os filtros com alunos, turmas e responsáveis vindos da API.</p></div>:chats.length===0?<div className="empty-state"><MessageCircle/><strong>Nenhum chat carregado</strong><p>Selecione turma/aluno/responsável e clique em Localizar chat.</p></div>:chats.map(chat=><button type="button" key={chat.id} className={selected===chat.id?"selected":""} onClick={()=>setSelected(chat.id)}>
+        {busy==="students"||busy==="classrooms"||busy==="sync"||busy==="mirror"?<div className="empty-state"><RefreshCw/><strong>{busy==="sync"?"Sincronizando espelho Agenda Edu…":"Carregando dados da Agenda Edu…"}</strong><p>Estou montando os filtros com alunos, turmas e responsáveis vindos da estrutura principal.</p></div>:chats.length===0?<div className="empty-state"><MessageCircle/><strong>Nenhum chat carregado</strong><p>Selecione turma/aluno/responsável e clique em Localizar chat.</p></div>:chats.map(chat=><button type="button" key={chat.id} className={selected===chat.id?"selected":""} onClick={()=>setSelected(chat.id)}>
           <span className="agenda-chat-result-icon">{selected===chat.id?<Check/>:<MessageCircle/>}</span>
           <span><strong>{chat.title}</strong><small>{chat.classroomName||turma||"Turma não informada"} · {chat.studentName||aluno||"Aluno não identificado"}</small><small>{chat.responsibleNames.length?chat.responsibleNames.join(", "):responsavel||"Responsável não identificado"}</small></span>
           <b>{selected===chat.id?"Selecionado":"Selecionar"}</b>
