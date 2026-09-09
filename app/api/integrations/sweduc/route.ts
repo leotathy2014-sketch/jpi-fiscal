@@ -149,6 +149,8 @@ function defaultRecentYears(academicYears:{year:number}[],currentYear:number){
 
 function normalizeSearchText(value:unknown){return String(value||"").normalize("NFD").replace(/[\u0300-\u036f]/g,"").replace(/[^\p{L}\p{N}\s]/gu," ").replace(/\s+/g," ").trim().toLocaleLowerCase("pt-BR")}
 function matchesSearch(row:Record<string,unknown>,term:string){const normalized=normalizeSearchText(term);if(!normalized)return true;return [row.nome,row.numero_matricula,row.matricula_id,row.turma,row.serie,row.curso].some(value=>normalizeSearchText(value).includes(normalized))}
+function sameAcademic(value:unknown,expected:string){return !expected||normalizeAcademicReference(value)===normalizeAcademicReference(expected)}
+function matchesAcademic(row:Record<string,unknown>,course:string,serie:string,turma:string){return sameAcademic(row.curso,course)&&sameAcademic(row.serie,serie)&&sameAcademic(row.turma,turma)}
 function financialText(item:Record<string,unknown>,keys:string[]){for(const key of keys){const value=item[key];if(value!==undefined&&value!==null&&String(value).trim())return String(value)}return ""}
 function parseFinancialNumber(value:string){
   const clean=value.replace(/[^\d.,-]/g,"").trim();
@@ -330,6 +332,15 @@ export async function POST(request:NextRequest){
     if(result.error)return json({error:"Não foi possível consultar o espelho SWeduc no banco."},500);
     let rows=(result.data||[]) as Array<Record<string,unknown>>;
     const totalLocal=Number(result.count||0);const mirrorTotal=Number(mirrorCount.count||0);
+    if(!rows.length&&mirrorTotal>0&&(course||serie||turma)){
+      let broad=auth.supabase.from("sweduc_alunos").select("matricula_id,aluno_id,nome,data_nascimento,numero_aluno,numero_matricula,status,unidade,curso,serie,turma,ano_letivo,responsaveis,financeiro,dados_origem,sincronizado_em").in("unidade",syncUnits);
+      if(Number.isSafeInteger(rawYear)&&rawYear>1900)broad=broad.eq("ano_letivo",String(rawYear));
+      const broadResult=await broad.order("nome",{ascending:true}).limit(1000);
+      if(broadResult.error)return json({error:"Não foi possível consultar o espelho SWeduc no banco."},500);
+      const normalizedRows=((broadResult.data||[]) as Array<Record<string,unknown>>).filter(row=>matchesAcademic(row,course,serie,turma)&&matchesSearch(row,search));
+      rows=normalizedRows.slice(from,to+1);
+      if(rows.length)return json({ok:true,students:rows,page,lastPage:Math.max(1,Math.ceil(normalizedRows.length/pageSize)),nextPage:to+1<normalizedRows.length?page+1:null,totalAvailable:normalizedRows.length,message:`Consulta local encontrou ${normalizedRows.length} matrícula(s) pelos filtros selecionados. Nada foi salvo no cadastro fiscal.`});
+    }
     if(search&&!rows.length&&mirrorTotal>0){
       let broad=auth.supabase.from("sweduc_alunos").select("matricula_id,aluno_id,nome,data_nascimento,numero_aluno,numero_matricula,status,unidade,curso,serie,turma,ano_letivo,responsaveis,financeiro,dados_origem,sincronizado_em").in("unidade",syncUnits);
       if(Number.isSafeInteger(rawYear)&&rawYear>1900)broad=broad.eq("ano_letivo",String(rawYear));
