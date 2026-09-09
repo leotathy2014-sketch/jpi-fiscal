@@ -311,14 +311,15 @@ export async function POST(request:NextRequest){
       const environment=agendaEnvironment(currentConfig?.agenda_edu_environment);
       const credentials=parseAgendaEduCredentials(String(storedSecret));const {accessToken}=await createAgendaEduAccessToken(credentials,fetch,environment);
       const result=await searchAgendaEduStudents({accessToken,schoolToken:credentials.schoolToken,name:String(student.nome||""),className:String(student.turma||""),grade:String(student.segmento||""),externalId:student.sweduc_matricula_id?String(student.sweduc_matricula_id):null,environment});
-      const best=result.candidates[0];const autoLinked=Boolean(best&&best.score>=120&&result.candidates.filter(candidate=>candidate.score>=120).length===1);
+      const best=result.candidates[0];const trustedMatches=result.candidates.filter(candidate=>candidate.score>=140);
+      const autoLinked=Boolean(student.sweduc_matricula_id&&best&&best.score>=140&&trustedMatches.length===1);
       if(autoLinked){
         let updateRequest=auth.supabase.from("alunos").update({agenda_edu_student_id:best.id,agenda_edu_use_external_id:false});
         updateRequest=student.sweduc_matricula_id?updateRequest.eq("sweduc_matricula_id",student.sweduc_matricula_id):updateRequest.eq("id",studentId);
         const {error:updateError}=await updateRequest;
         if(updateError)return json({error:"Aluno encontrado na Agenda Edu, mas não foi possível salvar o vínculo."},500);
       }
-      return json({ok:true,autoLinked,candidates:result.candidates,attempted:result.attempted,message:autoLinked?`Vínculo Agenda Edu salvo para ${student.nome}.`:`Encontramos ${result.candidates.length} possível(is) aluno(s). Confira antes de salvar.`});
+      return json({ok:true,autoLinked,candidates:result.candidates,attempted:result.attempted,message:autoLinked?`Vínculo Agenda Edu salvo para ${student.nome}.`:student.sweduc_matricula_id?"Não vinculei automaticamente porque a Agenda Edu não retornou um aluno com ID externo igual à matrícula SWeduc. Confira a lista antes de salvar.":`Encontramos ${result.candidates.length} possível(is) aluno(s). Confira antes de salvar.`});
     }catch(testError){
       return json({error:testError instanceof Error?testError.message:"A Agenda Edu não permitiu localizar o aluno."},400);
     }

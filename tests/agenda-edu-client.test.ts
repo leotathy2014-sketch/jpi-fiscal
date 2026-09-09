@@ -79,3 +79,33 @@ test("não aceita candidato de aluno com nome diferente quando a busca retorna l
   assert.equal(result.candidates[0].id,"stu-certo");
   assert.equal(result.candidates.length,1);
 });
+
+test("não aceita aluno sem external_id exatamente igual à matrícula SWeduc",async()=>{
+  const fakeFetch:typeof fetch=async()=>new Response(JSON.stringify({student_profiles:[
+    {id:"stu-errado",nome:"ANA LUIZA ABREU DA SILVA",nome_da_turma:"701",external_ids:["18945"]},
+    {id:"stu-sem-id",nome:"ANA LUIZA ABREU DA SILVA",nome_da_turma:"701"},
+  ]}),{status:200,headers:{"Content-Type":"application/json"}});
+  const result=await searchAgendaEduStudents({accessToken:"token",schoolToken:"school",name:"ANA LUIZA ABREU DA SILVA",className:"701",externalId:"8945",environment:"producao"},fakeFetch);
+  assert.equal(result.candidates.length,0);
+});
+
+test("lê aluno da Agenda Edu no formato JSON API com turma e responsável em included",async()=>{
+  const fakeFetch:typeof fetch=async()=>new Response(JSON.stringify({
+    data:[{
+      id:"16910",
+      type:"student_profile",
+      attributes:{external_id:"9193",name:"Carlos Alan",custom_ids:["AgendaEdu:401"]},
+      relationships:{classrooms:{data:[{id:"1382",type:"classroom"}]},responsibles:{data:[{id:"1592",type:"responsible_profile"}]}}
+    }],
+    included:[
+      {id:"1592",type:"responsible_profile",attributes:{name:"Sara Moreira",kinship:"mother"}},
+      {id:"1382",type:"classroom",attributes:{external_id:"CL12345",name:"Turma A"},relationships:{grade:{data:{id:"356",type:"grade"}}}},
+      {id:"356",type:"grade",attributes:{name:"Maternal 1"}},
+    ]
+  }),{status:200,headers:{"Content-Type":"application/json"}});
+  const result=await searchAgendaEduStudents({accessToken:"token",schoolToken:"school",name:"Carlos Alan",className:"Turma A",grade:"Maternal 1",externalId:"9193",environment:"producao"},fakeFetch);
+  assert.equal(result.candidates[0].id,"16910");
+  assert.equal(result.candidates[0].className,"Turma A");
+  assert.equal(result.candidates[0].grade,"Maternal 1");
+  assert.deepEqual(result.candidates[0].externalIds,["9193","AgendaEdu:401"]);
+});
