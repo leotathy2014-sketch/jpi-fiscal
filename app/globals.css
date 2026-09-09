@@ -63,10 +63,11 @@
 .agenda-chat-manual input{height:38px;border:1px solid #cfc5ef;border-radius:9px;padding:0 12px;font-weight:800;color:#1d2b40;background:white}
 .agenda-chat-manual input:focus{outline:2px solid #7c5ad7;outline-offset:1px}
 .agenda-chat-manual small{font-size:10.5px;color:#66758a}
-.agenda-chat-guide{grid-column:1/-1;display:grid;grid-template-columns:1fr auto;align-items:center;gap:6px 12px;padding:11px;border:1px solid #cfe3fa;border-radius:10px;background:#f4f9ff;color:#244466}
+.agenda-chat-guide{grid-column:1/-1;display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:flex-start;gap:10px 14px;padding:13px;border:1px solid #cfe3fa;border-radius:10px;background:#f4f9ff;color:#244466}
 .agenda-chat-guide strong{font-size:12px;color:#183b63}
 .agenda-chat-guide span{font-size:11px;line-height:1.35;color:#55708d}
-.agenda-chat-guide>div{grid-row:1/3;grid-column:2;display:flex;gap:8px}
+.agenda-chat-guide textarea{grid-column:1;min-height:160px;width:100%;border:1px solid #bfd6ee;border-radius:10px;background:white;color:#1d2b40;font:inherit;font-size:12px;line-height:1.5;padding:12px;resize:vertical}
+.agenda-chat-guide>div{grid-row:1/4;grid-column:2;display:flex;gap:8px;align-self:center}
 .agenda-chat-status{grid-column:1/-1;padding:9px 11px;border-radius:9px;background:#fff7ed;border:1px solid #fed7aa;color:#9a3412;font-size:11px;font-weight:800}
 .agenda-chat-candidates{grid-column:1/-1;display:grid;gap:8px}
 .agenda-chat-candidates button{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:10px;padding:10px 12px;border:1px solid #d9e8f7;border-radius:10px;background:#fff;text-align:left;cursor:pointer}
@@ -102,7 +103,7 @@
 .agenda-chat-retry input{height:36px;border:1px solid #e7bd86;border-radius:8px;padding:0 10px;font-weight:800;color:#1d2b40;background:white}
 .agenda-chat-retry input:focus{outline:2px solid #c46a19;outline-offset:1px}
 .agenda-send-preview article p{grid-column:1/-1;margin:0;padding:10px 11px;border-radius:9px;background:#f7f9fc;color:#3f4d61;font-size:11.5px;line-height:1.45}
-@media(max-width:900px){.agenda-send-preview article{grid-template-columns:1fr 1fr}.agenda-send-preview article p{grid-column:1/-1}}@media(max-width:700px){.agenda-send-preview article{grid-template-columns:1fr}.agenda-send-preview article p{grid-column:auto}.agenda-chat-guide{grid-template-columns:1fr}.agenda-chat-guide>div{grid-row:auto;grid-column:auto;flex-direction:column}.agenda-chat-guide button{width:100%}.agenda-chat-candidates button{grid-template-columns:1fr}.agenda-chat-candidates button b{justify-self:start}}
+@media(max-width:900px){.agenda-send-preview article{grid-template-columns:1fr 1fr}.agenda-send-preview article p{grid-column:1/-1}}@media(max-width:700px){.agenda-send-preview article{grid-template-columns:1fr}.agenda-send-preview article p{grid-column:auto}.agenda-chat-guide{grid-template-columns:1fr}.agenda-chat-guide textarea{grid-column:auto;min-height:190px}.agenda-chat-guide>div{grid-row:auto;grid-column:auto;flex-direction:column}.agenda-chat-guide button{width:100%}.agenda-chat-candidates button{grid-template-columns:1fr}.agenda-chat-candidates button b{justify-self:start}}
 
 
 .whatsapp-sender-panel{display:grid;gap:14px;border:2px solid #b9e6d1;background:linear-gradient(180deg,#fbfffd 0%,#f3fbf7 100%)}
