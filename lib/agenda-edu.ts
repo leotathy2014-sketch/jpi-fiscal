@@ -27,6 +27,7 @@ export type AgendaEduChannelItem={id:string;name:string;type:string|null;status:
 export type AgendaEduChannelListPage={channels:AgendaEduChannelItem[];page:number;nextPage:number|null;totalPages:number|null;totalCount:number|null;attempted:string};
 export type AgendaEduStudentListPage={students:AgendaEduStudentListItem[];page:number;nextPage:number|null;totalPages:number|null;totalCount:number|null;attempted:string};
 export type AgendaEduStudentDetails={student:AgendaEduStudentListItem|null;responsibles:AgendaEduResponsibleItem[];classrooms:AgendaEduClassroomItem[];primaryResponsible:AgendaEduResponsibleItem|null;included:AgendaResource[];raw:unknown;attempted:string};
+export type AgendaEduFamilyChatLookup={chatId:string|null;found:boolean;attempted:string;raw:unknown};
 
 export function serializeAgendaEduCredentials(credentials:AgendaEduCredentials){
   return JSON.stringify(credentials);
@@ -381,6 +382,20 @@ export async function findAgendaEduFamilyChat(input:{accessToken:string;schoolTo
   if(!response.ok)throw new Error(await responseMessage(response,"A Agenda Edu não permitiu localizar a mensagem do aluno."));
   const result=await response.json() as {data?:AgendaResource[]};
   return String(result.data?.[0]?.id??"").trim()||null;
+}
+
+export async function lookupAgendaEduFamilyChat(input:{accessToken:string;schoolToken:string;channelId:string;studentId:string;useExternalId:boolean;environment?:AgendaEduEnvironment},fetchImpl:FetchLike=fetch):Promise<AgendaEduFamilyChatLookup>{
+  const channelId=String(input.channelId||"").trim();
+  const studentId=String(input.studentId||"").trim();
+  if(!/^[A-Za-z0-9._-]{1,120}$/.test(channelId))throw new Error("Informe um ID de canal válido da Agenda Edu.");
+  if(!/^[A-Za-z0-9._-]{1,120}$/.test(studentId))throw new Error("Informe um ID de aluno válido da Agenda Edu.");
+  const query=new URLSearchParams({"filter[kind]":"family","filter[studentId]":studentId,"filter[useExternalId]":String(input.useExternalId),"page[size]":"5"});
+  const url=`${agendaBaseUrl(input.environment)}/channels/${encodeURIComponent(channelId)}/chats?${query}`;
+  const response=await fetchImpl(url,{headers:agendaHeaders(input.accessToken,input.schoolToken),cache:"no-store"});
+  if(!response.ok)throw new Error(await responseMessage(response,"A Agenda Edu não permitiu localizar o chat familiar do aluno."));
+  const result=await response.json() as {data?:AgendaResource[]};
+  const chatId=String(result.data?.[0]?.id??"").trim()||null;
+  return {chatId,found:Boolean(chatId),attempted:url,raw:result};
 }
 
 export async function createAgendaEduFamilyChat(input:{accessToken:string;schoolToken:string;channelId:string;studentId:string;useExternalId:boolean;environment?:AgendaEduEnvironment},fetchImpl:FetchLike=fetch){

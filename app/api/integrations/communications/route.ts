@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { sendSmtpEmail } from "@/lib/smtp";
-import { AGENDA_EDU_ENDPOINTS, createAgendaEduAccessToken, serializeAgendaEduCredentials, parseAgendaEduCredentials, searchAgendaEduStudents, testAgendaEduConnection, listAgendaEduStudents, getAgendaEduStudentDetails, listAgendaEduChannels, type AgendaEduEnvironment } from "@/lib/agenda-edu";
+import { AGENDA_EDU_ENDPOINTS, createAgendaEduAccessToken, serializeAgendaEduCredentials, parseAgendaEduCredentials, searchAgendaEduStudents, testAgendaEduConnection, listAgendaEduStudents, getAgendaEduStudentDetails, listAgendaEduChannels, lookupAgendaEduFamilyChat, type AgendaEduEnvironment } from "@/lib/agenda-edu";
 import { hasServerPermission } from "@/lib/server-permissions";
 
 export const runtime = "nodejs";
@@ -325,6 +325,25 @@ export async function POST(request:NextRequest){
       return json({ok:true,message:`Detalhes do aluno ${studentId} carregados. Nada foi gravado.`,baseUrl:agendaBaseUrl(environment),environment,...result,raw:safeSample(result.raw)});
     }catch(detailError){
       return json({error:detailError instanceof Error?detailError.message:"Não foi possível consultar detalhes do aluno na Agenda Edu."},400);
+    }
+  }
+
+  if(action==="lookup-agenda-family-chat"){
+    if(!await hasServerPermission(auth.supabase,"settings.integrations.edit"))return json({error:"Seu usuário não possui permissão para localizar chats da Agenda Edu."},403);
+    const channelId=String(body.channelId||"").trim();
+    const studentId=String(body.studentId||"").trim();
+    const useExternalId=body.useExternalId===true||String(body.useExternalId)==="true";
+    const {data:storedSecret,error:secretError}=await auth.supabase.rpc("get_communication_secret",{p_channel:"agenda_edu",p_backend_secret:backendSecret});
+    if(secretError||!storedSecret)return json({error:"Cadastre primeiro as credenciais da Agenda Edu."},400);
+    try{
+      const {data:currentConfig}=await readConfig(auth.supabase);
+      const environment=agendaEnvironment(currentConfig?.agenda_edu_environment);
+      const credentials=parseAgendaEduCredentials(String(storedSecret));
+      const token=await createAgendaEduAccessToken(credentials,fetch,environment);
+      const result=await lookupAgendaEduFamilyChat({accessToken:token.accessToken,schoolToken:credentials.schoolToken,channelId,studentId,useExternalId,environment},fetch);
+      return json({ok:true,message:result.found?`Chat familiar encontrado: ${result.chatId}. Nada foi gravado e nenhuma mensagem foi enviada.`:"Nenhum chat familiar encontrado para este canal/aluno. Nada foi criado.",baseUrl:agendaBaseUrl(environment),environment,...result,raw:safeSample(result.raw)});
+    }catch(chatError){
+      return json({error:chatError instanceof Error?chatError.message:"Não foi possível localizar o chat familiar na Agenda Edu."},400);
     }
   }
 
