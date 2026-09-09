@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { sendSmtpEmail } from "@/lib/smtp";
-import { AGENDA_EDU_ENDPOINTS, createAgendaEduAccessToken, serializeAgendaEduCredentials, parseAgendaEduCredentials, searchAgendaEduStudents, testAgendaEduConnection, listAgendaEduStudents, type AgendaEduEnvironment } from "@/lib/agenda-edu";
+import { AGENDA_EDU_ENDPOINTS, createAgendaEduAccessToken, serializeAgendaEduCredentials, parseAgendaEduCredentials, searchAgendaEduStudents, testAgendaEduConnection, listAgendaEduStudents, getAgendaEduStudentDetails, type AgendaEduEnvironment } from "@/lib/agenda-edu";
 import { hasServerPermission } from "@/lib/server-permissions";
 
 export const runtime = "nodejs";
@@ -292,6 +292,23 @@ export async function POST(request:NextRequest){
       return json({ok:true,message:`Lista Agenda Edu carregada: página ${result.page}${result.totalPages?` de ${result.totalPages}`:""}. Nada foi gravado.`,baseUrl:agendaBaseUrl(environment),environment,...result});
     }catch(listError){
       return json({error:listError instanceof Error?listError.message:"Não foi possível listar os alunos da Agenda Edu."},400);
+    }
+  }
+
+  if(action==="get-agenda-student-details"){
+    if(!await hasServerPermission(auth.supabase,"settings.integrations.edit"))return json({error:"Seu usuário não possui permissão para consultar detalhes do aluno na Agenda Edu."},403);
+    const studentId=String(body.studentId||"").trim();
+    const {data:storedSecret,error:secretError}=await auth.supabase.rpc("get_communication_secret",{p_channel:"agenda_edu",p_backend_secret:backendSecret});
+    if(secretError||!storedSecret)return json({error:"Cadastre primeiro as credenciais da Agenda Edu."},400);
+    try{
+      const {data:currentConfig}=await readConfig(auth.supabase);
+      const environment=agendaEnvironment(currentConfig?.agenda_edu_environment);
+      const credentials=parseAgendaEduCredentials(String(storedSecret));
+      const token=await createAgendaEduAccessToken(credentials,fetch,environment);
+      const result=await getAgendaEduStudentDetails({accessToken:token.accessToken,schoolToken:credentials.schoolToken,studentId,environment},fetch);
+      return json({ok:true,message:`Detalhes do aluno ${studentId} carregados. Nada foi gravado.`,baseUrl:agendaBaseUrl(environment),environment,...result,raw:safeSample(result.raw)});
+    }catch(detailError){
+      return json({error:detailError instanceof Error?detailError.message:"Não foi possível consultar detalhes do aluno na Agenda Edu."},400);
     }
   }
 

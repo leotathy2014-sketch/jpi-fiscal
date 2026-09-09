@@ -22,6 +22,7 @@ export type AgendaEduStudentListItem={
   dateOfBirth:string|null;
 };
 export type AgendaEduStudentListPage={students:AgendaEduStudentListItem[];page:number;nextPage:number|null;totalPages:number|null;totalCount:number|null;attempted:string};
+export type AgendaEduStudentDetails={student:AgendaEduStudentListItem|null;responsibles:AgendaEduStudentListItem[];classrooms:AgendaEduStudentListItem[];included:AgendaResource[];raw:unknown;attempted:string};
 
 export function serializeAgendaEduCredentials(credentials:AgendaEduCredentials){
   return JSON.stringify(credentials);
@@ -234,6 +235,26 @@ export async function listAgendaEduStudents(input:{accessToken:string;schoolToke
     nextPage:numberOrNull(meta.next),
     totalPages:numberOrNull(meta.pages),
     totalCount:numberOrNull(meta.count),
+    attempted:url,
+  };
+}
+
+export async function getAgendaEduStudentDetails(input:{accessToken:string;schoolToken:string;studentId:string;environment?:AgendaEduEnvironment},fetchImpl:FetchLike=fetch):Promise<AgendaEduStudentDetails>{
+  const studentId=String(input.studentId||"").trim();
+  if(!/^[A-Za-z0-9._-]{1,120}$/.test(studentId))throw new Error("Informe um ID válido do aluno na Agenda Edu.");
+  const url=`${agendaBaseUrl(input.environment)}/student_profiles/${encodeURIComponent(studentId)}`;
+  const response=await fetchImpl(url,{headers:agendaHeaders(input.accessToken,input.schoolToken),cache:"no-store"});
+  if(!response.ok)throw new Error(await responseMessage(response,"A Agenda Edu não permitiu consultar os detalhes do aluno."));
+  const result=await response.json().catch(()=>({}));
+  const resources=agendaStudentsFromPayload(result);
+  const studentResource=resources[0]||null;
+  const included=Array.isArray((result as {included?:unknown}).included)?(result as {included:AgendaResource[]}).included:[];
+  return {
+    student:studentResource?mapAgendaStudentListItem(studentResource):null,
+    responsibles:included.filter(item=>item.type==="responsible_profile").map(mapAgendaStudentListItem).filter(Boolean) as AgendaEduStudentListItem[],
+    classrooms:included.filter(item=>item.type==="classroom").map(mapAgendaStudentListItem).filter(Boolean) as AgendaEduStudentListItem[],
+    included,
+    raw:result,
     attempted:url,
   };
 }
