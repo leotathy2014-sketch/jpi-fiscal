@@ -89,6 +89,17 @@ test("não aceita aluno sem external_id exatamente igual à matrícula SWeduc",a
   assert.equal(result.candidates.length,0);
 });
 
+test("aceita legacy_id como fallback quando external_id não vier preenchido",async()=>{
+  const fakeFetch:typeof fetch=async()=>new Response(JSON.stringify({data:[{
+    id:"stu-legacy",
+    type:"student_profile",
+    attributes:{name:"JOAQUIM PONCIANO VILLAS BÔAS",external_id:"",legacy_id:"9193"}
+  }]}),{status:200,headers:{"Content-Type":"application/json"}});
+  const result=await searchAgendaEduStudents({accessToken:"token",schoolToken:"school",name:"JOAQUIM PONCIANO VILLAS BÔAS",externalId:"9193",environment:"producao"},fakeFetch);
+  assert.equal(result.candidates[0].id,"stu-legacy");
+  assert.equal(result.candidates[0].externalId,"9193");
+});
+
 test("lê aluno da Agenda Edu no formato JSON API com turma e responsável em included",async()=>{
   const fakeFetch:typeof fetch=async()=>new Response(JSON.stringify({
     data:[{

@@ -39,7 +39,8 @@ async function agendaProbe(accessToken:string,schoolToken:string,label:string,pa
     const text=await response.text();
     let body:unknown=text;try{body=text?JSON.parse(text):null}catch{}
     const data=body&&typeof body==="object"&&(body as {data?:unknown}).data;
-    return {label,method:init?.method||"GET",endpoint:path,status:response.status,ok:response.ok,durationMs:Date.now()-started,count:Array.isArray(data)?data.length:null,sample:safeSample(body)};
+    const meta=body&&typeof body==="object"?(body as {meta?:unknown}).meta:null;
+    return {label,method:init?.method||"GET",endpoint:path,status:response.status,ok:response.ok,durationMs:Date.now()-started,count:Array.isArray(data)?data.length:null,sample:safeSample(meta?{meta,data}:body)};
   }catch(error){
     return {label,method:init?.method||"GET",endpoint:path,status:0,ok:false,durationMs:Date.now()-started,count:null,sample:{error:error instanceof Error?error.message:"Falha de rede ao consultar a Agenda Edu."}};
   }

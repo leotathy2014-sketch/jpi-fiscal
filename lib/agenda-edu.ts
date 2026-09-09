@@ -165,6 +165,7 @@ function mapAgendaStudent(resource:AgendaResource):AgendaEduStudentCandidate|nul
     agendaValue(resource,"externalId"),
     agendaValue(resource,"external_id"),
     agendaValue(resource,"custom_ids"),
+    agendaValue(resource,"legacy_id"),
     agendaValue(resource,"registration"),
     agendaValue(resource,"matricula"),
     agendaValue(resource,"numero_matricula"),
