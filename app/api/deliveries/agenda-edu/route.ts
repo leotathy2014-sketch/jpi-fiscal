@@ -9,6 +9,7 @@ export const maxDuration=60;
 const XML_BUCKET="documentos-nfse";
 const uuidPattern=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const json=(body:Record<string,unknown>,status=200)=>NextResponse.json(body,{status,headers:{"Cache-Control":"no-store"}});
+const publicBaseUrl=(request:NextRequest)=>String(process.env.NEXT_PUBLIC_APP_URL||(request.nextUrl.hostname==="localhost"?request.nextUrl.origin:"https://jpi-fiscal.vercel.app")).replace(/\/+$/,"");
 
 type PaymentSource={id:number;competencia:string;valor_nfse:number;alunos:{nome:string;responsavel:string;turma:string|null;segmento:string|null}|null};
 type DocumentSource={id:number;mensalidade_id:number;versao:number;chave_acesso:string;nfse_xml_path:string;estado:string};
@@ -81,7 +82,7 @@ export async function POST(request:NextRequest){
     const accessTokenValue=randomBytes(32).toString("base64url");const accessTokenHash=createHash("sha256").update(accessTokenValue).digest("hex");
     const accessResult=await auth.supabase.rpc("create_nfse_delivery_access",{p_delivery_id:deliveryId,p_token_hash:accessTokenHash,p_xml_base64:xmlBuffer.toString("base64"),p_chave_acesso:document.chave_acesso,p_backend_secret:backendSecret});
     if(accessResult.error)throw new Error("Não foi possível criar o link protegido da NFS-e.");
-    const protectedUrl=new URL(`/nota/${accessTokenValue}`,request.nextUrl.origin).toString();
+    const protectedUrl=new URL(`/nota/${accessTokenValue}`,publicBaseUrl(request)).toString();
     const preparedAt=new Date().toISOString();const manualMessage=manualAgendaMessage(payment,protectedUrl);
     const update=await auth.supabase.from("nfse_entregas").update({status:"aguardando_confirmacao",erro_mensagem:null,aberto_em:preparedAt,updated_at:preparedAt}).eq("id",deliveryId).select("id").maybeSingle();
     if(update.error||!update.data)throw new Error("O histórico do link manual não pôde ser atualizado.");

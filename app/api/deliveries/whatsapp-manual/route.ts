@@ -14,6 +14,7 @@ const digits=(value:string)=>value.replace(/\D/g,"");
 const normalizeBrazilPhone=(value:string)=>{const phone=digits(value);return phone.length===10||phone.length===11?`55${phone}`:phone};
 const maskPhone=(value:string)=>value.length>=12?`+${value.slice(0,2)} (${value.slice(2,4)}) •••••-${value.slice(-4)}`:"Número interno configurado";
 const formatSchoolPhone=(value:string)=>{const phone=normalizeBrazilPhone(value);const national=phone.startsWith("55")?phone.slice(2):phone;if(national.length===11)return `+55 (${national.slice(0,2)}) ${national.slice(2,7)}-${national.slice(7)}`;if(national.length===10)return `+55 (${national.slice(0,2)}) ${national.slice(2,6)}-${national.slice(6)}`;return value};
+const publicBaseUrl=(request:NextRequest)=>String(process.env.NEXT_PUBLIC_APP_URL||(request.nextUrl.hostname==="localhost"?request.nextUrl.origin:"https://jpi-fiscal.vercel.app")).replace(/\/+$/,"");
 
 type ManualConfig={whatsapp_test_recipient:string|null;whatsapp_manual_message_template:string|null};
 type ManualSender={id:number;nome:string;numero:string;ativo:boolean;ordem:number};
@@ -127,7 +128,7 @@ export async function POST(request:NextRequest){
     const accessToken=randomBytes(32).toString("base64url");const accessTokenHash=createHash("sha256").update(accessToken).digest("hex");
     const accessResult=await auth.supabase.rpc("create_nfse_delivery_access",{p_delivery_id:deliveryId,p_token_hash:accessTokenHash,p_xml_base64:xmlBuffer.toString("base64"),p_chave_acesso:document.chave_acesso,p_backend_secret:backendSecret});
     if(accessResult.error)throw new Error("Não foi possível criar o link protegido da NFS-e.");
-    const protectedUrl=new URL(`/nota/${accessToken}`,request.nextUrl.origin).toString();
+    const protectedUrl=new URL(`/nota/${accessToken}`,publicBaseUrl(request)).toString();
     const whatsappUrl=new URL(`https://wa.me/${testRecipient}`);whatsappUrl.searchParams.set("text",manualMessage(payment,protectedUrl,config.whatsapp_manual_message_template));
     const openedAt=new Date().toISOString();
     const update=await auth.supabase.from("nfse_entregas").update({status:"aguardando_confirmacao",aberto_em:openedAt,updated_at:openedAt}).eq("id",deliveryId).select("id").maybeSingle();
