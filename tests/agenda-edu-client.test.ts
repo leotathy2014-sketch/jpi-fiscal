@@ -18,6 +18,16 @@ test("localiza o chat de família e envia um único anexo por mensagem",async()=
   const form=calls[1].init?.body as FormData;assert.equal(form.get("chatIds[]"),"chat-10");assert.equal((form.get("attachment") as File).name,"nota.pdf");
 });
 
+test("permite testar envio direto no canal sem chat familiar",async()=>{
+  const calls:Array<{url:string;init?:RequestInit}>=[];
+  const fakeFetch:typeof fetch=async(input,init)=>{const url=String(input);calls.push({url,init});return new Response(JSON.stringify({data:{id:"message-channel-1"}}),{status:201});};
+  const messageId=await sendAgendaEduAttachment({accessToken:"token",schoolToken:"school",channelId:"68768",chatId:null,content:"Documento fiscal",filename:"nota.pdf",contentType:"application/pdf",bytes:new Uint8Array([1,2,3])},fakeFetch);
+  assert.equal(messageId,"message-channel-1");
+  const form=calls[0].init?.body as FormData;
+  assert.equal(form.get("chatIds[]"),null);
+  assert.equal((form.get("attachment") as File).name,"nota.pdf");
+});
+
 test("cria chat familiar apenas quando o aluno ainda não possui um",async()=>{
   let call=0;const fakeFetch:typeof fetch=async()=>{call++;if(call===1)return new Response(JSON.stringify({data:[]}),{status:200});return new Response(JSON.stringify({data:{id:"chat-new"}}),{status:201});};
   const chatId=await resolveAgendaEduFamilyChat({accessToken:"token",schoolToken:"school",channelId:"channel",studentId:"student",useExternalId:true},fakeFetch);

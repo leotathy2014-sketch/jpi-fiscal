@@ -108,7 +108,11 @@ export async function POST(request:NextRequest){
     const protectedUrl=new URL(`/nota/${accessTokenValue}`,request.nextUrl.origin).toString();
     protectedSecret=String(storedSecret);const credentials=parseAgendaEduCredentials(protectedSecret);const {accessToken}=await createAgendaEduAccessToken(credentials,fetch,environment);
     const common={accessToken,schoolToken:credentials.schoolToken,channelId:config.agenda_edu_channel_id,studentId,useExternalId,studentName:payment.alunos?.nome||null,classroomName:[payment.alunos?.turma,payment.alunos?.segmento].filter(Boolean).join(" ")||null};
-    const chatId=manualChatId||await resolveAgendaEduFamilyChat({...common,environment});
+    let chatId:string|null=manualChatId||null;
+    if(!chatId){
+      try{chatId=await resolveAgendaEduFamilyChat({...common,environment})}
+      catch{chatId=null}
+    }
     const prefix=environment==="producao"?"JPI Fiscal":"TESTE DE HOMOLOGAÇÃO — SEM VALIDADE FISCAL";
     providerIds.pdf=await sendAgendaEduAttachment({accessToken,schoolToken:credentials.schoolToken,channelId:config.agenda_edu_channel_id,chatId,content:`${prefix}\nNFS-e de ${payment.alunos?.nome||"aluno"}, competência ${payment.competencia}. DANFSe em PDF.\n\nAcesso individual protegido: ${protectedUrl}`,filename:`danfse-homologacao-${safeKey(document.chave_acesso)}.pdf`,contentType:"application/pdf",bytes:new Uint8Array(pdfBuffer),environment});
     providerIds.xml=await sendAgendaEduAttachment({accessToken,schoolToken:credentials.schoolToken,channelId:config.agenda_edu_channel_id,chatId,content:`${prefix}\nArquivo XML da mesma NFS-e, competência ${payment.competencia}.`,filename:`nfse-homologacao-${safeKey(document.chave_acesso)}.xml`,contentType:"application/xml",bytes:new Uint8Array(xmlBuffer),environment});

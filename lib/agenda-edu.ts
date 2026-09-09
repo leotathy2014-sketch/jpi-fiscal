@@ -467,11 +467,11 @@ export async function resolveAgendaEduFamilyChat(input:{accessToken:string;schoo
   return await findAgendaEduFamilyChat(input,fetchImpl)||await createAgendaEduFamilyChat(input,fetchImpl);
 }
 
-export async function sendAgendaEduAttachment(input:{accessToken:string;schoolToken:string;channelId:string;chatId:string;content:string;filename:string;contentType:string;bytes:Uint8Array;environment?:AgendaEduEnvironment},fetchImpl:FetchLike=fetch){
+export async function sendAgendaEduAttachment(input:{accessToken:string;schoolToken:string;channelId:string;chatId?:string|null;content:string;filename:string;contentType:string;bytes:Uint8Array;environment?:AgendaEduEnvironment},fetchImpl:FetchLike=fetch){
   const form=new FormData();
   const attachmentBytes=new Uint8Array(input.bytes.byteLength);attachmentBytes.set(input.bytes);
   form.append("content",input.content);
-  form.append("chatIds[]",input.chatId);
+  if(input.chatId)form.append("chatIds[]",input.chatId);
   form.append("attachment",new Blob([attachmentBytes.buffer],{type:input.contentType}),input.filename);
   const response=await fetchImpl(`${agendaBaseUrl(input.environment)}/channels/${encodeURIComponent(input.channelId)}/messages/`,{method:"POST",headers:agendaHeaders(input.accessToken,input.schoolToken),body:form,cache:"no-store"});
   if(!response.ok)throw new Error(await responseMessage(response,"A Agenda Edu não aceitou um dos documentos da NFS-e."));
