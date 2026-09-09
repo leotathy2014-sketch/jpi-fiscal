@@ -10,6 +10,18 @@ export type AgendaEduEnvironment="homologacao"|"producao";
 type FetchLike=typeof fetch;
 type AgendaResource={id?:string|number;type?:string;attributes?:Record<string,unknown>;relationships?:Record<string,{data?:unknown}>};
 export type AgendaEduStudentCandidate={id:string;name:string;className:string|null;grade:string|null;externalId:string|null;externalIds:string[];raw:Record<string,unknown>};
+export type AgendaEduStudentListItem={
+  id:string;
+  name:string;
+  externalId:string|null;
+  legacyId:string|null;
+  mainClassroomId:string|null;
+  period:string|null;
+  status:string|null;
+  linkedStatus:string|null;
+  dateOfBirth:string|null;
+};
+export type AgendaEduStudentListPage={students:AgendaEduStudentListItem[];page:number;nextPage:number|null;totalPages:number|null;totalCount:number|null;attempted:string};
 
 export function serializeAgendaEduCredentials(credentials:AgendaEduCredentials){
   return JSON.stringify(credentials);
@@ -183,6 +195,47 @@ function agendaList(value:unknown):AgendaResource[]{
   if(Array.isArray(record.alunos))return record.alunos as AgendaResource[];
   if(Array.isArray(record.results))return record.results as AgendaResource[];
   return [];
+}
+
+function numberOrNull(value:unknown){
+  const number=Number(value);
+  return Number.isFinite(number)&&number>0?number:null;
+}
+
+function mapAgendaStudentListItem(resource:AgendaResource):AgendaEduStudentListItem|null{
+  const id=String(resource.id??"").trim();
+  const name=agendaAttr(resource,"name")||agendaAttr(resource,"nome")||agendaAttr(resource,"nome_aluno");
+  if(!id||!name)return null;
+  return {
+    id,
+    name,
+    externalId:agendaAttr(resource,"external_id")||agendaAttr(resource,"externalId")||null,
+    legacyId:agendaAttr(resource,"legacy_id")||null,
+    mainClassroomId:agendaAttr(resource,"main_classroom_id")||null,
+    period:agendaAttr(resource,"period")||null,
+    status:agendaAttr(resource,"status")||null,
+    linkedStatus:agendaAttr(resource,"linked_status")||null,
+    dateOfBirth:agendaAttr(resource,"date_of_birth")||null,
+  };
+}
+
+export async function listAgendaEduStudents(input:{accessToken:string;schoolToken:string;page?:number;perPage?:number;environment?:AgendaEduEnvironment},fetchImpl:FetchLike=fetch):Promise<AgendaEduStudentListPage>{
+  const page=Math.max(1,Math.trunc(Number(input.page)||1));
+  const perPage=Math.min(100,Math.max(1,Math.trunc(Number(input.perPage)||50)));
+  const query=new URLSearchParams({pagina:String(page),por_pagina:String(perPage)});
+  const url=`${agendaBaseUrl(input.environment)}/student_profiles?${query}`;
+  const response=await fetchImpl(url,{headers:agendaHeaders(input.accessToken,input.schoolToken),cache:"no-store"});
+  if(!response.ok)throw new Error(await responseMessage(response,"A Agenda Edu não permitiu listar alunos."));
+  const result=await response.json().catch(()=>({})) as {meta?:Record<string,unknown>};
+  const meta=result.meta||{};
+  return {
+    students:agendaStudentsFromPayload(result).map(mapAgendaStudentListItem).filter(Boolean) as AgendaEduStudentListItem[],
+    page:numberOrNull(meta.page)??page,
+    nextPage:numberOrNull(meta.next),
+    totalPages:numberOrNull(meta.pages),
+    totalCount:numberOrNull(meta.count),
+    attempted:url,
+  };
 }
 
 function scoreAgendaStudent(candidate:AgendaEduStudentCandidate,input:{name:string;className?:string|null;grade?:string|null;externalId?:string|null}){
