@@ -28,6 +28,7 @@ export type AgendaEduChannelListPage={channels:AgendaEduChannelItem[];page:numbe
 export type AgendaEduStudentListPage={students:AgendaEduStudentListItem[];page:number;nextPage:number|null;totalPages:number|null;totalCount:number|null;attempted:string};
 export type AgendaEduStudentDetails={student:AgendaEduStudentListItem|null;responsibles:AgendaEduResponsibleItem[];classrooms:AgendaEduClassroomItem[];primaryResponsible:AgendaEduResponsibleItem|null;included:AgendaResource[];raw:unknown;attempted:string};
 export type AgendaEduFamilyChatLookup={chatId:string|null;found:boolean;attempted:string[];raw:unknown};
+export type AgendaEduFamilyChatCandidate={id:string;title:string;studentName:string|null;classroomName:string|null;responsibleNames:string[];score:number;raw:Record<string,unknown>};
 
 export function serializeAgendaEduCredentials(credentials:AgendaEduCredentials){
   return JSON.stringify(credentials);
@@ -393,6 +394,50 @@ function chatMatchesStudent(chat:AgendaResource,input:{studentId:string;studentN
   if(studentId&&text.includes(studentId))return true;
   if(studentName&&text.includes(studentName)&&(!classroomToken||text.includes(classroomToken)))return true;
   return false;
+}
+
+function mapAgendaChatCandidate(chat:AgendaResource,input:{studentName?:string|null;classroomName?:string|null;responsibleName?:string|null}):AgendaEduFamilyChatCandidate|null{
+  const id=String(chat.id||"").trim();if(!id)return null;
+  const text=normalize(flattenText(chat));
+  const studentName=String(input.studentName||"").trim();
+  const classroomName=String(input.classroomName||"").trim();
+  const responsibleName=String(input.responsibleName||"").trim();
+  let score=0;
+  if(studentName&&text.includes(normalize(studentName)))score+=70;
+  if(classroomName){
+    const classroomTokens=normalize(classroomName).split(/\s+/).filter(token=>token.length>=2);
+    if(classroomTokens.some(token=>text.includes(token)))score+=20;
+  }
+  if(responsibleName&&text.includes(normalize(responsibleName)))score+=10;
+  const title=agendaAttr(chat,"title")||agendaAttr(chat,"name")||agendaAttr(chat,"subject")||agendaAttr(chat,"label")||`Chat ${id}`;
+  const classroom=agendaAttr(chat,"classroom")||agendaAttr(chat,"classroom_name")||agendaAttr(chat,"turma")||agendaAttr(chat,"room")||null;
+  const student=agendaAttr(chat,"student_name")||agendaAttr(chat,"studentName")||agendaAttr(chat,"nome_aluno")||agendaAttr(chat,"aluno")||null;
+  const responsible=agendaAttr(chat,"responsible_name")||agendaAttr(chat,"responsibleName")||agendaAttr(chat,"responsavel")||agendaAttr(chat,"responsible")||null;
+  return {id,title,studentName:student||studentName||null,classroomName:classroom||classroomName||null,responsibleNames:responsible?[responsible]:responsibleName?[responsibleName]:[],score,raw:chat as Record<string,unknown>};
+}
+
+export async function listAgendaEduFamilyChats(input:{accessToken:string;schoolToken:string;channelId:string;studentName?:string|null;classroomName?:string|null;responsibleName?:string|null;environment?:AgendaEduEnvironment},fetchImpl:FetchLike=fetch){
+  const channelId=String(input.channelId||"").trim();
+  if(!/^[A-Za-z0-9._-]{1,120}$/.test(channelId))throw new Error("Informe um ID de canal válido da Agenda Edu.");
+  const base=`${agendaBaseUrl(input.environment)}/channels/${encodeURIComponent(channelId)}/chats`;
+  const queries:URLSearchParams[]=[];
+  for(let page=1;page<=10;page++)queries.push(new URLSearchParams({"pagina":String(page),"por_pagina":"50"}),new URLSearchParams({"page[number]":String(page),"page[size]":"50"}));
+  const attempted:string[]=[];const candidates:AgendaEduFamilyChatCandidate[]=[];const seen=new Set<string>();
+  for(const query of queries){
+    const url=`${base}?${query}`;attempted.push(url);
+    const response=await fetchImpl(url,{headers:agendaHeaders(input.accessToken,input.schoolToken),cache:"no-store"});
+    if(!response.ok)throw new Error(await responseMessage(response,"A Agenda Edu não permitiu listar os chats do canal."));
+    const result=await response.json().catch(()=>({})) as {data?:AgendaResource[];meta?:{next?:number|null}};
+    const rows=Array.isArray(result.data)?result.data:[];
+    for(const chat of rows){
+      const candidate=mapAgendaChatCandidate(chat,input);if(!candidate||seen.has(candidate.id))continue;
+      if(candidate.score>0||!input.studentName&&!input.classroomName&&!input.responsibleName){seen.add(candidate.id);candidates.push(candidate)}
+    }
+    if(rows.length===0)break;
+    if(result.meta&&result.meta.next==null)break;
+  }
+  candidates.sort((a,b)=>b.score-a.score||a.title.localeCompare(b.title,"pt-BR"));
+  return {chats:candidates.slice(0,20),attempted,total:candidates.length};
 }
 
 async function findAgendaEduFamilyChatByContext(input:{accessToken:string;schoolToken:string;channelId:string;studentId:string;studentName?:string|null;classroomName?:string|null;environment?:AgendaEduEnvironment},fetchImpl:FetchLike){

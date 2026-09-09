@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { sendSmtpEmail } from "@/lib/smtp";
-import { AGENDA_EDU_ENDPOINTS, createAgendaEduAccessToken, serializeAgendaEduCredentials, parseAgendaEduCredentials, searchAgendaEduStudents, testAgendaEduConnection, listAgendaEduStudents, getAgendaEduStudentDetails, listAgendaEduChannels, lookupAgendaEduFamilyChat, type AgendaEduEnvironment } from "@/lib/agenda-edu";
+import { AGENDA_EDU_ENDPOINTS, createAgendaEduAccessToken, serializeAgendaEduCredentials, parseAgendaEduCredentials, searchAgendaEduStudents, testAgendaEduConnection, listAgendaEduStudents, getAgendaEduStudentDetails, listAgendaEduChannels, lookupAgendaEduFamilyChat, listAgendaEduFamilyChats, type AgendaEduEnvironment } from "@/lib/agenda-edu";
 import { hasServerPermission } from "@/lib/server-permissions";
 
 export const runtime = "nodejs";
@@ -330,13 +330,15 @@ export async function POST(request:NextRequest){
 
   if(action==="lookup-agenda-family-chat"){
     if(!await hasServerPermission(auth.supabase,"settings.integrations.edit"))return json({error:"Seu usuário não possui permissão para localizar chats da Agenda Edu."},403);
-    const channelId=String(body.channelId||"").trim();
+    let channelId=String(body.channelId||"").trim();
     const studentId=String(body.studentId||"").trim();
     const useExternalId=body.useExternalId===true||String(body.useExternalId)==="true";
     const {data:storedSecret,error:secretError}=await auth.supabase.rpc("get_communication_secret",{p_channel:"agenda_edu",p_backend_secret:backendSecret});
     if(secretError||!storedSecret)return json({error:"Cadastre primeiro as credenciais da Agenda Edu."},400);
     try{
       const {data:currentConfig}=await readConfig(auth.supabase);
+      channelId=channelId||String(currentConfig?.agenda_edu_channel_id||"").trim();
+      if(!channelId)return json({error:"Defina primeiro o canal padrão da Agenda Edu."},400);
       const environment=agendaEnvironment(currentConfig?.agenda_edu_environment);
       const credentials=parseAgendaEduCredentials(String(storedSecret));
       const token=await createAgendaEduAccessToken(credentials,fetch,environment);
@@ -344,6 +346,28 @@ export async function POST(request:NextRequest){
       return json({ok:true,message:result.found?`Chat familiar encontrado: ${result.chatId}. Nada foi gravado e nenhuma mensagem foi enviada.`:"Nenhum chat familiar encontrado para este canal/aluno. Nada foi criado.",baseUrl:agendaBaseUrl(environment),environment,...result,raw:safeSample(result.raw)});
     }catch(chatError){
       return json({error:chatError instanceof Error?chatError.message:"Não foi possível localizar o chat familiar na Agenda Edu."},400);
+    }
+  }
+
+  if(action==="list-agenda-family-chats"){
+    if(!await hasServerPermission(auth.supabase,"settings.integrations.edit"))return json({error:"Seu usuário não possui permissão para listar chats da Agenda Edu."},403);
+    let channelId=String(body.channelId||"").trim();
+    const studentName=String(body.studentName||"").replace(/\s+/g," ").trim();
+    const classroomName=String(body.classroomName||"").replace(/\s+/g," ").trim();
+    const responsibleName=String(body.responsibleName||"").replace(/\s+/g," ").trim();
+    const {data:storedSecret,error:secretError}=await auth.supabase.rpc("get_communication_secret",{p_channel:"agenda_edu",p_backend_secret:backendSecret});
+    if(secretError||!storedSecret)return json({error:"Cadastre primeiro as credenciais da Agenda Edu."},400);
+    try{
+      const {data:currentConfig}=await readConfig(auth.supabase);
+      channelId=channelId||String(currentConfig?.agenda_edu_channel_id||"").trim();
+      if(!channelId)return json({error:"Defina primeiro o canal padrão da Agenda Edu."},400);
+      const environment=agendaEnvironment(currentConfig?.agenda_edu_environment);
+      const credentials=parseAgendaEduCredentials(String(storedSecret));
+      const token=await createAgendaEduAccessToken(credentials,fetch,environment);
+      const result=await listAgendaEduFamilyChats({accessToken:token.accessToken,schoolToken:credentials.schoolToken,channelId,studentName,classroomName,responsibleName,environment},fetch);
+      return json({ok:true,message:result.chats.length?`Encontramos ${result.chats.length} chat(s) possível(is) no canal Secretaria. Confira antes de enviar.`:"Nenhum chat candidato encontrado no canal Secretaria.",baseUrl:agendaBaseUrl(environment),environment,...result,raw:safeSample(result.chats)});
+    }catch(chatError){
+      return json({error:chatError instanceof Error?chatError.message:"Não foi possível listar os chats da Agenda Edu."},400);
     }
   }
 
