@@ -296,7 +296,7 @@ export async function POST(request:NextRequest){
   }
 
   if(action==="list-agenda-students"){
-    if(!await hasServerPermission(auth.supabase,"settings.integrations.edit"))return json({error:"Seu usuário não possui permissão para listar alunos da Agenda Edu."},403);
+    if(!await hasServerPermission(auth.supabase,"deliveries.send_agenda")&&!await hasServerPermission(auth.supabase,"settings.integrations.edit"))return json({error:"Seu usuário não possui permissão para listar alunos da Agenda Edu."},403);
     const {data:storedSecret,error:secretError}=await auth.supabase.rpc("get_communication_secret",{p_channel:"agenda_edu",p_backend_secret:backendSecret});
     if(secretError||!storedSecret)return json({error:"Cadastre primeiro as credenciais da Agenda Edu."},400);
     try{
@@ -312,7 +312,7 @@ export async function POST(request:NextRequest){
   }
 
   if(action==="get-agenda-student-details"){
-    if(!await hasServerPermission(auth.supabase,"settings.integrations.edit"))return json({error:"Seu usuário não possui permissão para consultar detalhes do aluno na Agenda Edu."},403);
+    if(!await hasServerPermission(auth.supabase,"deliveries.send_agenda")&&!await hasServerPermission(auth.supabase,"settings.integrations.edit"))return json({error:"Seu usuário não possui permissão para consultar detalhes do aluno na Agenda Edu."},403);
     const studentId=String(body.studentId||"").trim();
     const {data:storedSecret,error:secretError}=await auth.supabase.rpc("get_communication_secret",{p_channel:"agenda_edu",p_backend_secret:backendSecret});
     if(secretError||!storedSecret)return json({error:"Cadastre primeiro as credenciais da Agenda Edu."},400);
