@@ -11,6 +11,7 @@ export const maxDuration=60;
 const XML_BUCKET="documentos-nfse";
 const uuidPattern=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const studentIdPattern=/^[A-Za-z0-9._-]{1,120}$/;
+const chatIdPattern=/^[A-Za-z0-9._-]{1,120}$/;
 const json=(body:Record<string,unknown>,status=200)=>NextResponse.json(body,{status,headers:{"Cache-Control":"no-store"}});
 const safeKey=(value:string)=>value.replace(/[^a-z0-9]/gi,"").slice(0,60)||"documento";
 
@@ -58,8 +59,9 @@ export async function POST(request:NextRequest){
   const auth=await authorizedClient(request);if(!auth.ok)return auth.response;
   const backendSecret=process.env.JPI_BACKEND_SECRET;if(!backendSecret)return json({error:"O cofre de credenciais ainda não está configurado no servidor."},503);
   let body:Record<string,unknown>={};try{body=await request.json()}catch{return json({error:"Dados da solicitação inválidos."},400)}
-  const monthlyId=Number(body.monthlyId);const documentId=Number(body.documentId);const requestId=String(body.requestId||"");
+  const monthlyId=Number(body.monthlyId);const documentId=Number(body.documentId);const requestId=String(body.requestId||"");const manualChatId=String(body.agendaChatId||"").trim();
   if(!Number.isSafeInteger(monthlyId)||monthlyId<=0||!Number.isSafeInteger(documentId)||documentId<=0||!uuidPattern.test(requestId))return json({error:"Identificação da entrega inválida."},400);
+  if(manualChatId&&!chatIdPattern.test(manualChatId))return json({error:"Informe um ID de chat Agenda Edu válido."},400);
 
   const {data:existing}=await auth.supabase.from("nfse_entregas").select("id,status,enviado_em,erro_mensagem").eq("request_id",requestId).maybeSingle();
   if(existing)return json({ok:existing.status==="enviado",alreadyProcessed:true,status:existing.status,sentAt:existing.enviado_em,error:existing.erro_mensagem},existing.status==="erro"?409:200);
@@ -106,7 +108,7 @@ export async function POST(request:NextRequest){
     const protectedUrl=new URL(`/nota/${accessTokenValue}`,request.nextUrl.origin).toString();
     protectedSecret=String(storedSecret);const credentials=parseAgendaEduCredentials(protectedSecret);const {accessToken}=await createAgendaEduAccessToken(credentials,fetch,environment);
     const common={accessToken,schoolToken:credentials.schoolToken,channelId:config.agenda_edu_channel_id,studentId,useExternalId,studentName:payment.alunos?.nome||null,classroomName:[payment.alunos?.turma,payment.alunos?.segmento].filter(Boolean).join(" ")||null};
-    const chatId=await resolveAgendaEduFamilyChat({...common,environment});
+    const chatId=manualChatId||await resolveAgendaEduFamilyChat({...common,environment});
     const prefix=environment==="producao"?"JPI Fiscal":"TESTE DE HOMOLOGAÇÃO — SEM VALIDADE FISCAL";
     providerIds.pdf=await sendAgendaEduAttachment({accessToken,schoolToken:credentials.schoolToken,channelId:config.agenda_edu_channel_id,chatId,content:`${prefix}\nNFS-e de ${payment.alunos?.nome||"aluno"}, competência ${payment.competencia}. DANFSe em PDF.\n\nAcesso individual protegido: ${protectedUrl}`,filename:`danfse-homologacao-${safeKey(document.chave_acesso)}.pdf`,contentType:"application/pdf",bytes:new Uint8Array(pdfBuffer),environment});
     providerIds.xml=await sendAgendaEduAttachment({accessToken,schoolToken:credentials.schoolToken,channelId:config.agenda_edu_channel_id,chatId,content:`${prefix}\nArquivo XML da mesma NFS-e, competência ${payment.competencia}.`,filename:`nfse-homologacao-${safeKey(document.chave_acesso)}.xml`,contentType:"application/xml",bytes:new Uint8Array(xmlBuffer),environment});
