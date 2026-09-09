@@ -898,6 +898,20 @@
 .sweduc-inline-financial-test{display:grid;gap:3px;padding:10px 12px;border:1px solid #bfe1d2;border-radius:10px;background:#edf9f4;color:#157653}
 .sweduc-inline-financial-test strong{font-size:13px}
 .sweduc-inline-financial-test small{font-size:11.5px;color:#4f7969}
+.agenda-student-table{overflow-x:auto;scrollbar-width:thin}
+.agenda-student-table table{min-width:0;table-layout:fixed}
+.agenda-student-table th,.agenda-student-table td{padding:11px 12px;vertical-align:middle}
+.agenda-student-table th:nth-child(1),.agenda-student-table td:nth-child(1){width:92px}
+.agenda-student-table th:nth-child(2),.agenda-student-table td:nth-child(2){width:28%}
+.agenda-student-table th:nth-child(3),.agenda-student-table td:nth-child(3){width:130px}
+.agenda-student-table th:nth-child(4),.agenda-student-table td:nth-child(4){width:110px}
+.agenda-student-table th:nth-child(5),.agenda-student-table td:nth-child(5){width:110px}
+.agenda-student-table th:nth-child(6),.agenda-student-table td:nth-child(6){width:92px}
+.agenda-student-table th:nth-child(7),.agenda-student-table td:nth-child(7){width:150px}
+.agenda-student-table td strong,.agenda-student-table .subcell{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.agenda-student-table .compact-actions{margin:0;padding:0;border:0;gap:6px;justify-content:flex-end;flex-wrap:nowrap}
+.agenda-student-table .secondary.mini{min-height:30px;white-space:nowrap}
+@media(max-width:760px){.agenda-student-table table{min-width:760px}.agenda-student-table th:nth-child(2),.agenda-student-table td:nth-child(2){width:190px}}
 .sweduc-inline-financial-test.error{border-color:#f1c3bd;background:#fff2f0;color:#a23624}
 .sweduc-inline-financial-test.error small{color:#8a4a40}
 .sweduc-suggested-responsible{display:inline-flex;align-items:center;gap:4px;margin-left:8px;padding:3px 7px;border-radius:999px;background:#e8f8ef;color:#087044;font-style:normal;font-size:10.5px;font-weight:900;vertical-align:middle}
