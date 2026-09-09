@@ -350,7 +350,7 @@ export async function POST(request:NextRequest){
   }
 
   if(action==="list-agenda-family-chats"){
-    if(!await hasServerPermission(auth.supabase,"settings.integrations.edit"))return json({error:"Seu usuário não possui permissão para listar chats da Agenda Edu."},403);
+    if(!await hasServerPermission(auth.supabase,"deliveries.send_agenda")&&!await hasServerPermission(auth.supabase,"settings.integrations.edit"))return json({error:"Seu usuário não possui permissão para localizar chats da Agenda Edu."},403);
     let channelId=String(body.channelId||"").trim();
     const studentName=String(body.studentName||"").replace(/\s+/g," ").trim();
     const classroomName=String(body.classroomName||"").replace(/\s+/g," ").trim();
