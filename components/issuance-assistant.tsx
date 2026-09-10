@@ -185,6 +185,7 @@ export function IssuanceAssistant({onNavigate}:{onNavigate:(page:AppPage)=>void}
   const [newStudentId,setNewStudentId]=useState<number|null>(null);
   const [newCompetence,setNewCompetence]=useState(()=>currentCompetenceInput());
   const [newValue,setNewValue]=useState("");
+  const [newSweducDueDate,setNewSweducDueDate]=useState("");
   const [newPaymentStatus,setNewPaymentStatus]=useState("Aberto");
   const [newDescription,setNewDescription]=useState("");
   const [newDescriptionEdited,setNewDescriptionEdited]=useState(false);
@@ -328,6 +329,10 @@ export function IssuanceAssistant({onNavigate}:{onNavigate:(page:AppPage)=>void}
     if(!selectedSweducMonthlyTitle||!Number.isFinite(selectedSweducMonthlyTitle.amount))return;
     setNewValue(selectedSweducMonthlyTitle.amount.toLocaleString("pt-BR",{style:"currency",currency:"BRL"}));
   },[selectedSweducMonthlyTitle]);
+  useEffect(()=>{
+    const due=selectedSweducMonthlyTitle?.dueDate;
+    setNewSweducDueDate(due?new Date(`${due}T12:00:00`).toLocaleDateString("pt-BR"):"");
+  },[selectedSweducMonthlyTitle?.dueDate]);
   const delivery=useMemo(()=>selected?deliveries.find(item=>item.mensalidade_id===selected.id&&item.status==="enviado")||null:null,[deliveries,selected]);
   const missing=selected?missingStudentFields(selected):[];
   const progress=selected?statusOrder(selected):null;
@@ -458,7 +463,7 @@ export function IssuanceAssistant({onNavigate}:{onNavigate:(page:AppPage)=>void}
       sessionStorage.removeItem("jpi-assistant-prepared-sweduc-student");
       setNewEmissionOpen(false);
       setMessage("Mensalidade criada e nota iniciada. O próximo passo é validar os dados fiscais.");
-      setNewValue("");setNewPaymentStatus("Aberto");setNewDescriptionEdited(false);
+      setNewValue("");setNewSweducDueDate("");setNewPaymentStatus("Aberto");setNewDescriptionEdited(false);
       await load(true);
     }catch(cause){setError(cause instanceof Error?cause.message:"Não foi possível iniciar a emissão.");}
     finally{setBusyAction("")}
@@ -932,7 +937,7 @@ export function IssuanceAssistant({onNavigate}:{onNavigate:(page:AppPage)=>void}
               <div className="assistant-edit-grid">
                 <label><span>Competência</span><input type="month" max={currentCompetenceInput()} value={newCompetence} onChange={e=>{const value=e.target.value;setNewCompetence(value);if(!newDescriptionEdited)setNewDescription(defaultServiceDescription(value,selectedStudent))}}/></label>
                 <label><span>Valor da mensalidade / NFS-e</span><input type="text" inputMode="numeric" placeholder="R$ 0,00" value={newValue} onChange={e=>setNewValue(currencyInput(e.target.value))}/></label>
-                <label><span>Vencimento SWeduc</span><input type="text" value={selectedSweducMonthlyTitle?.dueDate?new Date(`${selectedSweducMonthlyTitle.dueDate}T12:00:00`).toLocaleDateString("pt-BR"):"Não encontrado para esta competência"} readOnly/></label>
+                <label><span>Vencimento SWeduc</span><input type="text" value={newSweducDueDate} onChange={e=>setNewSweducDueDate(e.target.value)} placeholder="Ex.: 10/01/2026"/></label>
               </div>
               <label><span>Status do pagamento</span><select value={newPaymentStatus} onChange={e=>setNewPaymentStatus(e.target.value)}><option value="Aberto">Pendente</option><option value="Pago">Pago</option></select></label>
               <label className="assistant-description-field"><span>Descrição do serviço <em>Editável</em></span><textarea rows={5} maxLength={1000} value={newDescription} onChange={e=>{setNewDescriptionEdited(true);setNewDescription(e.target.value)}}/><small>{newDescription.length}/1000 caracteres</small></label>
