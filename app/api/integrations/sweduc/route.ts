@@ -149,7 +149,8 @@ function defaultRecentYears(academicYears:{year:number}[],currentYear:number){
 
 function normalizeSearchText(value:unknown){return String(value||"").normalize("NFD").replace(/[\u0300-\u036f]/g,"").replace(/[^\p{L}\p{N}\s]/gu," ").replace(/\s+/g," ").trim().toLocaleLowerCase("pt-BR")}
 function matchesSearch(row:Record<string,unknown>,term:string){const normalized=normalizeSearchText(term);if(!normalized)return true;return [row.nome,row.numero_matricula,row.matricula_id,row.turma,row.serie,row.curso].some(value=>normalizeSearchText(value).includes(normalized))}
-function sameAcademic(value:unknown,expected:string){return !expected||normalizeAcademicReference(value)===normalizeAcademicReference(expected)}
+function looseAcademic(value:unknown){return normalizeAcademicReference(value).replace(/\bii\b/g,"2").replace(/\bi\b/g,"1").replace(/\b(matriz|filial|manha|tarde|noite)\b/g,"").replace(/\bm\b/g,"").replace(/\s+/g," ").trim()}
+function sameAcademic(value:unknown,expected:string){const current=looseAcademic(value);const wanted=looseAcademic(expected);return !wanted||Boolean(current)&&(current===wanted||current.includes(wanted)||wanted.includes(current))}
 function matchesAcademic(row:Record<string,unknown>,course:string,serie:string,turma:string){return sameAcademic(row.curso,course)&&sameAcademic(row.serie,serie)&&sameAcademic(row.turma,turma)}
 function financialText(item:Record<string,unknown>,keys:string[]){for(const key of keys){const value=item[key];if(value!==undefined&&value!==null&&String(value).trim())return String(value)}return ""}
 function parseFinancialNumber(value:string){

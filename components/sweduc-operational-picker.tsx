@@ -16,7 +16,19 @@ function isTrueFlag(value:unknown){return value===true||value===1||String(value)
 function isFinancialResponsible(responsible:SweducResponsible){return isTrueFlag(responsible.responsavel_financeiro)||isTrueFlag(responsible.financeiro)||isTrueFlag(responsible.eh_financeiro)}
 function responsibleRoleText(responsible:SweducResponsible){return `${responsible.parentesco||"Parentesco não informado"} · ${isTrueFlag(responsible.responsavel_pedagogico)?"pedagógico":"não pedagógico"}`}
 function normalizeSearchText(value:unknown){return String(value||"").normalize("NFD").replace(/[\u0300-\u036f]/g,"").replace(/[^\p{L}\p{N}\s]/gu," ").replace(/\s+/g," ").trim().toLocaleLowerCase("pt-BR")}
-function sameOption(left:unknown,right:unknown){return normalizeSearchText(left)===normalizeSearchText(right)}
+function normalizeAcademicText(value:unknown){
+  return normalizeSearchText(value)
+    .replace(/\bii\b/g,"2")
+    .replace(/\bi\b/g,"1")
+    .replace(/\b(matriz|filial|manha|tarde|noite)\b/g,"")
+    .replace(/\bm\b/g,"")
+    .replace(/\s+/g," ")
+    .trim();
+}
+function sameOption(left:unknown,right:unknown){
+  const a=normalizeAcademicText(left);const b=normalizeAcademicText(right);
+  return !a||!b?false:a===b||a.includes(b)||b.includes(a);
+}
 function uniqueSortedOptions(values:Array<string|null|undefined>){
   const options=new Map<string,string>();
   for(const value of values){
