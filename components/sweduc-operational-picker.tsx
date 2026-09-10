@@ -136,12 +136,13 @@ export function SweducOperationalPicker({onStudentReady}:{onStudentReady:(studen
   }
 
   useEffect(()=>{
+    if(students.length>0)return;
     if(!selectedYear||!hasAcademicFilter||busy)return;
     const key=[selectedYear,courseFilter,serieFilter,turmaFilter].join("|");
     if(lastAutoConsultRef.current===key)return;
     lastAutoConsultRef.current=key;
     void consult();
-  },[selectedYear,courseFilter,serieFilter,turmaFilter,hasAcademicFilter,busy]);
+  },[selectedYear,courseFilter,serieFilter,turmaFilter,hasAcademicFilter,busy,students.length]);
 
   async function openResponsibleChoice(student:SweducStudent){
     setSelected(student);setBusy(`details-${student.matricula_id}`);setError("");setMessage("Carregando responsáveis da SWeduc para conferência…");setResponsibleIndex(0);
