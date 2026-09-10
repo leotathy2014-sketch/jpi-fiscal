@@ -1158,7 +1158,7 @@ export function IssuanceAssistant({onNavigate}:{onNavigate:(page:AppPage)=>void}
                 <small>DESTINO DE HOMOLOGAÇÃO</small>
                 <strong>{deliveryRecipient}</strong>
                 <span>{deliveryChannel==="email"?selected.alunos?.email||"E-mail do responsável não informado":deliveryChannel==="whatsapp-manual"?selected.alunos?.whatsapp||"WhatsApp do responsável não informado":agendaEduStudentId?"Aluno vinculado à Agenda Edu":"Aluno ainda sem vínculo da Agenda Edu"}</span>
-                <button className="secondary" type="button" onClick={()=>focusAndNavigate("Alunos e Responsáveis")} disabled={deliveryBusy}><Settings size={16}/>Alterar cadastro/e-mail</button>
+                <button className="secondary attention" type="button" onClick={()=>focusAndNavigate("Alunos e Responsáveis")} disabled={deliveryBusy}><Settings size={16}/>Alterar cadastro/e-mail</button>
               </div>
 
               {deliveryChannel==="whatsapp-manual"&&<>
@@ -1206,7 +1206,7 @@ export function IssuanceAssistant({onNavigate}:{onNavigate:(page:AppPage)=>void}
             <button className="primary assistant-main-action" onClick={continueProcess} disabled={Boolean(busyAction)||(!canPrepare&&effectiveCurrent>=2&&effectiveCurrent<8)}>
               {busyAction==="validate"?"Validando…":busyAction==="save-dps"?"Salvando DPS…":busyAction==="approve"?"Aprovando…":busyAction==="xml"?"Gerando XML…":effectiveCurrent===2&&missing.length?"Corrigir cadastro":effectiveCurrent===2?"Validar nota":effectiveCurrent===3?"Salvar DPS e ver prévia":effectiveCurrent===4?"Aprovar prévia":effectiveCurrent===5?"Gerar e validar XML":effectiveCurrent===6?"Abrir homologação NFS-e":effectiveCurrent>=8?"Ir para envio":"Continuar processo"} <ChevronRight size={18}/>
             </button>
-            <button className="secondary" type="button" onClick={()=>focusAndNavigate("Alunos e Responsáveis")} disabled={Boolean(busyAction)}><Settings size={17}/>Alterar cadastro/e-mail</button>
+            <button className="secondary attention" type="button" onClick={()=>focusAndNavigate("Alunos e Responsáveis")} disabled={Boolean(busyAction)}><Settings size={17}/>Alterar cadastro/e-mail</button>
             {effectiveCurrent<=2&&selected.alunos?.sweduc_matricula_id&&<button className="secondary" type="button" onClick={()=>void openResponsibleSwitch()} disabled={Boolean(responsibleSwitchBusy)||!canPrepare}><UsersRound size={17}/>Trocar responsável</button>}
             {effectiveCurrent>2&&effectiveCurrent<8&&<button className="secondary" onClick={()=>effectiveCurrent===6?openOfficialHomologation():focusAndNavigate("NFS-e")}>{effectiveCurrent===6?"Abrir homologação oficial":"Abrir NFS-e atual"}</button>}
             {progress?.finished&&<button className="secondary" onClick={()=>focusAndNavigate("Enviar notas")}>Abrir central de envios</button>}
