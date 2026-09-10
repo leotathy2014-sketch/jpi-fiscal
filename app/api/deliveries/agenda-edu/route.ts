@@ -51,6 +51,15 @@ export async function POST(request:NextRequest){
   const auth=await authorizedClient(request);if(!auth.ok)return auth.response;
   const backendSecret=process.env.JPI_BACKEND_SECRET;if(!backendSecret)return json({error:"O cofre de credenciais ainda não está configurado no servidor."},503);
   let body:Record<string,unknown>={};try{body=await request.json()}catch{return json({error:"Dados da solicitação inválidos."},400)}
+  const action=String(body.action||"prepare");
+  if(action==="confirm"){
+    const deliveryId=Number(body.deliveryId);
+    if(!Number.isSafeInteger(deliveryId)||deliveryId<=0)return json({error:"Identificação da entrega inválida."},400);
+    const now=new Date().toISOString();
+    const {data,error}=await auth.supabase.from("nfse_entregas").update({status:"enviado",erro_mensagem:null,enviado_em:now,confirmado_em:now,confirmado_por:auth.user.id,confirmado_por_nome:auth.user.email,updated_at:now}).eq("id",deliveryId).eq("canal","agenda_edu").eq("status","aguardando_confirmacao").select("id").maybeSingle();
+    if(error||!data)return json({error:"Não foi possível marcar esta mensagem como enviada. Confira se ela ainda está aguardando confirmação."},400);
+    return json({ok:true,status:"enviado",sentAt:now,message:"Mensagem marcada como enviada manualmente na Agenda Edu."});
+  }
   const monthlyId=Number(body.monthlyId);const documentId=Number(body.documentId);const requestId=String(body.requestId||"");
   if(!Number.isSafeInteger(monthlyId)||monthlyId<=0||!Number.isSafeInteger(documentId)||documentId<=0||!uuidPattern.test(requestId))return json({error:"Identificação da entrega inválida."},400);
 
