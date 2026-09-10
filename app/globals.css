@@ -249,6 +249,9 @@
  .profile-permission-selector{grid-template-columns:1fr}
  .permission-profile-row{grid-template-columns:1fr auto}
 }
+.secondary.attention{background:#fff2bf;border-color:#e5ac22;color:#6f4100;box-shadow:0 4px 12px #b36a0820}
+.secondary.attention:hover{background:#ffe59a;border-color:#c47a07;color:#4f2c00}
+.secondary.attention:disabled{background:#f4ead0;border-color:#ead8ad;color:#9a8254;box-shadow:none}
 @media(max-width:480px){
  .permission-profile-row{grid-template-columns:1fr}
  .permission-toggle.profile-only{justify-content:start;place-items:center start}
