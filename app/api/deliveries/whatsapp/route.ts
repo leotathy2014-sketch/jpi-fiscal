@@ -25,7 +25,7 @@ function safeDeliveryError(error:unknown){
   const message=error instanceof Error?error.message:String(error||"");
   if(/token|oauth|unauthorized|forbidden|permission/i.test(message))return "A Meta recusou a autenticação. Confira o token e as permissões em Configurações → Integrações.";
   if(/template|modelo|parameter|parâmetro|language/i.test(message))return "O modelo aprovado na Meta não corresponde ao modelo envio_nfse esperado pelo JPI Fiscal.";
-  if(/phone|telefone|número|recipient|destinat/i.test(message))return "A Meta não aceitou o número interno configurado para homologação.";
+  if(/phone|telefone|número|recipient|destinat/i.test(message))return "A Meta não aceitou o WhatsApp cadastrado para o responsável.";
   if(/media|document|PDF|upload/i.test(message))return "A Meta não aceitou o PDF da NFS-e. O XML e o documento fiscal foram preservados.";
   if(/signed|link|XML|storage/i.test(message))return "Não foi possível criar o link privado temporário do XML. Nenhum arquivo foi exposto.";
   return "A Meta não concluiu o envio pelo WhatsApp. Revise a integração e tente novamente.";
@@ -55,8 +55,8 @@ export async function GET(request:NextRequest){
   const {config,error}=await readConfig(auth.supabase,backendSecret);
   if(error||!config)return json({error:"Não foi possível carregar a configuração segura do WhatsApp."},503);
   const testRecipient=normalizeBrazilPhone(config.whatsapp_test_recipient||"");
-  const ready=Boolean(config.whatsapp_token_configurado&&config.whatsapp_ultimo_status==="conectado"&&config.whatsapp_phone_number_id&&config.whatsapp_template_name&&brazilPhonePattern.test(testRecipient));
-  return json({ok:true,ready,testRecipient:ready?maskPhone(testRecipient):null,templateName:config.whatsapp_template_name||"envio_nfse"});
+  const ready=Boolean(config.whatsapp_token_configurado&&config.whatsapp_ultimo_status==="conectado"&&config.whatsapp_phone_number_id&&config.whatsapp_template_name);
+  return json({ok:true,ready,testRecipient:brazilPhonePattern.test(testRecipient)?maskPhone(testRecipient):null,templateName:config.whatsapp_template_name||"envio_nfse"});
 }
 
 export async function POST(request:NextRequest){
@@ -78,13 +78,12 @@ export async function POST(request:NextRequest){
   if(paymentResult.error||!payment)return json({error:"Mensalidade não encontrada."},404);
   if(documentResult.error||!document)return json({error:"A versão ativa da NFS-e de teste não foi encontrada."},404);
   if(configResult.error||!config)return json({error:"Não foi possível carregar a configuração segura do WhatsApp."},503);
-  const intendedRecipient=normalizeBrazilPhone(payment.alunos?.whatsapp||"");const testRecipient=normalizeBrazilPhone(config.whatsapp_test_recipient||"");
+  const intendedRecipient=normalizeBrazilPhone(payment.alunos?.whatsapp||"");
   if(!brazilPhonePattern.test(intendedRecipient))return json({error:"O responsável não possui um WhatsApp brasileiro válido no cadastro."},400);
   if(!config.whatsapp_token_configurado||config.whatsapp_ultimo_status!=="conectado"||!config.whatsapp_phone_number_id)return json({error:"A integração do WhatsApp precisa estar configurada e testada antes das entregas."},400);
-  if(!brazilPhonePattern.test(testRecipient))return json({error:"Cadastre o número interno de homologação em Configurações → Integrações."},400);
 
   const subject=`TESTE — NFS-e de homologação · ${payment.alunos?.nome||"Aluno"} · ${payment.competencia}`;
-  const insertResult=await auth.supabase.from("nfse_entregas").insert({mensalidade_id:monthlyId,documento_homologacao_id:documentId,request_id:requestId,canal:"whatsapp",ambiente:"homologacao",destinatario_pretendido:intendedRecipient,destinatario_utilizado:testRecipient,assunto:subject,status:"enviando",created_by:auth.user.id,updated_at:new Date().toISOString()}).select("id").single();
+  const insertResult=await auth.supabase.from("nfse_entregas").insert({mensalidade_id:monthlyId,documento_homologacao_id:documentId,request_id:requestId,canal:"whatsapp",ambiente:"homologacao",destinatario_pretendido:intendedRecipient,destinatario_utilizado:intendedRecipient,assunto:subject,status:"enviando",created_by:auth.user.id,updated_at:new Date().toISOString()}).select("id").single();
   if(insertResult.error){
     if(insertResult.error.code==="23505")return json({error:"Esta nota já possui um envio pelo WhatsApp em andamento. Aguarde a conclusão."},409);
     return json({error:"Não foi possível iniciar o histórico seguro da entrega pelo WhatsApp."},500);
@@ -109,12 +108,12 @@ export async function POST(request:NextRequest){
     const mediaResult=await mediaResponse.json().catch(()=>({})) as {id?:string;error?:{message?:string}};
     if(!mediaResponse.ok||!mediaResult.id)throw new Error(mediaResult.error?.message||"A Meta não aceitou o PDF.");
 
-    const messageResponse=await fetch(`https://graph.facebook.com/${encodeURIComponent(config.whatsapp_phone_number_id)}/messages`,{method:"POST",headers:{Authorization:`Bearer ${accessToken}`,"Content-Type":"application/json"},body:JSON.stringify({messaging_product:"whatsapp",recipient_type:"individual",to:testRecipient,type:"template",template:{name:config.whatsapp_template_name||"envio_nfse",language:{code:"pt_BR"},components:[{type:"header",parameters:[{type:"document",document:{id:mediaResult.id,filename:pdfFilename}}]},{type:"body",parameters:[{type:"text",text:payment.alunos?.responsavel||"Responsável"},{type:"text",text:payment.alunos?.nome||"Aluno"},{type:"text",text:payment.competencia},{type:"text",text:signedXml.signedUrl}]}]}}),cache:"no-store"});
+    const messageResponse=await fetch(`https://graph.facebook.com/${encodeURIComponent(config.whatsapp_phone_number_id)}/messages`,{method:"POST",headers:{Authorization:`Bearer ${accessToken}`,"Content-Type":"application/json"},body:JSON.stringify({messaging_product:"whatsapp",recipient_type:"individual",to:intendedRecipient,type:"template",template:{name:config.whatsapp_template_name||"envio_nfse",language:{code:"pt_BR"},components:[{type:"header",parameters:[{type:"document",document:{id:mediaResult.id,filename:pdfFilename}}]},{type:"body",parameters:[{type:"text",text:payment.alunos?.responsavel||"Responsável"},{type:"text",text:payment.alunos?.nome||"Aluno"},{type:"text",text:payment.competencia},{type:"text",text:signedXml.signedUrl}]}]}}),cache:"no-store"});
     const messageResult=await messageResponse.json().catch(()=>({})) as {messages?:Array<{id?:string}>;error?:{message?:string}};
     const providerMessageId=messageResult.messages?.[0]?.id;if(!messageResponse.ok||!providerMessageId)throw new Error(messageResult.error?.message||"A Meta não confirmou a mensagem.");
     const sentAt=new Date().toISOString();const updateResult=await auth.supabase.from("nfse_entregas").update({status:"enviado",provider_message_id:providerMessageId,erro_mensagem:null,enviado_em:sentAt,updated_at:sentAt}).eq("id",deliveryId).select("id").maybeSingle();
     if(updateResult.error||!updateResult.data)return json({error:"A mensagem foi aceita pela Meta, mas o histórico ainda precisa ser conferido.",sent:true},500);
-    return json({ok:true,status:"enviado",sentAt,actualRecipient:maskPhone(testRecipient),intendedRecipient,message:"NFS-e de homologação enviada ao WhatsApp interno com PDF e link privado do XML."});
+    return json({ok:true,status:"enviado",sentAt,actualRecipient:maskPhone(intendedRecipient),intendedRecipient,message:"NFS-e de homologação enviada ao WhatsApp do responsável com PDF e link privado do XML."});
   }catch(error){
     const safeError=safeDeliveryError(error);await auth.supabase.from("nfse_entregas").update({status:"erro",erro_mensagem:safeError,updated_at:new Date().toISOString()}).eq("id",deliveryId);
     return json({error:safeError},400);
