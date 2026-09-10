@@ -63,17 +63,16 @@
 .agenda-chat-manual input{height:38px;border:1px solid #cfc5ef;border-radius:9px;padding:0 12px;font-weight:800;color:#1d2b40;background:white}
 .agenda-chat-manual input:focus{outline:2px solid #7c5ad7;outline-offset:1px}
 .agenda-chat-manual small{font-size:10.5px;color:#66758a}
-.agenda-chat-guide{grid-column:1/-1;display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:flex-start;gap:10px 14px;padding:13px;border:1px solid #cfe3fa;border-radius:10px;background:#f4f9ff;color:#244466}
+.agenda-chat-guide{grid-column:1/-1;display:grid;grid-template-columns:1fr;align-items:flex-start;gap:10px 14px;padding:13px;border:1px solid #cfe3fa;border-radius:10px;background:#f4f9ff;color:#244466}
 .agenda-chat-guide strong{font-size:12px;color:#183b63}
 .agenda-chat-guide-title{grid-column:1;display:flex;align-items:center;justify-content:space-between;gap:10px}
 .agenda-chat-guide-title span{display:inline-flex;align-items:center;gap:5px;padding:5px 8px;border-radius:999px;background:#dff4eb;color:#11734d;font-size:11px;font-weight:800}
 .agenda-chat-guide span{font-size:11px;line-height:1.35;color:#55708d}
 .agenda-chat-guide textarea{grid-column:1;min-height:160px;width:100%;border:1px solid #bfd6ee;border-radius:10px;background:white;color:#1d2b40;font:inherit;font-size:12px;line-height:1.5;padding:12px;resize:vertical}
-.agenda-message-preview{grid-column:1;min-height:160px;width:100%;border:1px solid #bfd6ee;border-radius:10px;background:white;color:#1d2b40;font-size:12px;line-height:1.5;padding:12px;white-space:pre-wrap}
-.agenda-message-preview p{margin:0 0 6px}
-.agenda-message-preview p:last-child{margin-bottom:0}
+.agenda-message-preview{display:grid;gap:6px;grid-column:1;min-height:160px;width:100%;border:1px solid #bfd6ee;border-radius:10px;background:white;color:#1d2b40;font-size:12px;line-height:1.5;padding:12px;white-space:pre-wrap}
+.agenda-message-preview span{display:block}
 .agenda-message-preview a{color:#1466df;font-weight:800;text-decoration:underline;overflow-wrap:anywhere}
-.agenda-chat-guide>div{grid-row:1/4;grid-column:2;display:flex;gap:8px;align-self:center}
+.agenda-chat-guide>div{grid-column:1;display:flex;gap:8px;align-self:flex-start}
 .agenda-chat-status{grid-column:1/-1;padding:9px 11px;border-radius:9px;background:#fff7ed;border:1px solid #fed7aa;color:#9a3412;font-size:11px;font-weight:800}
 .agenda-chat-candidates{grid-column:1/-1;display:grid;gap:8px}
 .agenda-chat-candidates button{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:10px;padding:10px 12px;border:1px solid #d9e8f7;border-radius:10px;background:#fff;text-align:left;cursor:pointer}
