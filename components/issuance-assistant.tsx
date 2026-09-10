@@ -1158,6 +1158,7 @@ export function IssuanceAssistant({onNavigate}:{onNavigate:(page:AppPage)=>void}
                 <small>DESTINO DE HOMOLOGAÇÃO</small>
                 <strong>{deliveryRecipient}</strong>
                 <span>{deliveryChannel==="email"?selected.alunos?.email||"E-mail do responsável não informado":deliveryChannel==="whatsapp-manual"?selected.alunos?.whatsapp||"WhatsApp do responsável não informado":agendaEduStudentId?"Aluno vinculado à Agenda Edu":"Aluno ainda sem vínculo da Agenda Edu"}</span>
+                <button className="secondary" type="button" onClick={()=>focusAndNavigate("Alunos e Responsáveis")} disabled={deliveryBusy}><Settings size={16}/>Alterar cadastro/e-mail</button>
               </div>
 
               {deliveryChannel==="whatsapp-manual"&&<>
