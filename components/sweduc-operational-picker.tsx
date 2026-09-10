@@ -111,13 +111,13 @@ export function SweducOperationalPicker({onStudentReady}:{onStudentReady:(studen
   const pagedVisible=visible.slice((safeGridPage-1)*pageSize,safeGridPage*pageSize);
   useEffect(()=>{setGridPage(1)},[query,courseFilter,serieFilter,turmaFilter,selectedYear]);
   const hasAcademicFilter=Boolean(courseFilter||serieFilter||turmaFilter);
-  const canConsult=Boolean(selectedYear&&(query.trim().length>=2||hasAcademicFilter));
+  const canConsult=Boolean(selectedYear);
 
   async function consult(yearOverride?:number){
     const activeYear=yearOverride||selectedYear;
     if(!activeYear)return;
     const term=query.trim();
-    if(term.length<2&&!hasAcademicFilter){setMessage("Digite o nome ou selecione segmento, série ou turma para consultar.");return}
+    if(term.length<2&&!hasAcademicFilter&&students.length>0){setMessage("Listando alunos já carregados. Use os filtros ou digite o nome para refinar.");return}
     setBusy("consult");setError("");setMessage(term?`Buscando "${term}" em ${activeYear} na SWeduc…`:`Buscando alunos pelos filtros selecionados em ${activeYear}…`);
     setStudents([]);setSelected(null);setResponsibleIndex(0);setGridPage(1);
     let page=1;let total=0;
@@ -136,12 +136,12 @@ export function SweducOperationalPicker({onStudentReady}:{onStudentReady:(studen
   }
 
   useEffect(()=>{
-    if(!selectedYear||!courseFilter||!serieFilter||!turmaFilter||busy)return;
+    if(!selectedYear||!hasAcademicFilter||busy)return;
     const key=[selectedYear,courseFilter,serieFilter,turmaFilter].join("|");
     if(lastAutoConsultRef.current===key)return;
     lastAutoConsultRef.current=key;
     void consult();
-  },[selectedYear,courseFilter,serieFilter,turmaFilter,busy]);
+  },[selectedYear,courseFilter,serieFilter,turmaFilter,hasAcademicFilter,busy]);
 
   async function openResponsibleChoice(student:SweducStudent){
     setSelected(student);setBusy(`details-${student.matricula_id}`);setError("");setMessage("Carregando responsáveis da SWeduc para conferência…");setResponsibleIndex(0);
@@ -178,8 +178,8 @@ export function SweducOperationalPicker({onStudentReady}:{onStudentReady:(studen
       <div className="sweduc-filter-row">
         <label>Ano letivo<select value={selectedYear||""} disabled={!years.length} onChange={event=>{const year=Number(event.target.value);lastAutoConsultRef.current="";setSelectedYear(year);setStudents([]);setSelected(null);setResponsibleIndex(0);setQuery("");setCourseFilter("");setSerieFilter("");setTurmaFilter("");setMessage("Ano selecionado. Agora escolha os filtros e pesquise o aluno pelo nome.")}}>{years.map(year=><option key={year.year} value={year.year}>{year.year}</option>)}</select></label>
         <label>Segmento / curso<select value={courseFilter} disabled={Boolean(busy)||!selectedYear||!courseOptions.length} onChange={event=>{lastAutoConsultRef.current="";setCourseFilter(event.target.value);setSerieFilter("");setTurmaFilter("")}}><option value="">Todos</option>{courseOptions.map(option=><option key={option} value={option}>{option}</option>)}</select></label>
-        <label>Série<select value={serieFilter} disabled={Boolean(busy)||!courseFilter} onChange={event=>{lastAutoConsultRef.current="";setSerieFilter(event.target.value);setTurmaFilter("")}}><option value="">Todas</option>{serieOptions.map(option=><option key={option} value={option}>{option}</option>)}</select></label>
-        <label>Turma<select value={turmaFilter} disabled={Boolean(busy)||!serieFilter} onChange={event=>setTurmaFilter(event.target.value)}><option value="">Todas</option>{turmaOptions.map(option=><option key={option} value={option}>{option}</option>)}</select></label>
+        <label>Série<select value={serieFilter} disabled={Boolean(busy)||!selectedYear||!serieOptions.length} onChange={event=>{lastAutoConsultRef.current="";setSerieFilter(event.target.value);setTurmaFilter("")}}><option value="">Todas</option>{serieOptions.map(option=><option key={option} value={option}>{option}</option>)}</select></label>
+        <label>Turma<select value={turmaFilter} disabled={Boolean(busy)||!selectedYear||!turmaOptions.length} onChange={event=>{lastAutoConsultRef.current="";setTurmaFilter(event.target.value)}}><option value="">Todas</option>{turmaOptions.map(option=><option key={option} value={option}>{option}</option>)}</select></label>
       </div>
       <label className="sweduc-search-row sweduc-search-label">Pesquisar aluno<div className="search-input sweduc-student-name-search"><Search/><input value={query} disabled={Boolean(busy)} onChange={event=>setQuery(event.target.value.toLocaleUpperCase("pt-BR"))} onKeyDown={event=>{if(event.key==="Enter"){event.preventDefault();void consult()}}} placeholder="DIGITE O NOME OU BUSQUE A TURMA SELECIONADA"/><button type="button" aria-label="Pesquisar aluno" disabled={Boolean(busy)||!canConsult} onClick={()=>void consult()}>{busy==="consult"?<RefreshCw size={15}/>:<Search size={16}/>}</button></div></label>
     </div>
