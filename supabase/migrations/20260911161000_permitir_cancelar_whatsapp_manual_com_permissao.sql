@@ -13,12 +13,17 @@ begin
  end if;
  if not exists(
   select 1 from public.nfse_entregas e
-  where e.id=p_delivery_id and e.canal='whatsapp_manual' and e.ambiente='homologacao'
+  where e.id=p_delivery_id and e.canal='whatsapp_manual' and e.ambiente='homologacao' and e.status='aguardando_confirmacao'
  ) then
   raise exception 'Entrega protegida não encontrada.' using errcode='42501';
  end if;
  delete from private.nfse_entrega_links where entrega_id=p_delivery_id;
- return true;
+ update public.nfse_entregas
+ set status='erro',
+     erro_mensagem='Envio manual cancelado para gerar uma nova tentativa.',
+     updated_at=now()
+ where id=p_delivery_id and canal='whatsapp_manual' and ambiente='homologacao' and status='aguardando_confirmacao';
+ return found;
 end;
 $$;
 

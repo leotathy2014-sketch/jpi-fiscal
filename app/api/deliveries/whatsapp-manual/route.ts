@@ -79,6 +79,7 @@ export async function POST(request:NextRequest){
     if(action==="cancel"){
       const revoked=await auth.supabase.rpc("revoke_nfse_delivery_access",{p_delivery_id:deliveryId,p_backend_secret:backendSecret});
       if(revoked.error)return json({error:"Não foi possível cancelar esta tentativa ou ela pertence a outro usuário."},409);
+      return json({ok:true,status:"erro",sentAt:null});
     }
     const now=new Date().toISOString();
     const changes=action==="confirm"
