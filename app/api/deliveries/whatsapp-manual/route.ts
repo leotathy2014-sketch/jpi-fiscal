@@ -127,7 +127,7 @@ export async function POST(request:NextRequest){
     const accessResult=await auth.supabase.rpc("create_nfse_delivery_access",{p_delivery_id:deliveryId,p_token_hash:accessTokenHash,p_xml_base64:xmlBuffer.toString("base64"),p_chave_acesso:document.chave_acesso,p_backend_secret:backendSecret});
     if(accessResult.error)throw new Error("Não foi possível criar o link protegido da NFS-e.");
     const protectedUrl=new URL(`/nota/${accessToken}`,publicBaseUrl(request)).toString();
-    const whatsappUrl=new URL(`https://wa.me/${intendedRecipient}`);whatsappUrl.searchParams.set("text",manualMessage(payment,protectedUrl,config.whatsapp_manual_message_template));
+    const whatsappUrl=new URL("https://web.whatsapp.com/send");whatsappUrl.searchParams.set("phone",intendedRecipient);whatsappUrl.searchParams.set("text",manualMessage(payment,protectedUrl,config.whatsapp_manual_message_template));
     const openedAt=new Date().toISOString();
     const update=await auth.supabase.from("nfse_entregas").update({status:"aguardando_confirmacao",aberto_em:openedAt,updated_at:openedAt}).eq("id",deliveryId).select("id").maybeSingle();
     if(update.error||!update.data)throw new Error("O histórico do envio manual não pôde ser atualizado.");
