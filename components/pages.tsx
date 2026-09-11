@@ -73,13 +73,6 @@ export function Dashboard() {
           </button>
         }
       />
-      <div className="notice warning">
-        <ShieldCheck />
-        <div>
-          <strong>Ambiente de homologação</strong>
-          <span>A emissão fiscal real está desativada. Você pode preparar e revisar notas com segurança.</span>
-        </div>
-      </div>
       <section className="stat-grid">
         <article className="stat-card">
           <span className="stat-icon blue">
@@ -169,7 +162,7 @@ export function Dashboard() {
           </div>
           <div className="notice compact">
             <AlertCircle />
-            <span>Consulte as notas atuais antes da homologação.</span>
+            <span>Consulte as notas atuais antes da emissão.</span>
           </div>
         </article>
       </section>
@@ -341,13 +334,6 @@ export function Invoices({ role }: { role: Role }) {
           ) : undefined
         }
       />
-      <div className="notice warning">
-        <ShieldCheck />
-        <div>
-          <strong>Emissão real bloqueada até homologação</strong>
-          <span>Nenhum documento será enviado à prefeitura. Os valores abaixo podem ser revisados livremente.</span>
-        </div>
-      </div>
       <div className="toolbar">
         <div className="search-input">
           <Search />
@@ -659,7 +645,7 @@ function CompanySettings() {
         <div className="panel-title">
           <div>
             <h2>Configuração fiscal</h2>
-            <p>Tributação aplicada às próximas DPS de homologação.</p>
+            <p>Tributação aplicada às próximas DPS de produção.</p>
           </div>
         </div>
         <label>
@@ -1040,13 +1026,6 @@ function CertificateSettings() {
   const days = active ? Math.ceil((new Date(`${active.validade}T23:59:59`).getTime() - Date.now()) / 86400000) : null;
   return (
     <div className="certificate-settings">
-      <div className="notice warning">
-        <ShieldCheck />
-        <div>
-          <strong>Emissão fiscal real permanece bloqueada</strong>
-          <span>O certificado será utilizado somente depois da homologação da integração NFS-e.</span>
-        </div>
-      </div>
       {!canManage&&<div className="notice compact"><ShieldCheck/><span>Seu perfil pode consultar o certificado e a validade, mas não pode anexar, substituir, excluir ou alterar a senha protegida.</span></div>}
       <div className="company-settings">
         <form className={`panel data-form company-form ${!canManage?"settings-readonly":""}`} onSubmit={upload}>
@@ -1376,7 +1355,7 @@ function CommunicationsSettings({accessToken,onChanged,canEdit,section}:{accessT
   const agendaPreviewDisabled=loading||!canEdit||!config?.agenda_edu_credencial_configurada;
   const sectionCopy={
     email:{title:"E-mail",description:"Servidor, remetente, credencial e teste de entrega por e-mail.",Icon:Mail},
-    whatsapp:{title:"WhatsApp API",description:"Integração oficial da Meta Cloud API e dados de homologação.",Icon:MessageCircle},
+    whatsapp:{title:"WhatsApp API",description:"Integração oficial da Meta Cloud API.",Icon:MessageCircle},
     "manual-whatsapp":{title:"WhatsApps da escola",description:"Contas usadas no envio manual e mensagem padrão enviada aos responsáveis.",Icon:MessageCircle},
     agenda:{title:"Agenda Edu",description:"Credenciais da plataforma oficial e integração de mensagens com responsáveis.",Icon:CalendarDays},
   }[section];
@@ -1702,7 +1681,7 @@ function Integrations({accessToken,onNavigate}:{accessToken:string|null;onNaviga
       <div className="integration-overview-grid">
         <button type="button" className="integration-overview-card nfse-overview-card" onClick={()=>setSection("nfse")}><span className="integration-icon blue"><FileCheck2/></span><div><strong>NFS-e / SEFIN</strong><small>Servidor fiscal e situação da liberação de emissão.</small></div><div className="nfse-status-pair"><span className={`nfse-state-badge ${sefinTone}`}><i/>{sefinLabel}</span><span className={`nfse-state-badge ${productionEnabled?"available":"homologation"}`}><i/>{operationalLabel}</span></div></button>
         <button type="button" className="integration-overview-card" onClick={()=>setSection("email")}><span className="integration-icon blue"><Mail/></span><div><strong>E-mail</strong><small>Locaweb, remetente, senha e teste de entrega.</small></div><IntegrationStateBadge label={emailState.label} tone={emailState.tone}/></button>
-        <button type="button" className="integration-overview-card" onClick={()=>setSection("whatsapp")}><span className="integration-icon green"><MessageCircle/></span><div><strong>WhatsApp API</strong><small>Meta Cloud API e dados de homologação.</small></div><IntegrationStateBadge label={whatsappState.label} tone={whatsappState.tone}/></button>
+        <button type="button" className="integration-overview-card" onClick={()=>setSection("whatsapp")}><span className="integration-icon green"><MessageCircle/></span><div><strong>WhatsApp API</strong><small>Meta Cloud API e envio oficial.</small></div><IntegrationStateBadge label={whatsappState.label} tone={whatsappState.tone}/></button>
         <button type="button" className="integration-overview-card" onClick={()=>setSection("manual-whatsapp")}><span className="integration-icon green"><MessageCircle/></span><div><strong>WhatsApps da escola</strong><small>Números manuais e mensagem padrão para responsáveis.</small></div><IntegrationStateBadge label={manualWhatsappState.label} tone={manualWhatsappState.tone}/></button>
         <button type="button" className="integration-overview-card" onClick={()=>setSection("agenda")}><span className="integration-icon purple"><CalendarDays/></span><div><strong>Agenda Edu</strong><small>Plataforma oficial, credenciais e canal escolar.</small></div><IntegrationStateBadge label={agendaState.label} tone={agendaState.tone}/></button>
         <button type="button" className="integration-overview-card" onClick={()=>setSection("sweduc")}><span className="integration-icon blue"><BookOpenCheck/></span><div><strong>SWeduc</strong><small>Alunos, matrículas, responsáveis e financeiro.</small></div><IntegrationStateBadge label={sweducState.label} tone={sweducState.tone}/></button>
@@ -1713,7 +1692,7 @@ function Integrations({accessToken,onNavigate}:{accessToken:string|null;onNaviga
     {section==="nfse"&&<div className="integration-detail-panel">
       <div className="integration-detail-heading"><span className="integration-icon blue"><FileCheck2/></span><div><h2>NFS-e / SEFIN</h2><p>Ambiente fiscal, certificado A1 e situação do servidor de emissão nacional.</p></div><div className="nfse-status-pair detail"><span className={`nfse-state-badge ${sefinTone}`} title={sefinCheckedAt?`Última verificação: ${sefinCheckedAt.toLocaleTimeString("pt-BR",{hour:"2-digit",minute:"2-digit"})}`:"Verificando servidor"}><i/>{sefinLabel}</span><span className={`nfse-state-badge ${productionEnabled?"available":"homologation"}`}><i/>{operationalLabel}</span></div></div>
       {error&&<div className="error-box">{error}</div>}{message&&<div className="success-box">{message}</div>}
-      <div className="integration-nfse-summary"><div><span>Servidor SEFIN</span><strong className={sefinAvailability==="available"?"green-text":sefinAvailability==="unstable"?"red-text":""}>{sefinLabel}</strong><small>{sefinAvailability==="available"?"Servidor respondendo e apto para homologação.":sefinAvailability==="unstable"?"Não enviar notas até normalizar.":"Aguardando confirmação do servidor."}</small></div><div><span>Situação fiscal</span><strong className={productionEnabled?"green-text":"amber-text"}>{productionEnabled?"Pronto e enviando":"Homologação"}</strong><small>{productionEnabled?"Emissão real oficialmente habilitada.":"Emissão real continua bloqueada até a liberação final."}</small></div><div><span>Segurança</span><strong>Certificado A1 + TLS</strong><small>Autenticação mútua protegida no servidor.</small></div></div>
+      <div className="integration-nfse-summary"><div><span>Servidor SEFIN</span><strong className={sefinAvailability==="available"?"green-text":sefinAvailability==="unstable"?"red-text":""}>{sefinLabel}</strong><small>{sefinAvailability==="available"?"Servidor respondendo e apto para emissão.":sefinAvailability==="unstable"?"Não enviar notas até normalizar.":"Aguardando confirmação do servidor."}</small></div><div><span>Situação fiscal</span><strong className={productionEnabled?"green-text":"amber-text"}>{productionEnabled?"Pronto e enviando":"Homologação"}</strong><small>{productionEnabled?"Emissão real oficialmente habilitada.":"Aguardando liberação final da produção."}</small></div><div><span>Segurança</span><strong>Certificado A1 + TLS</strong><small>Autenticação mútua protegida no servidor.</small></div></div>
       {canTestFiscal?<form className="data-form integration-test-form" onSubmit={testHomologation}>
         <div className="notice compact warning"><ShieldCheck/><span>O teste usa o certificado A1 apenas para autenticar a conexão. Nenhuma DPS ou NFS-e será enviada.</span></div>
         {(busy||elapsed>0)&&<div className="connection-timer"><Clock3/><span>{busy?(connectionStage||"Iniciando conexão…"):"Tempo da tentativa"}</span><strong>{elapsedLabel}</strong></div>}
