@@ -30,7 +30,10 @@ async function authorize(request:NextRequest){
 
 async function credentials(supabase:SupabaseClient){
   const backendSecret=process.env.JPI_BACKEND_SECRET;if(!backendSecret)throw new Error("O cofre seguro não está configurado na Vercel. Configure a variável JPI_BACKEND_SECRET para salvar e usar a conexão definitiva da SWeduc.");
-  const [secretResult,configResult]=await Promise.all([supabase.rpc("get_sweduc_secret",{p_backend_secret:backendSecret}),supabase.from("sweduc_config").select("host").eq("id",true).single()]);
+  const serviceClient=serviceSupabaseClient();
+  const reader=serviceClient||supabase;
+  const secretCall=serviceClient?serviceClient.rpc("get_sweduc_secret_service",{p_backend_secret:backendSecret}):supabase.rpc("get_sweduc_secret",{p_backend_secret:backendSecret});
+  const [secretResult,configResult]=await Promise.all([secretCall,reader.from("sweduc_config").select("host").eq("id",true).single()]);
   if(secretResult.error||!secretResult.data)throw new Error("Cadastre primeiro as credenciais da SWeduc.");
   const parsed=parseSweducCredentials(String(secretResult.data));
   return {...parsed,host:normalizeSweducHost(String(configResult.data?.host||parsed.host))};
@@ -259,7 +262,8 @@ function financialResponsibleCandidates(responsaveis:Array<Record<string,unknown
 export async function GET(request:NextRequest){
   const auth=await authorize(request);if(!auth.ok)return auth.response;
   if(!await hasServerPermission(auth.supabase,"settings.integrations.view")&&!await hasServerPermission(auth.supabase,"settings.integrations.edit")&&!await hasServerPermission(auth.supabase,"students.view")&&!await hasServerPermission(auth.supabase,"students.create")&&!await hasServerPermission(auth.supabase,"students.edit")&&!await hasServerPermission(auth.supabase,"payments.create")&&!await hasServerPermission(auth.supabase,"nfse.prepare"))return json({error:"Seu usuário não possui permissão para consultar esta integração."},403);
-  const {data:config,error}=await auth.supabase.from("sweduc_config").select("host,credencial_configurada,ultimo_status,testada_em,sincronizada_em,ultimo_erro,total_sincronizado,anos_sincronizacao,unidades_sincronizacao").eq("id",true).maybeSingle();
+  const reader=serviceSupabaseClient()||auth.supabase;
+  const {data:config,error}=await reader.from("sweduc_config").select("host,credencial_configurada,ultimo_status,testada_em,sincronizada_em,ultimo_erro,total_sincronizado,anos_sincronizacao,unidades_sincronizacao").eq("id",true).maybeSingle();
   if(error||!config)return json({error:"A estrutura da integração SWeduc ainda não foi aplicada ao banco."},503);
   let authMethod:SweducTokenGrant="client_credentials";let usuarioConfigurado=false;
   if(config.credencial_configurada){
