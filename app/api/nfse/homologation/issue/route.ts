@@ -41,6 +41,13 @@ type DpsSource = {
     email: string | null;
     whatsapp: string | null;
     segmento: string;
+    cep: string | null;
+    logradouro: string | null;
+    numero: string | null;
+    complemento: string | null;
+    bairro: string | null;
+    cidade: string | null;
+    uf: string | null;
   } | null;
 };
 type CompanySource = {
@@ -147,6 +154,19 @@ function fiscalEnvironmentSlug(environment: FiscalEnvironment) {
   return environment === "producao" ? "producao" : "homologacao";
 }
 
+function takerAddressXml(student: DpsSource["alunos"]) {
+  if (!student) return "";
+  const cep = digits(student.cep);
+  const street = String(student.logradouro || "").trim();
+  const number = String(student.numero || "").trim();
+  const district = String(student.bairro || "").trim();
+  const city = String(student.cidade || "").trim().toLocaleUpperCase("pt-BR");
+  const state = String(student.uf || "").trim().toLocaleUpperCase("pt-BR");
+  if (cep.length !== 8 || !street || !number || !district || state !== "RJ" || !city.includes("RIO DE JANEIRO")) return "";
+  const complement = String(student.complemento || "").trim();
+  return `<end><endNac><cMun>3304557</cMun><CEP>${cep}</CEP></endNac><xLgr>${escapeXml(street)}</xLgr><nro>${escapeXml(number)}</nro>${complement ? `<xCpl>${escapeXml(complement)}</xCpl>` : ""}<xBairro>${escapeXml(district)}</xBairro></end>`;
+}
+
 function buildRestrictedDps(payment: DpsSource, company: CompanySource, substitution?: SubstitutionInput, environment: FiscalEnvironment = "homologacao") {
   const municipality = "3304557";
   const environmentType = environment === "producao" ? "1" : "2";
@@ -181,6 +201,7 @@ function buildRestrictedDps(payment: DpsSource, company: CompanySource, substitu
   const id = `DPS${municipality}${providerRegistrationType}${providerCnpj}${series.padStart(5, "0")}${number.padStart(15, "0")}`;
   const document = takerTaxId.length === 11 ? `<CPF>${takerTaxId}</CPF>` : `<CNPJ>${takerTaxId}</CNPJ>`;
   const phone = digits(payment.alunos?.whatsapp);
+  const address = takerAddressXml(payment.alunos);
   const substitutionXml = substitution
     ? `<subst><chSubstda>${substitution.originalKey}</chSubstda><cMotivo>${substitution.reasonCode}</cMotivo><xMotivo>${escapeXml(substitution.reason)}</xMotivo></subst>`
     : "";
@@ -190,7 +211,7 @@ function buildRestrictedDps(payment: DpsSource, company: CompanySource, substitu
     <tpAmb>${environmentType}</tpAmb><dhEmi>${issueDateTime()}</dhEmi><verAplic>JPI-FISCAL-1.01</verAplic>
     <serie>${series}</serie><nDPS>${number}</nDPS><dCompet>${competenceDate(payment.competencia)}</dCompet><tpEmit>1</tpEmit><cLocEmi>${municipality}</cLocEmi>${substitutionXml}
     <prest><CNPJ>${providerCnpj}</CNPJ><regTrib><opSimpNac>1</opSimpNac><regEspTrib>0</regEspTrib></regTrib></prest>
-    <toma>${document}<xNome>${escapeXml(takerName)}</xNome>${phone.length >= 6 ? `<fone>${phone}</fone>` : ""}${payment.alunos?.email ? `<email>${escapeXml(payment.alunos.email.trim())}</email>` : ""}</toma>
+    <toma>${document}<xNome>${escapeXml(takerName)}</xNome>${address}${phone.length >= 6 ? `<fone>${phone}</fone>` : ""}${payment.alunos?.email ? `<email>${escapeXml(payment.alunos.email.trim())}</email>` : ""}</toma>
     <serv><locPrest><cLocPrestacao>${municipality}</cLocPrestacao></locPrest><cServ><cTribNac>080101</cTribNac><cTribMun>${municipalTaxCode}</cTribMun><xDescServ>${escapeXml(description)}</xDescServ><cNBS>${nbs}</cNBS></cServ></serv>
     <valores><vServPrest><vServ>${amount.toFixed(2)}</vServ></vServPrest><trib><tribMun><tribISSQN>1</tribISSQN><tpRetISSQN>1</tpRetISSQN></tribMun><tribFed><piscofins><CST>${company.pis_cofins_cst}</CST><vBCPisCofins>${amount.toFixed(2)}</vBCPisCofins><pAliqPis>${pisRate.toFixed(2)}</pAliqPis><pAliqCofins>${cofinsRate.toFixed(2)}</pAliqCofins><vPis>${federalTaxValue(amount, pisRate)}</vPis><vCofins>${federalTaxValue(amount, cofinsRate)}</vCofins><tpRetPisCofins>${withholdingType}</tpRetPisCofins></piscofins></tribFed><totTrib><vTotTrib><vTotTribFed>${amount.toFixed(2)}</vTotTribFed><vTotTribEst>0.00</vTotTribEst><vTotTribMun>0.00</vTotTribMun></vTotTrib></totTrib></trib></valores>
     <IBSCBS><finNFSe>0</finNFSe><indFinal>1</indFinal><cIndOp>030101</cIndOp><indDest>0</indDest><valores><trib><gIBSCBS><CST>200</CST><cClassTrib>200028</cClassTrib></gIBSCBS></trib></valores></IBSCBS>
@@ -465,7 +486,7 @@ export async function POST(request: NextRequest) {
 
   const { data: payment, error: paymentError } = await supabase
     .from("mensalidades")
-    .select("id,competencia,valor_nfse,descricao_servico,status_nfse,dps_xml_path,dps_xml_id,chave_nfse_homologacao,nfse_homologacao_xml_path,homologacao_emitida_em,alunos(responsavel,cpf_cnpj,email,whatsapp,segmento)")
+    .select("id,competencia,valor_nfse,descricao_servico,status_nfse,dps_xml_path,dps_xml_id,chave_nfse_homologacao,nfse_homologacao_xml_path,homologacao_emitida_em,alunos(responsavel,cpf_cnpj,email,whatsapp,segmento,cep,logradouro,numero,complemento,bairro,cidade,uf)")
     .eq("id", monthlyId)
     .maybeSingle();
   if (paymentError || !payment) return json({ error: "Mensalidade não encontrada ou sem permissão de acesso." }, 404);
