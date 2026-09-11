@@ -1174,7 +1174,7 @@ export function IssuanceAssistant({onNavigate}:{onNavigate:(page:AppPage)=>void}
               </>}
 
               {deliveryChannel==="agenda-edu"&&!agendaEduInfo?.ready&&<div className="assistant-warning-box"><CircleAlert/><div><strong>Aguardando Agenda Edu</strong><span>{agendaEduInfo?.message||"A integração ainda depende das informações que a Agenda Edu precisa liberar."}</span></div></div>}
-              {deliveryChannel==="agenda-edu"&&agendaEduInfo?.ready&&agendaEduStudentId&&<div className="assistant-agenda-ready"><Check/><div><strong>Agenda Edu pronta</strong><span>O sistema vai gerar uma mensagem com link seguro da nota para copiar e colar no canal. Não precisa anexar PDF nem XML.</span></div></div>}
+              {deliveryChannel==="agenda-edu"&&agendaEduInfo?.ready&&agendaEduStudentId&&<div className="assistant-agenda-ready"><Check/><div><strong>Agenda Edu pronta</strong><span>O sistema vai gerar uma mensagem com link seguro da nota para copiar e colar no canal. O link abre PDF e XML.</span></div></div>}
               {deliveryChannel==="agenda-edu"&&agendaEduInfo?.ready&&!agendaEduStudentId&&<div className="assistant-warning-box"><CircleAlert/><div><strong>Aluno sem vínculo Agenda Edu</strong><span>Informe o ID Agenda Edu no cadastro do aluno para liberar o envio por este canal.</span><button className="secondary" type="button" onClick={()=>focusAndNavigate("Alunos e Responsáveis")}>Abrir cadastro do aluno</button></div></div>}
 
               {manualPending&&deliveryChannel==="whatsapp-manual"&&<div className="assistant-manual-confirm">
@@ -1190,7 +1190,7 @@ export function IssuanceAssistant({onNavigate}:{onNavigate:(page:AppPage)=>void}
               {!manualPending&&<div className="assistant-delivery-send-row">
                 <div><small>Canal selecionado</small><strong>{deliveryChannel==="email"?"E-mail":deliveryChannel==="whatsapp-manual"?"WhatsApp manual":"Agenda Edu"}</strong><span>{currentDeliveryReady?"Pronto para enviar":"Ainda não está pronto para este envio"}</span></div>
                 <button className="primary" type="button" onClick={()=>void sendCurrentDocument()} disabled={!currentDeliveryReady||deliveryBusy}>
-                  <Send size={17}/>{deliveryBusy?"Enviando…":deliveryChannel==="whatsapp-manual"?"Preparar WhatsApp":deliveryChannel==="agenda-edu"?"Gerar mensagem Agenda Edu":"Enviar por e-mail"}
+                  <Send size={17}/>{deliveryBusy?"Enviando…":deliveryChannel==="whatsapp-manual"?"Preparar WhatsApp":deliveryChannel==="agenda-edu"?"Gerar link e mensagem":"Enviar por e-mail"}
                 </button>
               </div>}
             </div>
