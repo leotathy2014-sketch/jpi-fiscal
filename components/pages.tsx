@@ -45,7 +45,9 @@ function Heading({ title, desc, action }: { title: string; desc: string; action?
   );
 }
 function Status({ children }: { children: string }) {
-  return <span className={`status ${children.toLowerCase()}`}>{children}</span>;
+  const normalized = children.toLocaleLowerCase("pt-BR");
+  const tone = normalized.includes("cancelad") ? "cancelada" : normalized;
+  return <span className={`status ${tone}`}>{children}</span>;
 }
 type IntegrationStateTone="connected"|"pending"|"disconnected"|"neutral";
 function integrationState(rawStatus:string|null|undefined,configured=false){
