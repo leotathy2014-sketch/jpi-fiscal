@@ -634,7 +634,7 @@ export function IssuanceAssistant({onNavigate}:{onNavigate:(page:AppPage)=>void}
           const data=await response.json().catch(()=>({})) as {ok?:boolean;error?:string;deliveryId?:number;whatsappUrl?:string;actualRecipient?:string;sender?:ManualSender};
           if(!response.ok||!data.ok||!data.deliveryId||!data.whatsappUrl)throw new Error(data.error||"Não foi possível preparar o WhatsApp.");
           const whatsappUrl=new URL(data.whatsappUrl);
-          if(whatsappUrl.protocol!=="https:"||whatsappUrl.hostname!=="wa.me")throw new Error("O endereço seguro do WhatsApp não pôde ser validado.");
+          if(whatsappUrl.protocol!=="https:"||!["wa.me","web.whatsapp.com"].includes(whatsappUrl.hostname))throw new Error("O endereço seguro do WhatsApp não pôde ser validado.");
           if(popup)popup.location.href=whatsappUrl.toString();else window.open(whatsappUrl.toString(),"_blank","noopener,noreferrer");
           setManualPending({deliveryId:data.deliveryId,whatsappUrl:whatsappUrl.toString(),actualRecipient:data.actualRecipient||"WhatsApp do responsável",sender:data.sender||whatsappInfo.senders.find(sender=>sender.id===manualSenderId)||null});
           setMessage("WhatsApp aberto. Depois de enviar a mensagem, confirme o envio no Assistente.");

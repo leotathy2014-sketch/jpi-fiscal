@@ -95,7 +95,7 @@ export function DeliveryCenter({role,accessToken,onNavigate}:{role:Role;accessTo
       const response=await authenticatedFetch("/api/deliveries/whatsapp-manual",{method:"POST",headers:{Authorization:`Bearer ${accessToken}`,"Content-Type":"application/json"},body:JSON.stringify({action:"prepare",monthlyId:row.payment.id,documentId:row.document.id,senderId:manualSenderId,requestId:crypto.randomUUID()}),cache:"no-store"});
       const data=await response.json().catch(()=>({})) as {ok?:boolean;error?:string;deliveryId?:number;whatsappUrl?:string;actualRecipient?:string;sender?:ManualSender};
       if(!response.ok||!data.ok||!data.deliveryId||!data.whatsappUrl)throw new Error(data.error||"Não foi possível preparar o WhatsApp.");
-      const whatsappUrl=new URL(data.whatsappUrl);if(whatsappUrl.protocol!=="https:"||whatsappUrl.hostname!=="wa.me")throw new Error("O endereço seguro do WhatsApp não pôde ser validado.");
+      const whatsappUrl=new URL(data.whatsappUrl);if(whatsappUrl.protocol!=="https:"||!["wa.me","web.whatsapp.com"].includes(whatsappUrl.hostname))throw new Error("O endereço seguro do WhatsApp não pôde ser validado.");
       if(popup)popup.location.href=whatsappUrl.toString();else window.open(whatsappUrl.toString(),"_blank","noopener,noreferrer");
       setManualPending({row,deliveryId:data.deliveryId,whatsappUrl:whatsappUrl.toString(),actualRecipient:data.actualRecipient||"WhatsApp do responsável",restored:false,sender:data.sender||whatsappInfo?.senders.find(sender=>sender.id===manualSenderId)||null});
       setMessage(popup?"WhatsApp aberto. Depois de enviar, confirme o envio no JPI Fiscal.":"O navegador bloqueou a nova aba. Use o botão Abrir WhatsApp na confirmação abaixo.");
