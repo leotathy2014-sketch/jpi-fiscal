@@ -129,11 +129,20 @@ const dpsDraftVersionPath=(paymentId:number,draftId:string)=>{const timestamp=ne
 
 function Modal({title,onClose,children}:{title:string;onClose:()=>void;children:React.ReactNode}){return <div className="modal-backdrop"><div className="modal-card"><div className="modal-head"><h2>{title}</h2><button className="icon-button" onClick={onClose}><X/></button></div>{children}</div></div>}
 
+function isCanceledNfse(payment:AssistantPayment){
+  return normalize(payment.status_nfse||"").includes("cancelada");
+}
+
+function hasActiveNfse(payment:AssistantPayment){
+  return Boolean(payment.chave_nfse_homologacao)&&!isCanceledNfse(payment);
+}
+
 function statusOrder(payment:AssistantPayment){
   const status=normalize(payment.status_nfse||"");
+  const activeNfse=hasActiveNfse(payment);
   const validationDone=Boolean(
     payment.dps_xml_path||
-    payment.chave_nfse_homologacao||
+    activeNfse||
     status.includes("homologacao validada")||
     status.includes("dps revisada")||
     status.includes("previa dps aprovada")||
@@ -141,20 +150,20 @@ function statusOrder(payment:AssistantPayment){
   );
   const dpsDone=Boolean(
     payment.dps_xml_path||
-    payment.chave_nfse_homologacao||
+    activeNfse||
     status.includes("dps revisada")||
     status.includes("previa dps aprovada")||
     status.includes("xml dps")
   );
   const previewDone=Boolean(
     payment.dps_xml_path||
-    payment.chave_nfse_homologacao||
+    activeNfse||
     status.includes("previa dps aprovada")||
     status.includes("xml dps")
   );
   const xmlDone=Boolean(payment.dps_xml_path&&payment.dps_xml_id);
-  const sefinDone=Boolean(payment.chave_nfse_homologacao);
-  const finished=Boolean(payment.chave_nfse_homologacao&&payment.homologacao_emitida_em);
+  const sefinDone=activeNfse;
+  const finished=Boolean(activeNfse&&payment.homologacao_emitida_em);
   return {validationDone,dpsDone,previewDone,xmlDone,sefinDone,finished};
 }
 
@@ -336,6 +345,8 @@ export function IssuanceAssistant({onNavigate}:{onNavigate:(page:AppPage)=>void}
   const delivery=useMemo(()=>selected?deliveries.find(item=>item.mensalidade_id===selected.id&&item.status==="enviado")||null:null,[deliveries,selected]);
   const missing=selected?missingStudentFields(selected):[];
   const progress=selected?statusOrder(selected):null;
+  const selectedCanceled=selected?isCanceledNfse(selected):false;
+  const selectedActiveNfse=selected?hasActiveNfse(selected):false;
 
   const steps=useMemo<AssistantStep[]>(()=>{
     const labels=["Aluno","Mensalidade","Validação","DPS","Prévia","XML","SEFIN","Conclusão","Enviar"];
@@ -402,9 +413,9 @@ export function IssuanceAssistant({onNavigate}:{onNavigate:(page:AppPage)=>void}
   },[newEmissionOpen,effectiveCurrent,fiscalContext,canPrepare]);
 
   useEffect(()=>{
-    if(newEmissionOpen||effectiveCurrent<7||!selected?.chave_nfse_homologacao)return;
+    if(newEmissionOpen||effectiveCurrent<7||!selectedActiveNfse)return;
     void loadDeliveryContext().catch(cause=>setError(cause instanceof Error?cause.message:"Não foi possível preparar a conclusão da nota."));
-  },[newEmissionOpen,effectiveCurrent,selected?.id,selected?.chave_nfse_homologacao,canSendWhatsapp,canSendAgenda]);
+  },[newEmissionOpen,effectiveCurrent,selected?.id,selectedActiveNfse,canSendWhatsapp,canSendAgenda]);
 
 
   async function createPaymentFromStudent(){
@@ -989,7 +1000,8 @@ export function IssuanceAssistant({onNavigate}:{onNavigate:(page:AppPage)=>void}
         {loading?<div className="assistant-loading">Carregando notas…</div>:filtered.length===0?<div className="assistant-empty">Nenhuma mensalidade encontrada.</div>:<><div className="assistant-list-hint">{Math.min(filtered.length,40)} de {filtered.length} nota(s)</div><div className="assistant-payment-list">
           {filtered.slice(0,40).map(payment=>{
             const order=statusOrder(payment);
-            const issued=Boolean(payment.chave_nfse_homologacao);
+            const canceled=isCanceledNfse(payment);
+            const issued=hasActiveNfse(payment);
             return <button key={payment.id} className={selectedId===payment.id?"assistant-payment selected":"assistant-payment"} onClick={()=>setSelectedId(payment.id)}>
               <span className="assistant-payment-icon"><GraduationCap size={17}/></span>
               <span className="assistant-payment-copy">
@@ -998,7 +1010,7 @@ export function IssuanceAssistant({onNavigate}:{onNavigate:(page:AppPage)=>void}
                 <span className="assistant-payment-meta">
                   <b>{payment.competencia}</b>
                   <b>{money(payment.valor_nfse)}</b>
-                  <em className={issued?"done":order.xmlDone?"xml":"pending"}>{issued?"Emitida":order.xmlDone?"XML pronto":payment.status_nfse}</em>
+                  <em className={canceled?"canceled":issued?"done":order.xmlDone?"xml":"pending"}>{canceled?"Cancelada":issued?"Emitida":order.xmlDone?"XML pronto":payment.status_nfse}</em>
                 </span>
               </span>
             </button>
@@ -1102,12 +1114,17 @@ export function IssuanceAssistant({onNavigate}:{onNavigate:(page:AppPage)=>void}
             </div>
           </section>}
 
-          {effectiveCurrent===7&&selected&&selected.chave_nfse_homologacao&&<section className="assistant-sefin-result">
+          {selectedCanceled&&<section className="assistant-warning-box">
+            <CircleAlert/>
+            <div><strong>NFS-e cancelada</strong><span>Esta chave fica guardada apenas no histórico. Para enviar novamente ao responsável, emita uma nova NFS-e para esta mensalidade.</span></div>
+          </section>}
+
+          {effectiveCurrent===7&&selected&&selectedActiveNfse&&<section className="assistant-sefin-result">
             <Check size={22}/>
             <div><span>HOMOLOGAÇÃO CONCLUÍDA</span><h3>NFS-e de teste confirmada pela SEFIN</h3><p>Chave: <strong>{selected.chave_nfse_homologacao}</strong></p>{selected.homologacao_emitida_em&&<small>Processada em {new Date(selected.homologacao_emitida_em).toLocaleString("pt-BR")}</small>}</div>
           </section>}
 
-          {effectiveCurrent>=7&&selected&&selected.chave_nfse_homologacao&&<section className="assistant-finalization">
+          {effectiveCurrent>=7&&selected&&selectedActiveNfse&&<section className="assistant-finalization">
             <div className="assistant-workspace-head">
               <div><span>CONCLUSÃO</span><h3>Documento fiscal de homologação</h3><p>A nota foi confirmada pela SEFIN. Confira o documento antes do envio.</p></div>
               <span className="assistant-safe-tag"><Check size={15}/>Concluída</span>

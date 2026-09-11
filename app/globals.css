@@ -444,6 +444,7 @@
 .assistant-payment em.pending{background:#fff3df;color:#a46109}
 .assistant-payment em.xml{background:#eef4ff;color:#385f9e}
 .assistant-payment em.done{background:#e8f7f1;color:#157653}
+.assistant-payment em.canceled{background:#fff1f0;color:#b42318}
 .assistant-loading,.assistant-empty{padding:28px 12px;text-align:center;color:var(--muted);font-size:10px}
 .assistant-empty.large{min-height:360px;display:grid;place-items:center;align-content:center;gap:8px}
 .assistant-empty.large svg{width:38px;height:38px;color:var(--blue)}

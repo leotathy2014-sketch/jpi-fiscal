@@ -72,6 +72,7 @@ type ActiveHomologationDocument = {
   chave_acesso: string;
   estado: string;
 };
+type HomologationDocumentSummary = ActiveHomologationDocument | null;
 type Asn1Node = { type: number; value: string | Asn1Node[] };
 type HomologationStage =
   | "validar_dados_fiscais"
@@ -512,21 +513,35 @@ export async function POST(request: NextRequest) {
     .eq("id", monthlyId)
     .maybeSingle();
   if (paymentError || !payment) return json({ error: "Mensalidade não encontrada ou sem permissão de acesso." }, 404);
-  if (operation === "issue" && payment.chave_nfse_homologacao) {
-    return json({ ok: true, alreadyIssued: true, environment: "Produção restrita", key: payment.chave_nfse_homologacao, issuedAt: payment.homologacao_emitida_em });
-  }
   if (operation === "issue" && (!payment.dps_xml_path || !payment.dps_xml_id)) return json({ error: "Gere e guarde primeiro a prévia XML da DPS." }, 400);
   if (operation === "substitute" && !payment.chave_nfse_homologacao) return json({ error: "A nota original não foi encontrada para substituição." }, 400);
 
   let activeDocument: ActiveHomologationDocument | null = null;
+  let latestDocument: HomologationDocumentSummary = null;
+  const { data: active } = await supabase
+    .from("nfse_documentos_homologacao")
+    .select("id,versao,chave_acesso,estado")
+    .eq("mensalidade_id", payment.id)
+    .eq("estado", "ativa")
+    .maybeSingle();
+  activeDocument = active as ActiveHomologationDocument | null;
+  const { data: latest } = await supabase
+    .from("nfse_documentos_homologacao")
+    .select("id,versao,chave_acesso,estado")
+    .eq("mensalidade_id", payment.id)
+    .order("versao", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  latestDocument = latest as HomologationDocumentSummary;
+  const paymentStatusIsCanceled = String(payment.status_nfse || "").toLowerCase().includes("cancelada");
+
+  if (operation === "issue" && payment.chave_nfse_homologacao && activeDocument) {
+    return json({ ok: true, alreadyIssued: true, environment: "Produção restrita", key: payment.chave_nfse_homologacao, issuedAt: payment.homologacao_emitida_em });
+  }
+  if (operation === "issue" && payment.chave_nfse_homologacao && !paymentStatusIsCanceled && !activeDocument) {
+    return json({ error: "A nota já está emitida ou precisa ser sincronizada antes de uma nova emissão." }, 409);
+  }
   if (operation === "substitute") {
-    const { data: active } = await supabase
-      .from("nfse_documentos_homologacao")
-      .select("id,versao,chave_acesso,estado")
-      .eq("mensalidade_id", payment.id)
-      .eq("estado", "ativa")
-      .maybeSingle();
-    activeDocument = active as ActiveHomologationDocument | null;
     if (!activeDocument || activeDocument.chave_acesso !== payment.chave_nfse_homologacao) {
       return json({ error: "A nota já está cancelada, substituída ou sendo processada." }, 409);
     }
@@ -584,7 +599,7 @@ export async function POST(request: NextRequest) {
     const sourcePayment = operation === "substitute"
       ? { ...payment, competencia: correctedCompetence, valor_nfse: correctedAmount, descricao_servico: correctedDescription }
       : payment;
-    const nextVersion = operation === "substitute" && activeDocument ? activeDocument.versao + 1 : 1;
+    const nextVersion = operation === "substitute" && activeDocument ? activeDocument.versao + 1 : (latestDocument?.versao || 0) + 1;
     const substitution = operation === "substitute" && activeDocument ? {
       originalKey: activeDocument.chave_acesso,
       reasonCode: substitutionReasonCode as SubstitutionInput["reasonCode"],
@@ -691,7 +706,7 @@ export async function POST(request: NextRequest) {
     } else {
       const { error: documentError } = await supabase.from("nfse_documentos_homologacao").insert({
         mensalidade_id: payment.id,
-        versao: 1,
+        versao: nextVersion,
         chave_acesso: sefin.chaveAcesso,
         dps_xml_id: draft.id,
         dps_xml_path: unsignedPath,
