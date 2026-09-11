@@ -1,4 +1,5 @@
 import { DOMParser } from "@xmldom/xmldom";
+import QRCode from "qrcode";
 
 const PAGE_WIDTH=595.28;
 const PAGE_HEIGHT=841.89;
@@ -10,15 +11,23 @@ type DanfseData={
   number:string;
   competence:string;
   issuedAt:string;
+  environment:string;
   dpsNumber:string;
   dpsSeries:string;
   providerName:string;
   providerTaxId:string;
   providerAddress:string;
+  providerPhone:string;
+  providerEmail:string;
+  providerCity:string;
+  providerCep:string;
   takerName:string;
   takerTaxId:string;
   takerAddress:string;
+  takerPhone:string;
   takerEmail:string;
+  takerCity:string;
+  takerCep:string;
   serviceCode:string;
   nbs:string;
   description:string;
@@ -100,15 +109,23 @@ export function parseDanfseXml(xml:string,expectedKey:string):DanfseData{
     number:present(text(info,["nNFSe"])),
     competence:formatDateOnly(text(info,["dCompet"])),
     issuedAt:formatDate(text(info,["dhEmi"])),
+    environment:text(info,["tpAmb"])==="1"?"1":"2",
     dpsNumber:present(text(dps,["nDPS"])),
     dpsSeries:present(text(dps,["serie"])),
     providerName:present(text(provider,["xNome"])),
     providerTaxId:formatTaxId(text(provider,["CNPJ","CPF","NIF"])),
     providerAddress:present(address(provider)),
+    providerPhone:present(text(provider,["fone","telefone"]),"-"),
+    providerEmail:present(text(provider,["email"]),"-"),
+    providerCity:present(text(provider,["xMun","xLoc","cLocEmi"]),"Rio de Janeiro / RJ"),
+    providerCep:present(text(provider,["CEP"]),"-"),
     takerName:present(text(taker,["xNome"])),
     takerTaxId:formatTaxId(text(taker,["CNPJ","CPF","NIF"])),
     takerAddress:present(address(taker)),
+    takerPhone:present(text(taker,["fone","telefone"]),"-"),
     takerEmail:present(text(taker,["email"])),
+    takerCity:present(text(taker,["xMun","xLoc"]),"-"),
+    takerCep:present(text(taker,["CEP"]),"-"),
     serviceCode:present(text(service,["cTribNac","cTribMun"])),
     nbs:present(text(service,["cNBS"])),
     description:present(text(service,["xDescServ"])),
@@ -152,6 +169,7 @@ function wrap(value:string,max:number,maxLines=3){
 
 function createPdf(data:DanfseData){
   const commands:string[]=[];
+  const consultationUrl=`https://www.nfse.gov.br/ConsultaPublica/?tpc=1&chave=${data.key}`;
   const rectangle=(x:number,top:number,width:number,height:number,fill?:number)=>{
     const y=PAGE_HEIGHT-top-height;
     if(fill!==undefined)commands.push(`${fill} g ${x} ${y} ${width} ${height} re f 0 g`);
@@ -169,46 +187,91 @@ function createPdf(data:DanfseData){
   const sectionTitle=(title:string,top:number)=>{
     rectangle(MARGIN,top,PAGE_WIDTH-MARGIN*2,16,0.95);write(title.toLocaleUpperCase("pt-BR"),MARGIN+5,top+4,{bold:true,size:7});
   };
+  const drawQr=(value:string,x:number,top:number,size:number)=>{
+    const qr=QRCode.create(value,{errorCorrectionLevel:"M"});
+    const count=qr.modules.size;
+    const moduleSize=size/count;
+    const y0=PAGE_HEIGHT-top-size;
+    commands.push(`1 g ${x} ${y0} ${size} ${size} re f 0 g`);
+    for(let row=0;row<count;row+=1){
+      for(let col=0;col<count;col+=1){
+        if(qr.modules.data[row*count+col]){
+          const px=x+col*moduleSize;
+          const py=y0+size-(row+1)*moduleSize;
+          commands.push(`${px.toFixed(2)} ${py.toFixed(2)} ${moduleSize.toFixed(2)} ${moduleSize.toFixed(2)} re f`);
+        }
+      }
+    }
+  };
 
   rectangle(MARGIN,MARGIN,PAGE_WIDTH-MARGIN*2,PAGE_HEIGHT-MARGIN*2);
-  rectangle(MARGIN,MARGIN,PAGE_WIDTH-MARGIN*2,62,0.95);
-  write("NFS-e",MARGIN+12,MARGIN+13,{bold:true,size:18});
-  write("DANFSe v2.0",205,MARGIN+10,{bold:true,size:10});
-  write("Documento Auxiliar da NFS-e",174,MARGIN+25,{bold:true,size:9});
-  write("NFS-e SEM VALIDADE JURÍDICA",165,MARGIN+41,{bold:true,size:10,color:[0.85,0,0]});
-  write("Município: RIO DE JANEIRO / RJ",421,MARGIN+12,{size:7});
-  write("Ambiente gerador: JPI Fiscal",421,MARGIN+25,{size:6});
-  write("Ambiente: Homologação",421,MARGIN+36,{size:6});
+  rectangle(MARGIN,MARGIN,PAGE_WIDTH-MARGIN*2,62,0.94);
+  write("NFS",MARGIN+10,MARGIN+9,{bold:true,size:23,color:[0.1,0.55,0.31]});
+  write("e",MARGIN+55,MARGIN+18,{bold:true,size:17,color:[0.08,0.32,0.75]});
+  write("Nota Fiscal de",MARGIN+76,MARGIN+15,{size:7,color:[0.38,0.43,0.52]});
+  write("Servico eletronica",MARGIN+76,MARGIN+25,{size:7,color:[0.38,0.43,0.52]});
+  write("DANFSe v2.0",245,MARGIN+10,{bold:true,size:10});
+  write("Documento Auxiliar da NFS-e",210,MARGIN+25,{bold:true,size:9});
+  write("Municipio: Rio de Janeiro - RJ",430,MARGIN+9,{size:7});
+  write(`Ambiente Gerador: ${data.environment}`,430,MARGIN+20,{size:6});
+  write(`Tipo de Ambiente: ${data.environment}`,430,MARGIN+30,{size:6});
 
   let top=80;
-  sectionTitle("Identificação da NFS-e",top);top+=18;
-  field("Chave de acesso",data.key,MARGIN+5,top,320);
-  field("Número da NFS-e",data.number,390,top,90);
-  field("Competência",data.competence,490,top,85);
-  top+=31;
-  field("Data e hora da emissão",data.issuedAt,MARGIN+5,top,160);
-  field("DPS / Série",`${data.dpsNumber} / ${data.dpsSeries}`,185,top,115);
-  field("Situação", "ATIVA EM HOMOLOGAÇÃO",320,top,150);
-  field("Finalidade","NFS-e regular",490,top,85);
-  top+=32;
+  field("CHAVE DE ACESSO DA NFS-e",data.key,MARGIN+5,top,295,2);
+  field("NUMERO DA NFS-e",data.number,MARGIN+5,top+28,90);
+  field("COMPETENCIA DA NFS-e",data.competence,155,top+28,130);
+  field("DATA E HORA DA EMISSAO DA NFS-e",data.issuedAt,300,top+28,155);
+  field("NUMERO DA DPS",data.dpsNumber,MARGIN+5,top+58,90);
+  field("SERIE DA DPS",data.dpsSeries,155,top+58,130);
+  field("DATA E HORA DA EMISSAO DA DPS",data.issuedAt,300,top+58,155);
+  drawQr(consultationUrl,493,top,58);
+  wrap("A autenticidade desta NFS-e pode ser verificada pela leitura deste codigo QR ou pela consulta da chave de acesso no portal nacional da NFS-e",35,4).forEach((entry,index)=>write(entry,430,top+63+index*8,{size:5}));
+  top+=105;
   line(MARGIN,top,PAGE_WIDTH-MARGIN,top);
 
-  top+=4;sectionTitle("Prestador / Fornecedor",top);top+=18;
-  field("Nome empresarial",data.providerName,MARGIN+5,top,300);
-  field("CNPJ / CPF / NIF",data.providerTaxId,330,top,145);
-  top+=26;field("Endereço",data.providerAddress,MARGIN+5,top,560,2);top+=30;
+  top+=2;sectionTitle("Emitente da NFS-e",top);top+=18;
+  field("Emitente","Prestador",MARGIN+5,top,130);
+  field("SITUACAO DA NFS-e","NFS-e Gerada",155,top,130);
+  field("FINALIDADE","-",300,top,130);
+  top+=28;
+
+  sectionTitle("Prestador / Fornecedor",top);top+=18;
+  field("Nome / Nome Empresarial",data.providerName,MARGIN+5,top,285);
+  field("CNPJ / CPF / NIF",data.providerTaxId,310,top,130);
+  field("Telefone",data.providerPhone,455,top,105);
+  top+=27;
+  field("Endereco",data.providerAddress,MARGIN+5,top,285,2);
+  field("Municipio / Sigla UF",data.providerCity,310,top,130);
+  field("Codigo IBGE / CEP",`33.04557 / ${data.providerCep}`,455,top,105);
+  top+=35;
+  field("E-mail",data.providerEmail,MARGIN+5,top,285);
+  field("Simples Nacional na Data de Competencia","Nao optante",310,top,130);
+  top+=30;
 
   sectionTitle("Tomador / Adquirente",top);top+=18;
-  field("Nome / Nome empresarial",data.takerName,MARGIN+5,top,300);
-  field("CNPJ / CPF / NIF",data.takerTaxId,330,top,145);
-  top+=26;field("Endereço",data.takerAddress,MARGIN+5,top,360,2);
-  field("E-mail",data.takerEmail,390,top,180,2);top+=34;
+  field("Nome / Nome Empresarial",data.takerName,MARGIN+5,top,285);
+  field("CNPJ / CPF / NIF",data.takerTaxId,310,top,130);
+  field("Telefone",data.takerPhone,455,top,105);
+  top+=27;
+  field("Endereco",data.takerAddress,MARGIN+5,top,285,2);
+  field("Municipio / Sigla UF",data.takerCity,310,top,130);
+  field("Codigo IBGE / CEP",data.takerCep,455,top,105);
+  top+=35;
+  field("E-mail",data.takerEmail,MARGIN+5,top,285);
+  top+=30;
+  line(MARGIN,top,PAGE_WIDTH-MARGIN,top);
+  write("DESTINATARIO DA OPERACAO NAO IDENTIFICADO NA NFS-e",190,top+5,{size:7});
+  line(MARGIN,top+14,PAGE_WIDTH-MARGIN,top+14);
+  write("INTERMEDIARIO DA OPERACAO NAO IDENTIFICADO NA NFS-e",184,top+18,{size:7});
+  line(MARGIN,top+27,PAGE_WIDTH-MARGIN,top+27);
+  top+=31;
 
   sectionTitle("Serviço prestado",top);top+=18;
-  field("Código de tributação",data.serviceCode,MARGIN+5,top,160);
-  field("NBS",data.nbs,190,top,140);
-  field("Local da prestação","RIO DE JANEIRO / RJ",350,top,220);
-  top+=26;field("Descrição do serviço",data.description,MARGIN+5,top,560,4);top+=47;
+  field("Codigo de Tributacao Nacional/Municipal",data.serviceCode,MARGIN+5,top,190);
+  field("Codigo da NBS",data.nbs,250,top,140);
+  field("Local da Prestacao / Sigla UF / Pais","Rio de Janeiro / RJ / -",455,top,120);
+  top+=28;
+  field("Descricao do Servico",data.description,MARGIN+5,top,560,4);top+=46;
 
   sectionTitle("Tributação municipal e federal",top);top+=18;
   field("Base de cálculo ISSQN",data.taxBase,MARGIN+5,top,125);
@@ -216,6 +279,13 @@ function createPdf(data:DanfseData){
   field("ISSQN apurado",data.issAmount,270,top,105);
   field("PIS",data.pisAmount,395,top,80);
   field("COFINS",data.cofinsAmount,490,top,80);
+  top+=31;
+
+  sectionTitle("Tributacao IBS/CBS",top);top+=18;
+  field("CST / cClassTrib","- / -",MARGIN+5,top,120);
+  field("Base de Calculo Apos Exclusoes e Reducoes","-",155,top,160);
+  field("Aliquota IBS UF / IBS Mun","- / -",350,top,160);
+  field("Valor Total IBS/CBS","R$ 0,00",485,top,80);
   top+=31;
 
   sectionTitle("Valor total da NFS-e",top);top+=18;
@@ -228,8 +298,12 @@ function createPdf(data:DanfseData){
   wrap("Documento auxiliar gerado pelo JPI Fiscal a partir do XML autorizado pela SEFIN Nacional. Confira a autenticidade no Portal Nacional da NFS-e.",105,3).forEach((entry,index)=>write(entry,MARGIN+5,top+index*9,{size:7}));
   top+=34;
   write("Consulta pública:",MARGIN+5,top,{bold:true,size:6});
-  wrap(`https://www.nfse.gov.br/ConsultaPublica/?tpc=1&chave=${data.key}`,112,2).forEach((entry,index)=>write(entry,MARGIN+5,top+9+index*8,{size:7}));
+  wrap(consultationUrl,112,2).forEach((entry,index)=>write(entry,MARGIN+5,top+9+index*8,{size:7}));
   write("A autenticidade deverá ser conferida no Portal Nacional da NFS-e.",MARGIN+5,PAGE_HEIGHT-MARGIN-16,{size:6});
+  rectangle(MARGIN,PAGE_HEIGHT-56,PAGE_WIDTH-MARGIN*2,26);
+  field("DATA CIENTIFICACAO:","",MARGIN+5,PAGE_HEIGHT-51,145);
+  field("IDENTIFICACAO E ASSINATURA","",175,PAGE_HEIGHT-51,145);
+  field("N NFS-e / CHAVE NFS-e",`${data.number} / ${data.key}`,335,PAGE_HEIGHT-51,240,1);
 
   const stream=Buffer.from(commands.join("\n"),"latin1");
   const objects=[
