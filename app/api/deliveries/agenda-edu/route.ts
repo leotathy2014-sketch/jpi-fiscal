@@ -34,7 +34,7 @@ function manualAgendaMessage(payment:PaymentSource,protectedUrl:string){
   return [
     "Olá!",
     "",
-    `Segue a NFS-e referente à mensalidade de ${payment.competencia} do aluno(a) ${aluno}, responsável ${responsavel}, no valor de ${valor}.`,
+    `Segue o link seguro da NFS-e referente à mensalidade de ${payment.competencia} do aluno(a) ${aluno}, responsável ${responsavel}, no valor de ${valor}.`,
     "",
     `Acesse a nota pelo link seguro: ${protectedUrl}`,
     "",
