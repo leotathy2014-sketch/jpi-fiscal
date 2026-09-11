@@ -9,22 +9,27 @@ import { BrandLogo } from "./branding";
 type Status = "checking" | "accepted" | "pending";
 
 export function LgpdConsentGate({accessToken,role,email}:{accessToken:string|null;role:string;email:string}) {
-  const [status,setStatus]=useState<Status>("checking");
+  const localKey=`jpi-lgpd-accepted:${email}:${LGPD_TERM_VERSION}`;
+  const [status,setStatus]=useState<Status>(()=>typeof window!=="undefined"&&localStorage.getItem(localKey)==="1"?"accepted":"checking");
   const [checked,setChecked]=useState(false);
   const [busy,setBusy]=useState(false);
   const [error,setError]=useState("");
   const load=useCallback(async()=>{
     if(!accessToken){setStatus("accepted");return}
+    if(localStorage.getItem(localKey)==="1"){setStatus("accepted");return}
     try{
       const response=await authenticatedFetch("/api/lgpd/acceptance",{headers:{Authorization:`Bearer ${accessToken}`},cache:"no-store"});
       const data=await response.json().catch(()=>({})) as {accepted?:boolean};
       if(response.status===401){window.dispatchEvent(new Event("jpi-session-invalid"));return}
-      setStatus(response.ok&&data.accepted?"accepted":"pending");
+      if(response.ok&&data.accepted){
+        localStorage.setItem(localKey,"1");
+        setStatus("accepted");
+      }else setStatus("pending");
     }catch{
       setStatus("pending");
       setError("Não foi possível confirmar seu aceite agora. Leia e registre para continuar.");
     }
-  },[accessToken]);
+  },[accessToken,localKey]);
   useEffect(()=>{void load()},[load]);
   async function accept(){
     if(!accessToken||!checked)return;
@@ -34,12 +39,13 @@ export function LgpdConsentGate({accessToken,role,email}:{accessToken:string|nul
       const data=await response.json().catch(()=>({})) as {error?:string};
       if(response.status===401){window.dispatchEvent(new Event("jpi-session-invalid"));return}
       if(!response.ok)throw new Error(data.error||"Não foi possível registrar o aceite.");
+      localStorage.setItem(localKey,"1");
       setStatus("accepted");
     }catch(cause){
       setError(cause instanceof Error?cause.message:"Não foi possível registrar o aceite.");
     }finally{setBusy(false)}
   }
-  if(status==="accepted")return null;
+  if(status==="accepted"||status==="checking")return null;
   return <div className="lgpd-gate" role="dialog" aria-modal="true" aria-labelledby="lgpd-title">
     <div className="lgpd-card">
       <div className="lgpd-brand"><BrandLogo/><div><strong>JPI Fiscal</strong><span>Ambiente seguro de gestão fiscal escolar</span></div></div>
@@ -48,7 +54,7 @@ export function LgpdConsentGate({accessToken,role,email}:{accessToken:string|nul
       <div className="lgpd-text">{LGPD_TERM_TEXT.split("\n\n").map((paragraph,index)=><p key={index}>{paragraph}</p>)}</div>
       {error&&<div className="error-box">{error}</div>}
       <label className="lgpd-check"><input type="checkbox" checked={checked} onChange={event=>setChecked(event.target.checked)}/><span>Li, entendi e concordo com o uso responsável, LGPD e sigilo dos dados do sistema.</span></label>
-      <div className="lgpd-actions"><button className="primary" disabled={!checked||busy||status==="checking"} onClick={accept}><CheckCircle2 size={18}/>{busy?"Registrando…":status==="checking"?"Verificando…":"Concordo e continuar"}</button></div>
+      <div className="lgpd-actions"><button className="primary" disabled={!checked||busy} onClick={accept}><CheckCircle2 size={18}/>{busy?"Registrando…":"Concordo e continuar"}</button></div>
     </div>
   </div>;
 }

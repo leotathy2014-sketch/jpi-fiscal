@@ -1804,10 +1804,10 @@ function Permissions() {
 
   const loadAcceptances=useCallback(async()=>{
     if(!supabase||!isMaster)return;
-    const {data,error}=await supabase.from("lgpd_user_acceptances").select("user_id,accepted_at,term_version,ip_address,user_agent").eq("term_version",LGPD_TERM_VERSION).order("accepted_at",{ascending:false});
+    const {data,error}=await supabase.from("lgpd_user_acceptances").select("user_id,user_email,accepted_at,term_version,ip_address,user_agent").eq("term_version",LGPD_TERM_VERSION).order("accepted_at",{ascending:false});
     if(error){setError(error.message);return}
     const next:Record<string,{accepted_at:string;term_version:string;ip_address:string|null;user_agent:string|null}>={};
-    for(const item of data||[])next[String(item.user_id)]={accepted_at:String(item.accepted_at),term_version:String(item.term_version),ip_address:item.ip_address?String(item.ip_address):null,user_agent:item.user_agent?String(item.user_agent):null};
+    for(const item of data||[]){const acceptance={accepted_at:String(item.accepted_at),term_version:String(item.term_version),ip_address:item.ip_address?String(item.ip_address):null,user_agent:item.user_agent?String(item.user_agent):null};next[String(item.user_id)]=acceptance;if(item.user_email)next[String(item.user_email).toLowerCase()]=acceptance}
     setAcceptances(next);
   },[supabase,isMaster]);
 
@@ -1827,6 +1827,7 @@ function Permissions() {
   function permissionEnabled(role:RolePermissionRow["role"],permissionKey:string){
     return rolePermissions.find(item=>item.role===role&&item.permission_key===permissionKey)?.allowed===true;
   }
+  function lgpdAcceptanceFor(user:ManagedUser){return acceptances[String(user.user_id||"")]||acceptances[user.email.toLowerCase()]||null}
 
   async function togglePermission(role:RolePermissionRow["role"],permissionKey:string){
     if(!supabase||!isMaster)return;
@@ -1976,12 +1977,12 @@ function Permissions() {
       </div>
       <div className="lgpd-audit-summary">
         <div><span>Versão vigente</span><strong>{LGPD_TERM_VERSION}</strong></div>
-        <div><span>Usuários com aceite</span><strong>{rows.filter(user=>Boolean(acceptances[user.id])).length}</strong></div>
-        <div><span>Pendentes</span><strong>{rows.filter(user=>!acceptances[user.id]).length}</strong></div>
+        <div><span>Usuários com aceite</span><strong>{rows.filter(user=>Boolean(lgpdAcceptanceFor(user))).length}</strong></div>
+        <div><span>Pendentes</span><strong>{rows.filter(user=>!lgpdAcceptanceFor(user)).length}</strong></div>
       </div>
       <div className="table-card permission-users-table"><table>
         <thead><tr><th>Usuário</th><th>Perfil</th><th>Aceite</th><th>Comprovante</th><th>Navegador</th></tr></thead>
-        <tbody>{rows.map(user=>{const acceptance=acceptances[user.id];return <tr key={user.id}>
+        <tbody>{rows.map(user=>{const acceptance=lgpdAcceptanceFor(user);return <tr key={user.id}>
           <td><div className="name-cell"><div className="avatar soft">{(user.nome||user.email)[0].toUpperCase()}</div><div><strong>{user.nome||"USUÁRIO CONVIDADO"}</strong><span className="subcell">{user.email}</span></div></div></td>
           <td>{roleLabels[user.role]}</td>
           <td>{acceptance?<Status>Aceito</Status>:<span className="status cancelada">Pendente</span>}</td>
