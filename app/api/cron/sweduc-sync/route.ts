@@ -1,9 +1,10 @@
 import {NextRequest,NextResponse} from "next/server";
 import {createClient} from "@supabase/supabase-js";
-import {createSweducAccessToken,currentSweducAcademicYear,resolveSweducAcademicYear,listSweducStudentsWithToken,normalizeSweducHost,parseSweducCredentials,type SweducCredentials,type SweducStudentSummary} from "@/lib/sweduc";
+import {createSweducAccessToken,currentSweducAcademicYear,resolveSweducAcademicYear,listSweducStudentsWithToken,getSweducStudentDetailsWithToken,normalizeSweducHost,parseSweducCredentials,type SweducCredentials,type SweducStudentSummary} from "@/lib/sweduc";
 
 export const runtime="nodejs";export const maxDuration=60;
 const MAX_PAGES_PER_RUN=20;
+const MAX_DETAILS_PER_RUN=20;
 const json=(body:Record<string,unknown>,status=200)=>NextResponse.json(body,{status,headers:{"Cache-Control":"private, no-store, max-age=0"}});
 
 function sanitizeSyncYears(value:unknown){
@@ -47,11 +48,13 @@ function mapSummaryToMirror(summary:SweducStudentSummary,at:string){
     serie:String(summary.serie||"")||null,
     turma:String(summary.turma||"")||null,
     ano_letivo:String(summary.ano_letivo||"")||null,
-    responsaveis:[],
-    financeiro:[],
     dados_origem:{resumo:summary},
     sincronizado_em:at
   };
+}
+
+function hasMirrorDetails(row:Record<string,unknown>){
+  return Array.isArray(row.responsaveis)&&row.responsaveis.length>0&&Array.isArray(row.financeiro)&&row.financeiro.length>0;
 }
 
 function normalizeSearchText(value:unknown){return String(value||"").normalize("NFD").replace(/[\u0300-\u036f]/g,"").replace(/[^\p{L}\p{N}\s]/gu," ").replace(/\s+/g," ").trim().toLocaleLowerCase("pt-BR")}
@@ -105,7 +108,7 @@ export async function GET(request:NextRequest){
   const backendSecret=process.env.JPI_BACKEND_SECRET;
   if(!supabaseUrl||!serviceRoleKey||!backendSecret)return json({error:"Configure SUPABASE_SERVICE_ROLE_KEY, JPI_BACKEND_SECRET e CRON_SECRET na Vercel para ativar a sincronização automática."},503);
   const supabase=createClient(supabaseUrl,serviceRoleKey,{auth:{persistSession:false,autoRefreshToken:false}});
-  let activeCredentials:SweducCredentials|undefined;let activeAccessToken="";let synced=0;let page=1;let lastPage=1;const syncedYears:number[]=[];
+  let activeCredentials:SweducCredentials|undefined;let activeAccessToken="";let synced=0;let detailsSynced=0;let page=1;let lastPage=1;const syncedYears:number[]=[];
   try{
     const [secretResult,configResult]=await Promise.all([
       supabase.rpc("get_sweduc_secret_service",{p_backend_secret:backendSecret}),
@@ -140,9 +143,21 @@ export async function GET(request:NextRequest){
       }
       if(syncedThisYear||page>lastPage)syncedYears.push(academicYear.year);
     }
+    const detailCandidatesResult=await supabase.from("sweduc_alunos").select("matricula_id,dados_origem,responsaveis,financeiro").in("ano_letivo",years.map(String)).order("sincronizado_em",{ascending:true}).limit(120);
+    if(detailCandidatesResult.error)throw new Error("Não foi possível conferir detalhes pendentes do espelho SWeduc.");
+    const detailCandidates=((detailCandidatesResult.data||[]) as Array<Record<string,unknown>>).filter(row=>!hasMirrorDetails(row)).slice(0,MAX_DETAILS_PER_RUN);
+    for(const row of detailCandidates){
+      const matriculaId=Number(row.matricula_id||0);
+      if(!Number.isSafeInteger(matriculaId)||matriculaId<=0)continue;
+      const detail=await getSweducStudentDetailsWithToken(activeCredentials.host,token.accessToken,matriculaId);
+      const dados_origem={...((row.dados_origem as Record<string,unknown>|undefined)||{}),detalhes:detail.detalhes};
+      const updateResult=await supabase.from("sweduc_alunos").update({responsaveis:detail.responsaveis,financeiro:detail.financeiro,dados_origem,sincronizado_em:new Date().toISOString()}).eq("matricula_id",matriculaId);
+      if(updateResult.error)throw new Error("Não foi possível salvar detalhes de responsáveis e financeiro no espelho SWeduc.");
+      detailsSynced++;
+    }
     const finished=page>lastPage;const doneAt=new Date().toISOString();
     await supabase.from("sweduc_config").update({ultimo_status:"conectado",ultimo_erro:null,sincronizada_em:doneAt,total_sincronizado:synced,updated_at:doneAt}).eq("id",true);
-    return json({ok:true,academicYears:syncedYears,synced,finished,nextPage:finished?null:page,message:finished?`Sincronização automática concluída para ${syncedYears.join(", ")} com ${synced} matrícula(s).`:`Sincronização parcial concluída com ${synced} matrícula(s). Próxima execução continua atualizando.`});
+    return json({ok:true,academicYears:syncedYears,synced,detailsSynced,finished,nextPage:finished?null:page,message:finished?`Sincronização automática concluída para ${syncedYears.join(", ")} com ${synced} matrícula(s) e ${detailsSynced} detalhe(s) de responsável/financeiro.`:`Sincronização parcial concluída com ${synced} matrícula(s). Próxima execução continua atualizando.`});
   }catch(error){
     const message=safeSweducError(error,activeCredentials,[activeAccessToken]);
     try{await supabase.from("sweduc_config").update({ultimo_status:"erro",ultimo_erro:message,updated_at:new Date().toISOString()}).eq("id",true)}catch{}

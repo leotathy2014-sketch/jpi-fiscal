@@ -43,7 +43,7 @@ function serviceSupabaseClient(){
 }
 
 function mapSummaryToGrid(summary:SweducStudentSummary){
-  return {matricula_id:Number(summary.matricula_id),aluno_id:Number(summary.aluno_id||0)||null,nome:String(summary.nome||"Aluno sem nome"),data_nascimento:String(summary.data_nascimento||"")||null,numero_aluno:String(summary.num_aluno||"")||null,numero_matricula:String(summary.num_matricula||"")||null,status:String(summary.status||"")||null,unidade:String(summary.unidade||"")||null,curso:String(summary.curso||"")||null,serie:String(summary.serie||"")||null,turma:String(summary.turma||"")||null,ano_letivo:String(summary.ano_letivo||"")||null,responsaveis:[],financeiro:[],dados_origem:{resumo:summary},sincronizado_em:new Date().toISOString()};
+  return {matricula_id:Number(summary.matricula_id),aluno_id:Number(summary.aluno_id||0)||null,nome:String(summary.nome||"Aluno sem nome"),data_nascimento:String(summary.data_nascimento||"")||null,numero_aluno:String(summary.num_aluno||"")||null,numero_matricula:String(summary.num_matricula||"")||null,status:String(summary.status||"")||null,unidade:String(summary.unidade||"")||null,curso:String(summary.curso||"")||null,serie:String(summary.serie||"")||null,turma:String(summary.turma||"")||null,ano_letivo:String(summary.ano_letivo||"")||null,dados_origem:{resumo:summary},sincronizado_em:new Date().toISOString()};
 }
 
 async function upsertSweducMirror(supabase:SupabaseClient,rows:Array<Record<string,unknown>>){
@@ -51,6 +51,13 @@ async function upsertSweducMirror(supabase:SupabaseClient,rows:Array<Record<stri
   const writer=serviceSupabaseClient()||supabase;
   const result=await writer.from("sweduc_alunos").upsert(rows,{onConflict:"matricula_id"});
   if(result.error)throw new Error("Não foi possível atualizar o espelho SWeduc no banco.");
+}
+
+async function saveSweducMirrorDetails(supabase:SupabaseClient,matriculaId:number,student:Record<string,unknown>,detail:{detalhes:Record<string,unknown>;responsaveis:Array<Record<string,unknown>>;financeiro:Array<Record<string,unknown>>}){
+  const writer=serviceSupabaseClient()||supabase;
+  const dados_origem={...((student.dados_origem as Record<string,unknown>|undefined)||{}),detalhes:detail.detalhes};
+  const {error}=await writer.from("sweduc_alunos").update({responsaveis:detail.responsaveis,financeiro:detail.financeiro,dados_origem,sincronizado_em:new Date().toISOString()}).eq("matricula_id",matriculaId);
+  if(error)throw new Error("A SWeduc retornou os dados, mas não foi possível atualizar o espelho local.");
 }
 
 function normalizeAcademicReference(value:unknown){
@@ -398,6 +405,7 @@ export async function POST(request:NextRequest){
     try{
       activeCredentials=await credentials(auth.supabase);const token=await createSweducAccessToken(activeCredentials);activeAccessToken=token.accessToken;
       const detail=await getSweducStudentDetailsWithToken(activeCredentials.host,token.accessToken,matriculaId);
+      await saveSweducMirrorDetails(auth.supabase,matriculaId,student,detail);
       return json({ok:true,student:{...student,responsaveis:detail.responsaveis,financeiro:detail.financeiro,dados_origem:{...((student.dados_origem as Record<string,unknown>|undefined)||{}),detalhes:detail.detalhes}},responsaveis:detail.responsaveis,financeiro:detail.financeiro,message:"Responsáveis carregados para conferência. Nada foi salvo ainda."});
     }catch(error){return json({error:safeSweducError(error,activeCredentials,[activeAccessToken])},400)}
   }
@@ -419,7 +427,7 @@ export async function POST(request:NextRequest){
     if(!student||Number(student.matricula_id)!==matriculaId)return json({error:"Consulte a matrícula na SWeduc antes de carregar para a nota."},400);
     let detail:{detalhes:Record<string,unknown>;responsaveis:Array<Record<string,unknown>>;financeiro:Array<Record<string,unknown>>};
     let activeCredentials:SweducCredentials|undefined;let activeAccessToken="";
-    try{activeCredentials=await credentials(auth.supabase);const token=await createSweducAccessToken(activeCredentials);activeAccessToken=token.accessToken;detail=await getSweducStudentDetailsWithToken(activeCredentials.host,token.accessToken,matriculaId)}catch(error){return json({error:safeSweducError(error,activeCredentials,[activeAccessToken])},400)}
+    try{activeCredentials=await credentials(auth.supabase);const token=await createSweducAccessToken(activeCredentials);activeAccessToken=token.accessToken;detail=await getSweducStudentDetailsWithToken(activeCredentials.host,token.accessToken,matriculaId);await saveSweducMirrorDetails(auth.supabase,matriculaId,student,detail)}catch(error){return json({error:safeSweducError(error,activeCredentials,[activeAccessToken])},400)}
     student.responsaveis=detail.responsaveis;student.financeiro=detail.financeiro;student.dados_origem={...((student.dados_origem as Record<string,unknown>|undefined)||{}),detalhes:detail.detalhes};
     const responsaveis=detail.responsaveis;
     const automaticResponsibleIndex=responsaveis.findIndex(responsible=>isTrueFlag(responsible.responsavel_financeiro)||isTrueFlag(responsible.financeiro)||isTrueFlag(responsible.eh_financeiro));
