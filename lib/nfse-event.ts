@@ -3,6 +3,7 @@ export type CancellationReasonCode = "1" | "2" | "9";
 export type CancellationRequest = {
   key: string;
   authorCnpj: string;
+  environmentType?: "1" | "2";
   reasonCode: CancellationReasonCode;
   reason: string;
   occurredAt: string;
@@ -24,13 +25,14 @@ export function buildCancellationRequest(input: CancellationRequest) {
   if (!/^20\d{2}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}-03:00$/.test(input.occurredAt)) {
     throw new Error("A data e hora do evento são inválidas.");
   }
+  const environmentType = input.environmentType === "1" ? "1" : "2";
   const id = `PRE${key}101101`;
   return {
     id,
     xml: `<?xml version="1.0" encoding="UTF-8"?>
 <pedRegEvento xmlns="http://www.sped.fazenda.gov.br/nfse" versao="1.01">
   <infPedReg Id="${id}">
-    <tpAmb>2</tpAmb>
+    <tpAmb>${environmentType}</tpAmb>
     <verAplic>JPI-FISCAL-1.01</verAplic>
     <dhEvento>${input.occurredAt}</dhEvento>
     <CNPJAutor>${authorCnpj}</CNPJAutor>

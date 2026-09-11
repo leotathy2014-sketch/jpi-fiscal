@@ -11,7 +11,7 @@ import {
   safeTechnicalError,
   signXmlElement,
 } from "@/lib/nfse-node";
-import { NFSE_RESTRICTED_ENDPOINT } from "@/lib/nfse-dps";
+import { NFSE_PRODUCTION_ENDPOINT, NFSE_RESTRICTED_ENDPOINT } from "@/lib/nfse-dps";
 import { hasServerPermission } from "@/lib/server-permissions";
 
 export const runtime = "nodejs";
@@ -24,8 +24,8 @@ function json(body: unknown, status = 200) {
   return NextResponse.json(body, { status, headers: { "Cache-Control": "no-store" } });
 }
 
-function eventUrl(key: string) {
-  const base = NFSE_RESTRICTED_ENDPOINT.replace(/\/+$/, "");
+function eventUrl(key: string, production: boolean) {
+  const base = (production ? NFSE_PRODUCTION_ENDPOINT : NFSE_RESTRICTED_ENDPOINT).replace(/\/+$/, "");
   return `${base}/${key}/eventos`;
 }
 
@@ -76,8 +76,11 @@ export async function POST(request: NextRequest) {
   if (!document) return json({ error: "A nota já está cancelada, substituída ou sendo processada." }, 409);
   if (document.chave_acesso !== payment.chave_nfse_homologacao) return json({ error: "A versão ativa da nota precisa ser sincronizada antes do cancelamento." }, 409);
 
-  const { data: company } = await supabase.from("configuracoes_empresa").select("cnpj").eq("id", true).maybeSingle();
+  const { data: company } = await supabase.from("configuracoes_empresa").select("cnpj,nfse_producao_habilitada").eq("id", true).maybeSingle();
   if (!company?.cnpj) return json({ error: "O CNPJ do prestador não foi encontrado." }, 400);
+  const productionEnabled = company.nfse_producao_habilitada === true;
+  const fiscalEnvironment = productionEnabled ? "Produção real" : "Produção restrita";
+  const fiscalEnvironmentType = productionEnabled ? "1" : "2";
   const { data: certificate } = await supabase
     .from("certificados_a1")
     .select("id,arquivo_caminho,validade,senha_configurada")
@@ -122,6 +125,7 @@ export async function POST(request: NextRequest) {
     const requestXml = buildCancellationRequest({
       key: document.chave_acesso,
       authorCnpj: digits(company.cnpj),
+      environmentType: fiscalEnvironmentType,
       reasonCode: reasonCode as CancellationReasonCode,
       reason,
       occurredAt: issueDateTime(),
@@ -139,7 +143,7 @@ export async function POST(request: NextRequest) {
     if (uploads.some(result => result.error)) throw new Error("O pedido de cancelamento não pôde ser guardado antes do envio.");
 
     const payload = JSON.stringify({ pedidoRegistroEventoXmlGZipB64: gzipSync(Buffer.from(signedXml, "utf8")).toString("base64") });
-    const response = await postJsonWithCertificate(eventUrl(document.chave_acesso), payload, pfx, password);
+    const response = await postJsonWithCertificate(eventUrl(document.chave_acesso, productionEnabled), payload, pfx, password);
     password = "";
     pfx.fill(0);
     let sefinPayload: unknown = {};
@@ -153,12 +157,12 @@ export async function POST(request: NextRequest) {
       await supabase.from("mensalidades").update({ status_nfse: previousStatus }).eq("id", monthlyId);
       await supabase.from("historico_nfse").insert({
         mensalidade_id: monthlyId,
-        evento: "nfse_cancelamento_homologacao_rejeitado",
+        evento: productionEnabled ? "nfse_cancelamento_producao_rejeitado" : "nfse_cancelamento_homologacao_rejeitado",
         valor_anterior: payment.valor_nfse,
         valor_novo: payment.valor_nfse,
-        detalhes: `Tentativa ${attemptId}. HTTP ${response.status}. ${formatted.join(" | ")}. Pedido ${requestPath}; assinado ${signedPath}.`.slice(0, 2000),
+        detalhes: `Tentativa ${attemptId}. ${fiscalEnvironment}. HTTP ${response.status}. ${formatted.join(" | ")}. Pedido ${requestPath}; assinado ${signedPath}.`.slice(0, 2000),
       });
-      return json({ error: formatted[0] || "A produção restrita rejeitou o cancelamento.", errors }, 422);
+      return json({ error: formatted[0] || `A ${fiscalEnvironment.toLowerCase()} rejeitou o cancelamento.`, errors }, 422);
     }
 
     sefinAccepted = true;
@@ -173,15 +177,15 @@ export async function POST(request: NextRequest) {
       evento_processado_em: processedAt,
     }).eq("id", document.id).eq("estado", "cancelando");
     if (documentUpdateError) throw new Error("O cancelamento foi confirmado, mas a versão da nota não pôde ser atualizada.");
-    await supabase.from("mensalidades").update({ status_nfse: "NFS-e cancelada em homologação" }).eq("id", monthlyId);
+    await supabase.from("mensalidades").update({ status_nfse: productionEnabled ? "NFS-e cancelada em produção" : "NFS-e cancelada em homologação" }).eq("id", monthlyId);
     await supabase.from("historico_nfse").insert({
       mensalidade_id: monthlyId,
-      evento: "nfse_cancelada_homologacao",
+      evento: productionEnabled ? "nfse_cancelada_producao" : "nfse_cancelada_homologacao",
       valor_anterior: payment.valor_nfse,
       valor_novo: payment.valor_nfse,
-      detalhes: `Versão ${document.versao} cancelada na produção restrita. Motivo ${reasonCode}: ${reason}. Evento autorizado ${eventPath}.`,
+      detalhes: `Versão ${document.versao} cancelada na ${fiscalEnvironment.toLowerCase()}. Motivo ${reasonCode}: ${reason}. Evento autorizado ${eventPath}.`,
     });
-    return json({ ok: true, environment: "Produção restrita", processedAt });
+    return json({ ok: true, environment: fiscalEnvironment, processedAt });
   } catch (error) {
     password = "";
     pfx.fill(0);
@@ -190,15 +194,15 @@ export async function POST(request: NextRequest) {
       await supabase.from("mensalidades").update({ status_nfse: previousStatus }).eq("id", monthlyId);
     } else if (sefinAccepted) {
       await supabase.from("nfse_documentos_homologacao").update({ estado: "cancelada", evento_processado_em: new Date().toISOString() }).eq("id", document.id);
-      await supabase.from("mensalidades").update({ status_nfse: "NFS-e cancelada em homologação" }).eq("id", monthlyId);
+      await supabase.from("mensalidades").update({ status_nfse: productionEnabled ? "NFS-e cancelada em produção" : "NFS-e cancelada em homologação" }).eq("id", monthlyId);
     }
     await supabase.from("historico_nfse").insert({
       mensalidade_id: monthlyId,
-      evento: sefinAccepted ? "nfse_cancelamento_confirmado_sincronizacao_pendente" : "nfse_cancelamento_homologacao_falhou",
+      evento: sefinAccepted ? "nfse_cancelamento_confirmado_sincronizacao_pendente" : productionEnabled ? "nfse_cancelamento_producao_falhou" : "nfse_cancelamento_homologacao_falhou",
       valor_anterior: payment.valor_nfse,
       valor_novo: payment.valor_nfse,
       detalhes: `Falha técnica: ${safeTechnicalError(error)}. ${sefinAccepted ? "A SEFIN confirmou o evento; o estado local foi mantido como cancelado." : "Nenhum cancelamento foi confirmado."}`.slice(0, 2000),
     });
-    return json({ error: sefinAccepted ? "O cancelamento foi confirmado, mas alguns arquivos ainda precisam ser sincronizados." : "Não foi possível concluir o cancelamento na produção restrita.", confirmed: sefinAccepted }, sefinAccepted ? 202 : 502);
+    return json({ error: sefinAccepted ? "O cancelamento foi confirmado, mas alguns arquivos ainda precisam ser sincronizados." : `Não foi possível concluir o cancelamento na ${fiscalEnvironment.toLowerCase()}.`, confirmed: sefinAccepted }, sefinAccepted ? 202 : 502);
   }
 }
