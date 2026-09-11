@@ -167,7 +167,26 @@ function takerAddressXml(student: DpsSource["alunos"]) {
   return `<end><endNac><cMun>3304557</cMun><CEP>${cep}</CEP></endNac><xLgr>${escapeXml(street)}</xLgr><nro>${escapeXml(number)}</nro>${complement ? `<xCpl>${escapeXml(complement)}</xCpl>` : ""}<xBairro>${escapeXml(district)}</xBairro></end>`;
 }
 
-function buildRestrictedDps(payment: DpsSource, company: CompanySource, substitution?: SubstitutionInput, environment: FiscalEnvironment = "homologacao") {
+function assertCompleteTakerAddress(student: DpsSource["alunos"],allowMissing=false) {
+  const missing: string[] = [];
+  const cep = digits(student?.cep);
+  const street = String(student?.logradouro || "").trim();
+  const number = String(student?.numero || "").trim();
+  const district = String(student?.bairro || "").trim();
+  const city = String(student?.cidade || "").trim().toLocaleUpperCase("pt-BR");
+  const state = String(student?.uf || "").trim().toLocaleUpperCase("pt-BR");
+  if (cep.length !== 8) missing.push("CEP");
+  if (!street) missing.push("logradouro");
+  if (!number) missing.push("número");
+  if (!district) missing.push("bairro");
+  if (!city) missing.push("cidade");
+  if (state !== "RJ") missing.push("UF RJ");
+  if (!city.includes("RIO DE JANEIRO")) missing.push("cidade Rio de Janeiro");
+  if (missing.length && !allowMissing) throw new Error(`Complete o endereço do responsável financeiro antes de emitir: ${missing.join(", ")}.`);
+  return missing;
+}
+
+function buildRestrictedDps(payment: DpsSource, company: CompanySource, substitution?: SubstitutionInput, environment: FiscalEnvironment = "homologacao", allowMissingTakerAddress=false) {
   const municipality = "3304557";
   const environmentType = environment === "producao" ? "1" : "2";
   const providerCnpj = digits(company.cnpj);
@@ -190,6 +209,7 @@ function buildRestrictedDps(payment: DpsSource, company: CompanySource, substitu
   if (!hasValidCnpj(providerCnpj)) throw new Error("O CNPJ do prestador é inválido.");
   if (!isValidCpfCnpj(takerTaxId)) throw new Error("O CPF/CNPJ do tomador é inválido.");
   if (!takerName) throw new Error("O responsável financeiro do tomador não foi informado.");
+  const missingTakerAddress=assertCompleteTakerAddress(payment.alunos,allowMissingTakerAddress);
   if (!description || description.length > 1000) throw new Error("A descrição fiscal deve ter entre 1 e 1000 caracteres.");
   if (!Number.isFinite(amount) || amount <= 0) throw new Error("O valor da NFS-e é inválido.");
   if (company.regime_tributario !== "LUCRO PRESUMIDO") throw new Error("O regime tributário deve ser Lucro Presumido.");
@@ -205,7 +225,7 @@ function buildRestrictedDps(payment: DpsSource, company: CompanySource, substitu
   const substitutionXml = substitution
     ? `<subst><chSubstda>${substitution.originalKey}</chSubstda><cMotivo>${substitution.reasonCode}</cMotivo><xMotivo>${escapeXml(substitution.reason)}</xMotivo></subst>`
     : "";
-  return { id, xml: `<?xml version="1.0" encoding="UTF-8"?>
+  return { id, missingTakerAddress, xml: `<?xml version="1.0" encoding="UTF-8"?>
 <DPS xmlns="http://www.sped.fazenda.gov.br/nfse" versao="1.01">
   <infDPS Id="${id}">
     <tpAmb>${environmentType}</tpAmb><dhEmi>${issueDateTime()}</dhEmi><verAplic>JPI-FISCAL-1.01</verAplic>
@@ -461,10 +481,12 @@ export async function POST(request: NextRequest) {
   let correctedCompetence = "";
   let correctedDescription = "";
   let correctedAmount = 0;
+  let allowMissingTakerAddress = false;
   try {
     const body = await request.json();
     monthlyId = Number(body.monthlyId);
     operation = body.operation === "substitute" ? "substitute" : "issue";
+    allowMissingTakerAddress = body.allowMissingTakerAddress === true;
     if (operation === "substitute") {
       substitutionReasonCode = String(body.reasonCode || "");
       substitutionReason = String(body.reason || "").trim();
@@ -569,7 +591,7 @@ export async function POST(request: NextRequest) {
       reason: substitutionReason,
       dpsNumber: `${payment.id}${String(nextVersion).padStart(3, "0")}`,
     } : undefined;
-    const draft = buildRestrictedDps(sourcePayment as unknown as DpsSource, company as CompanySource, substitution, fiscalEnvironment);
+    const draft = buildRestrictedDps(sourcePayment as unknown as DpsSource, company as CompanySource, substitution, fiscalEnvironment, allowMissingTakerAddress);
     const unsignedXml = draft.xml;
     const attemptId = `${new Date().toISOString().replace(/\D/g, "").slice(0, 17)}-${crypto.randomUUID().slice(0, 8)}`;
     const attemptBasePath = operation === "substitute"
@@ -702,8 +724,8 @@ export async function POST(request: NextRequest) {
       valor_anterior: payment.valor_nfse,
       valor_novo: operation === "substitute" ? correctedAmount : payment.valor_nfse,
       detalhes: operation === "substitute" && activeDocument
-        ? `Tentativa ${attemptId}. NFS-e versão ${nextVersion} gerada em ${fiscalLabel} em substituição à chave ${activeDocument.chave_acesso}. Nova chave ${sefin.chaveAcesso}. Motivo ${substitutionReasonCode}: ${substitutionReason}. DPS ${unsignedPath}; DPS assinada ${signedPath}; NFS-e ${nfsePath}.`
-        : `Tentativa ${attemptId}. NFS-e gerada em ${fiscalLabel}. Chave ${sefin.chaveAcesso}. Aplicativo ${sefin.versaoAplicativo || "não informado"}. DPS ${unsignedPath}; DPS assinada ${signedPath}; NFS-e ${nfsePath}.`,
+        ? `Tentativa ${attemptId}. NFS-e versão ${nextVersion} gerada em ${fiscalLabel} em substituição à chave ${activeDocument.chave_acesso}. Nova chave ${sefin.chaveAcesso}. Motivo ${substitutionReasonCode}: ${substitutionReason}. ${draft.missingTakerAddress.length ? `Usuário autorizou emissão com endereço incompleto do tomador: ${draft.missingTakerAddress.join(", ")}. ` : ""}DPS ${unsignedPath}; DPS assinada ${signedPath}; NFS-e ${nfsePath}.`
+        : `Tentativa ${attemptId}. NFS-e gerada em ${fiscalLabel}. Chave ${sefin.chaveAcesso}. Aplicativo ${sefin.versaoAplicativo || "não informado"}. ${draft.missingTakerAddress.length ? `Usuário autorizou emissão com endereço incompleto do tomador: ${draft.missingTakerAddress.join(", ")}. ` : ""}DPS ${unsignedPath}; DPS assinada ${signedPath}; NFS-e ${nfsePath}.`,
     });
     return json({ ok: true, operation, environment: fiscalLabel, key: sefin.chaveAcesso, issuedAt, alerts: sefin.alertas || [] });
   } catch (error) {
