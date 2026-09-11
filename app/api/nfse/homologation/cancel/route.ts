@@ -177,7 +177,12 @@ export async function POST(request: NextRequest) {
       evento_processado_em: processedAt,
     }).eq("id", document.id).eq("estado", "cancelando");
     if (documentUpdateError) throw new Error("O cancelamento foi confirmado, mas a versão da nota não pôde ser atualizada.");
-    await supabase.from("mensalidades").update({ status_nfse: productionEnabled ? "NFS-e cancelada em produção" : "NFS-e cancelada em homologação" }).eq("id", monthlyId);
+    await supabase.from("mensalidades").update({
+      status_nfse: productionEnabled ? "NFS-e cancelada em produção" : "NFS-e cancelada em homologação",
+      nfse_homologacao_xml_path: null,
+      chave_nfse_homologacao: null,
+      homologacao_emitida_em: null,
+    }).eq("id", monthlyId);
     await supabase.from("historico_nfse").insert({
       mensalidade_id: monthlyId,
       evento: productionEnabled ? "nfse_cancelada_producao" : "nfse_cancelada_homologacao",
@@ -194,7 +199,12 @@ export async function POST(request: NextRequest) {
       await supabase.from("mensalidades").update({ status_nfse: previousStatus }).eq("id", monthlyId);
     } else if (sefinAccepted) {
       await supabase.from("nfse_documentos_homologacao").update({ estado: "cancelada", evento_processado_em: new Date().toISOString() }).eq("id", document.id);
-      await supabase.from("mensalidades").update({ status_nfse: productionEnabled ? "NFS-e cancelada em produção" : "NFS-e cancelada em homologação" }).eq("id", monthlyId);
+      await supabase.from("mensalidades").update({
+        status_nfse: productionEnabled ? "NFS-e cancelada em produção" : "NFS-e cancelada em homologação",
+        nfse_homologacao_xml_path: null,
+        chave_nfse_homologacao: null,
+        homologacao_emitida_em: null,
+      }).eq("id", monthlyId);
     }
     await supabase.from("historico_nfse").insert({
       mensalidade_id: monthlyId,
