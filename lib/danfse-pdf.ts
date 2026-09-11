@@ -187,6 +187,23 @@ function createPdf(data:DanfseData){
   const sectionTitle=(title:string,top:number)=>{
     rectangle(MARGIN,top,PAGE_WIDTH-MARGIN*2,16,0.95);write(title.toLocaleUpperCase("pt-BR"),MARGIN+5,top+4,{bold:true,size:7});
   };
+  const fillRect=(x:number,top:number,width:number,height:number,color:[number,number,number])=>{
+    const y=PAGE_HEIGHT-top-height;
+    commands.push(`${color[0]} ${color[1]} ${color[2]} rg ${x} ${y} ${width} ${height} re f 0 0 0 rg`);
+  };
+  const drawNfseLogo=(x:number,top:number)=>{
+    fillRect(x,top+2,13,34,[0.08,0.56,0.33]);
+    fillRect(x+36,top+2,13,34,[0.08,0.56,0.33]);
+    commands.push(`0.08 0.56 0.33 rg ${x+11} ${PAGE_HEIGHT-top-36} m ${x+23} ${PAGE_HEIGHT-top-36} l ${x+49} ${PAGE_HEIGHT-top-2} l ${x+37} ${PAGE_HEIGHT-top-2} l h f 0 0 0 rg`);
+    commands.push(`0.98 0.75 0.18 rg ${x+11} ${PAGE_HEIGHT-top-3} m ${x+23} ${PAGE_HEIGHT-top-3} l ${x+38} ${PAGE_HEIGHT-top-22} l ${x+26} ${PAGE_HEIGHT-top-22} l h f 0 0 0 rg`);
+    fillRect(x+55,top+2,32,8,[0.08,0.56,0.33]);
+    fillRect(x+55,top+2,8,34,[0.08,0.56,0.33]);
+    fillRect(x+55,top+16,28,7,[0.08,0.56,0.33]);
+    write("S",x+91,top+1,{bold:true,size:34,color:[0.08,0.56,0.33]});
+    write("e",x+116,top+12,{bold:true,size:20,color:[0.08,0.28,0.72]});
+    write("Nota Fiscal de",x+142,top+11,{size:7,color:[0.42,0.46,0.55]});
+    write("Servico eletronica",x+142,top+21,{size:7,color:[0.42,0.46,0.55]});
+  };
   const drawQr=(value:string,x:number,top:number,size:number)=>{
     const qr=QRCode.create(value,{errorCorrectionLevel:"M"});
     const count=qr.modules.size;
@@ -206,10 +223,7 @@ function createPdf(data:DanfseData){
 
   rectangle(MARGIN,MARGIN,PAGE_WIDTH-MARGIN*2,PAGE_HEIGHT-MARGIN*2);
   rectangle(MARGIN,MARGIN,PAGE_WIDTH-MARGIN*2,62,0.94);
-  write("NFS",MARGIN+10,MARGIN+9,{bold:true,size:23,color:[0.1,0.55,0.31]});
-  write("e",MARGIN+55,MARGIN+18,{bold:true,size:17,color:[0.08,0.32,0.75]});
-  write("Nota Fiscal de",MARGIN+76,MARGIN+15,{size:7,color:[0.38,0.43,0.52]});
-  write("Servico eletronica",MARGIN+76,MARGIN+25,{size:7,color:[0.38,0.43,0.52]});
+  drawNfseLogo(MARGIN+7,MARGIN+8);
   write("DANFSe v2.0",245,MARGIN+10,{bold:true,size:10});
   write("Documento Auxiliar da NFS-e",210,MARGIN+25,{bold:true,size:9});
   write("Municipio: Rio de Janeiro - RJ",430,MARGIN+9,{size:7});
