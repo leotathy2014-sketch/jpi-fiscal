@@ -177,7 +177,7 @@ function buildRestrictedDps(payment: DpsSource, company: CompanySource, substitu
   if (!Number.isFinite(pisRate) || pisRate < 0 || pisRate > 100) throw new Error("A alíquota do PIS é inválida.");
   if (!Number.isFinite(cofinsRate) || cofinsRate < 0 || cofinsRate > 100) throw new Error("A alíquota da COFINS é inválida.");
   if (!Number.isInteger(withholdingType) || withholdingType < 0 || withholdingType > 9) throw new Error("O tipo de retenção do PIS/COFINS é inválido.");
-  const id = `DPS${municipality}${environmentType}${providerCnpj}${series.padStart(5, "0")}${number.padStart(15, "0")}`;
+  const id = `DPS${municipality}${providerCnpj}${series.padStart(5, "0")}${number.padStart(15, "0")}`;
   const document = takerTaxId.length === 11 ? `<CPF>${takerTaxId}</CPF>` : `<CNPJ>${takerTaxId}</CNPJ>`;
   const phone = digits(payment.alunos?.whatsapp);
   const substitutionXml = substitution
