@@ -535,7 +535,7 @@ export async function POST(request: NextRequest) {
   latestDocument = latest as HomologationDocumentSummary;
   const paymentStatusIsCanceled = String(payment.status_nfse || "").toLowerCase().includes("cancelada");
 
-  if (operation === "issue" && payment.chave_nfse_homologacao && activeDocument) {
+  if (operation === "issue" && payment.chave_nfse_homologacao && activeDocument && !paymentStatusIsCanceled) {
     return json({ ok: true, alreadyIssued: true, environment: "Produção restrita", key: payment.chave_nfse_homologacao, issuedAt: payment.homologacao_emitida_em });
   }
   if (operation === "issue" && payment.chave_nfse_homologacao && !paymentStatusIsCanceled && !activeDocument) {
@@ -704,6 +704,12 @@ export async function POST(request: NextRequest) {
       });
       if (newDocumentError) throw new Error("A nota substituta foi gerada, mas sua nova versão não pôde ser registrada.");
     } else {
+      if (paymentStatusIsCanceled && activeDocument) {
+        await supabase.from("nfse_documentos_homologacao").update({
+          estado: "cancelada",
+          evento_processado_em: activeDocument.chave_acesso === payment.chave_nfse_homologacao ? (payment.homologacao_emitida_em || issuedAt) : issuedAt,
+        }).eq("id", activeDocument.id).eq("estado", "ativa");
+      }
       const { error: documentError } = await supabase.from("nfse_documentos_homologacao").insert({
         mensalidade_id: payment.id,
         versao: nextVersion,
