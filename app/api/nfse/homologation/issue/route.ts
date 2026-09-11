@@ -6,16 +6,16 @@ import { request as httpsRequest, type RequestOptions } from "node:https";
 import type { ConnectionOptions } from "node:tls";
 import { gzipSync, gunzipSync } from "node:zlib";
 import { SignedXml } from "xml-crypto";
-import { hasValidCnpj, isValidCpfCnpj, NFSE_OWN_APP_SERIES, NFSE_RESTRICTED_ENDPOINT } from "@/lib/nfse-dps";
+import { hasValidCnpj, isValidCpfCnpj, NFSE_OWN_APP_SERIES, NFSE_PRODUCTION_ENDPOINT, NFSE_RESTRICTED_ENDPOINT } from "@/lib/nfse-dps";
 import { hasServerPermission } from "@/lib/server-permissions";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
 
-const HOMOLOGATION_URL = NFSE_RESTRICTED_ENDPOINT;
 const XML_BUCKET = "documentos-nfse";
 const CERTIFICATE_BUCKET = "certificados-a1";
 const ICP_BRASIL_CNPJ_OID = "2.16.76.1.3.3";
+type FiscalEnvironment = "homologacao" | "producao";
 
 type ForgeCertificate = forge.pki.Certificate;
 type ForgePrivateKey = forge.pki.rsa.PrivateKey;
@@ -51,6 +51,7 @@ type CompanySource = {
   cofins_aliquota: number;
   pis_cofins_cst: string;
   pis_cofins_retencao: number;
+  nfse_producao_habilitada?: boolean;
 };
 type SubstitutionInput = {
   originalKey: string;
@@ -138,8 +139,17 @@ function issueDateTime() {
   return `${part("year")}-${part("month")}-${part("day")}T${part("hour")}:${part("minute")}:${part("second")}-03:00`;
 }
 
-function buildRestrictedDps(payment: DpsSource, company: CompanySource, substitution?: SubstitutionInput) {
+function fiscalEnvironmentLabel(environment: FiscalEnvironment) {
+  return environment === "producao" ? "Produção" : "Produção restrita";
+}
+
+function fiscalEnvironmentSlug(environment: FiscalEnvironment) {
+  return environment === "producao" ? "producao" : "homologacao";
+}
+
+function buildRestrictedDps(payment: DpsSource, company: CompanySource, substitution?: SubstitutionInput, environment: FiscalEnvironment = "homologacao") {
   const municipality = "3304557";
+  const environmentType = environment === "producao" ? "1" : "2";
   const providerCnpj = digits(company.cnpj);
   const takerTaxId = digits(payment.alunos?.cpf_cnpj);
   const description = String(payment.descricao_servico || "").trim();
@@ -167,7 +177,7 @@ function buildRestrictedDps(payment: DpsSource, company: CompanySource, substitu
   if (!Number.isFinite(pisRate) || pisRate < 0 || pisRate > 100) throw new Error("A alíquota do PIS é inválida.");
   if (!Number.isFinite(cofinsRate) || cofinsRate < 0 || cofinsRate > 100) throw new Error("A alíquota da COFINS é inválida.");
   if (!Number.isInteger(withholdingType) || withholdingType < 0 || withholdingType > 9) throw new Error("O tipo de retenção do PIS/COFINS é inválido.");
-  const id = `DPS${municipality}2${providerCnpj}${series.padStart(5, "0")}${number.padStart(15, "0")}`;
+  const id = `DPS${municipality}${environmentType}${providerCnpj}${series.padStart(5, "0")}${number.padStart(15, "0")}`;
   const document = takerTaxId.length === 11 ? `<CPF>${takerTaxId}</CPF>` : `<CNPJ>${takerTaxId}</CNPJ>`;
   const phone = digits(payment.alunos?.whatsapp);
   const substitutionXml = substitution
@@ -176,7 +186,7 @@ function buildRestrictedDps(payment: DpsSource, company: CompanySource, substitu
   return { id, xml: `<?xml version="1.0" encoding="UTF-8"?>
 <DPS xmlns="http://www.sped.fazenda.gov.br/nfse" versao="1.01">
   <infDPS Id="${id}">
-    <tpAmb>2</tpAmb><dhEmi>${issueDateTime()}</dhEmi><verAplic>JPI-FISCAL-1.01</verAplic>
+    <tpAmb>${environmentType}</tpAmb><dhEmi>${issueDateTime()}</dhEmi><verAplic>JPI-FISCAL-1.01</verAplic>
     <serie>${series}</serie><nDPS>${number}</nDPS><dCompet>${competenceDate(payment.competencia)}</dCompet><tpEmit>1</tpEmit><cLocEmi>${municipality}</cLocEmi>${substitutionXml}
     <prest><CNPJ>${providerCnpj}</CNPJ><regTrib><opSimpNac>1</opSimpNac><regEspTrib>0</regEspTrib></regTrib></prest>
     <toma>${document}<xNome>${escapeXml(takerName)}</xNome>${phone.length >= 6 ? `<fone>${phone}</fone>` : ""}${payment.alunos?.email ? `<email>${escapeXml(payment.alunos.email.trim())}</email>` : ""}</toma>
@@ -270,8 +280,9 @@ function readCertificate(pfx: Buffer, password: string, expectedCnpj: string) {
   };
 }
 
-function signDps(xml: string, privateKeyPem: string, certificatePem: string) {
-  if (!xml.includes("<tpAmb>2</tpAmb>")) throw new Error("O XML não pertence à produção restrita.");
+function signDps(xml: string, privateKeyPem: string, certificatePem: string, environment: FiscalEnvironment) {
+  const expectedEnvironment = environment === "producao" ? "1" : "2";
+  if (!xml.includes(`<tpAmb>${expectedEnvironment}</tpAmb>`)) throw new Error(`O XML não pertence ao ambiente fiscal esperado (${fiscalEnvironmentLabel(environment)}).`);
   const signer = new SignedXml({
     privateKey: privateKeyPem,
     publicCert: certificatePem,
@@ -359,9 +370,9 @@ function safeFiscalErrors(data: unknown) {
   return normalized.length > 0 ? normalized : [{ codigo: "", descricao: "Rejeição sem descrição.", complemento: "" }];
 }
 
-function postToRestrictedProduction(body: string, pfx: Buffer, passphrase: string) {
+function postToSefin(body: string, pfx: Buffer, passphrase: string, environment: FiscalEnvironment) {
   return new Promise<{ status: number; body: string }>((resolve, reject) => {
-    const target = new URL(HOMOLOGATION_URL);
+    const target = new URL(environment === "producao" ? NFSE_PRODUCTION_ENDPOINT : NFSE_RESTRICTED_ENDPOINT);
     const payload = Buffer.from(body, "utf8");
     const options: RequestOptions & ConnectionOptions = {
       method: "POST",
@@ -386,7 +397,7 @@ function postToRestrictedProduction(body: string, pfx: Buffer, passphrase: strin
         const bytes = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
         size += bytes.length;
         if (size > 20 * 1024 * 1024) {
-          response.destroy(new Error("A resposta da produção restrita excedeu o limite seguro."));
+          response.destroy(new Error(`A resposta da ${fiscalEnvironmentLabel(environment)} excedeu o limite seguro.`));
           return;
         }
         chunks.push(bytes);
@@ -394,7 +405,7 @@ function postToRestrictedProduction(body: string, pfx: Buffer, passphrase: strin
       response.on("end", () => resolve({ status: response.statusCode || 0, body: Buffer.concat(chunks).toString("utf8") }));
       response.on("error", reject);
     });
-    request.setTimeout(30000, () => request.destroy(new Error("Tempo esgotado ao acessar a produção restrita.")));
+    request.setTimeout(30000, () => request.destroy(new Error(`Tempo esgotado ao acessar a ${fiscalEnvironmentLabel(environment)}.`)));
     request.on("error", reject);
     request.write(payload);
     request.end();
@@ -479,10 +490,13 @@ export async function POST(request: NextRequest) {
 
   const { data: company } = await supabase
     .from("configuracoes_empresa")
-    .select("cnpj,razao_social,regime_tributario,pis_aliquota,cofins_aliquota,pis_cofins_cst,pis_cofins_retencao")
+    .select("cnpj,razao_social,regime_tributario,pis_aliquota,cofins_aliquota,pis_cofins_cst,pis_cofins_retencao,nfse_producao_habilitada")
     .eq("id", true)
     .maybeSingle();
   if (!company) return json({ error: "Os dados fiscais da empresa não foram encontrados." }, 400);
+  const fiscalEnvironment: FiscalEnvironment = company.nfse_producao_habilitada ? "producao" : "homologacao";
+  const fiscalLabel = fiscalEnvironmentLabel(fiscalEnvironment);
+  const fiscalSlug = fiscalEnvironmentSlug(fiscalEnvironment);
   const { data: certificate } = await supabase
     .from("certificados_a1")
     .select("id,arquivo_caminho,validade,senha_configurada")
@@ -533,7 +547,7 @@ export async function POST(request: NextRequest) {
       reason: substitutionReason,
       dpsNumber: `${payment.id}${String(nextVersion).padStart(3, "0")}`,
     } : undefined;
-    const draft = buildRestrictedDps(sourcePayment as unknown as DpsSource, company as CompanySource, substitution);
+    const draft = buildRestrictedDps(sourcePayment as unknown as DpsSource, company as CompanySource, substitution, fiscalEnvironment);
     const unsignedXml = draft.xml;
     const attemptId = `${new Date().toISOString().replace(/\D/g, "").slice(0, 17)}-${crypto.randomUUID().slice(0, 8)}`;
     const attemptBasePath = operation === "substitute"
@@ -549,7 +563,7 @@ export async function POST(request: NextRequest) {
     stage = "abrir_certificado";
     const keys = readCertificate(pfx, password, company.cnpj);
     stage = "assinar_dps";
-    const signedXml = signDps(unsignedXml, keys.privateKeyPem, keys.certificatePem);
+    const signedXml = signDps(unsignedXml, keys.privateKeyPem, keys.certificatePem, fiscalEnvironment);
     const signedPath = `${attemptBasePath}/${draft.id}-assinada.xml`;
     stage = "armazenar_dps_assinada";
     const { error: signedUploadError } = await supabase.storage
@@ -557,7 +571,7 @@ export async function POST(request: NextRequest) {
       .upload(signedPath, new Blob([signedXml], { type: "application/xml" }), { contentType: "application/xml", upsert: true });
     if (signedUploadError) throw new Error(`Não foi possível guardar a DPS assinada: ${signedUploadError.message}`);
     const { error: signedPathUpdateError } = await supabase.from("mensalidades").update({
-      status_nfse: "DPS assinada em homologação",
+      status_nfse: fiscalEnvironment === "producao" ? "DPS assinada em produção" : "DPS assinada em homologação",
       dps_xml_path: unsignedPath,
       dps_xml_id: draft.id,
       dps_assinada_xml_path: signedPath,
@@ -566,7 +580,7 @@ export async function POST(request: NextRequest) {
 
     const payload = JSON.stringify({ dpsXmlGZipB64: gzipSync(Buffer.from(signedXml, "utf8")).toString("base64") });
     stage = "transmitir_sefin";
-    const response = await postToRestrictedProduction(payload, pfx, password);
+    const response = await postToSefin(payload, pfx, password, fiscalEnvironment);
     password = "";
     pfx.fill(0);
     stage = "interpretar_retorno";
@@ -584,25 +598,25 @@ export async function POST(request: NextRequest) {
         await supabase.from("mensalidades").update({ status_nfse: previousStatus }).eq("id", payment.id);
         substitutionLocked = false;
       } else {
-        await supabase.from("mensalidades").update({ status_nfse: "Rejeitada em homologação" }).eq("id", payment.id);
+        await supabase.from("mensalidades").update({ status_nfse: fiscalEnvironment === "producao" ? "Rejeitada em produção" : "Rejeitada em homologação" }).eq("id", payment.id);
       }
       await supabase.from("historico_nfse").insert({
         mensalidade_id: payment.id,
-        evento: operation === "substitute" ? "nfse_substituicao_homologacao_rejeitada" : "nfse_homologacao_rejeitada",
+        evento: operation === "substitute" ? `nfse_substituicao_${fiscalSlug}_rejeitada` : `nfse_${fiscalSlug}_rejeitada`,
         valor_anterior: payment.valor_nfse,
         valor_novo: operation === "substitute" ? correctedAmount : payment.valor_nfse,
-        detalhes: `Tentativa ${attemptId}${operation === "substitute" ? " de substituição" : ""}. Produção restrita respondeu HTTP ${response.status}. ${formattedErrors.join(" | ")} DPS ${unsignedPath}; DPS assinada ${signedPath}.`.slice(0, 2000),
+        detalhes: `Tentativa ${attemptId}${operation === "substitute" ? " de substituição" : ""}. ${fiscalLabel} respondeu HTTP ${response.status}. ${formattedErrors.join(" | ")} DPS ${unsignedPath}; DPS assinada ${signedPath}.`.slice(0, 2000),
       });
-      return json({ error: formattedErrors[0] || `A produção restrita respondeu com o código ${response.status}.`, errors: fiscalErrors }, 422);
+      return json({ error: formattedErrors[0] || `A ${fiscalLabel} respondeu com o código ${response.status}.`, errors: fiscalErrors }, 422);
     }
 
     if (operation === "substitute") sefinAcceptedSubstitution = true;
     const nfseXml = gunzipSync(Buffer.from(sefin.nfseXmlGZipB64, "base64")).toString("utf8");
     const safeKey = sefin.chaveAcesso.replace(/[^A-Za-z0-9_-]/g, "").slice(0, 80);
-    if (!safeKey) throw new Error("A produção restrita retornou uma chave de acesso inválida.");
+    if (!safeKey) throw new Error(`A ${fiscalLabel} retornou uma chave de acesso inválida.`);
     const nfsePath = operation === "substitute"
-      ? `dps/${payment.id}/autorizada-homologacao/substituicoes/v${nextVersion}/${safeKey}.xml`
-      : `dps/${payment.id}/autorizada-homologacao/${safeKey}.xml`;
+      ? `dps/${payment.id}/autorizada-${fiscalSlug}/substituicoes/v${nextVersion}/${safeKey}.xml`
+      : `dps/${payment.id}/autorizada-${fiscalSlug}/${safeKey}.xml`;
     stage = "armazenar_nfse_autorizada";
     const { error: nfseUploadError } = await supabase.storage
       .from(XML_BUCKET)
@@ -645,7 +659,7 @@ export async function POST(request: NextRequest) {
       if (documentError && documentError.code !== "23505") throw new Error("A nota de teste foi gerada, mas sua versão não pôde ser registrada.");
     }
     const { error: updateError } = await supabase.from("mensalidades").update({
-      status_nfse: operation === "substitute" ? `NFS-e ativa em homologação · versão ${nextVersion}` : "NFS-e emitida em homologação",
+      status_nfse: operation === "substitute" ? `NFS-e ativa em ${fiscalEnvironment === "producao" ? "produção" : "homologação"} · versão ${nextVersion}` : fiscalEnvironment === "producao" ? "NFS-e emitida em produção" : "NFS-e emitida em homologação",
       ...(operation === "substitute" ? {
         competencia: correctedCompetence,
         valor_nfse: correctedAmount,
@@ -662,14 +676,14 @@ export async function POST(request: NextRequest) {
     stage = "registrar_historico";
     await supabase.from("historico_nfse").insert({
       mensalidade_id: payment.id,
-      evento: operation === "substitute" ? "nfse_substituida_homologacao" : "nfse_homologacao_emitida",
+      evento: operation === "substitute" ? `nfse_substituida_${fiscalSlug}` : `nfse_${fiscalSlug}_emitida`,
       valor_anterior: payment.valor_nfse,
       valor_novo: operation === "substitute" ? correctedAmount : payment.valor_nfse,
       detalhes: operation === "substitute" && activeDocument
-        ? `Tentativa ${attemptId}. NFS-e versão ${nextVersion} gerada na produção restrita em substituição à chave ${activeDocument.chave_acesso}. Nova chave ${sefin.chaveAcesso}. Motivo ${substitutionReasonCode}: ${substitutionReason}. DPS ${unsignedPath}; DPS assinada ${signedPath}; NFS-e ${nfsePath}.`
-        : `Tentativa ${attemptId}. NFS-e gerada exclusivamente na produção restrita. Chave ${sefin.chaveAcesso}. Aplicativo ${sefin.versaoAplicativo || "não informado"}. DPS ${unsignedPath}; DPS assinada ${signedPath}; NFS-e ${nfsePath}.`,
+        ? `Tentativa ${attemptId}. NFS-e versão ${nextVersion} gerada em ${fiscalLabel} em substituição à chave ${activeDocument.chave_acesso}. Nova chave ${sefin.chaveAcesso}. Motivo ${substitutionReasonCode}: ${substitutionReason}. DPS ${unsignedPath}; DPS assinada ${signedPath}; NFS-e ${nfsePath}.`
+        : `Tentativa ${attemptId}. NFS-e gerada em ${fiscalLabel}. Chave ${sefin.chaveAcesso}. Aplicativo ${sefin.versaoAplicativo || "não informado"}. DPS ${unsignedPath}; DPS assinada ${signedPath}; NFS-e ${nfsePath}.`,
     });
-    return json({ ok: true, operation, environment: "Produção restrita", key: sefin.chaveAcesso, issuedAt, alerts: sefin.alertas || [] });
+    return json({ ok: true, operation, environment: fiscalLabel, key: sefin.chaveAcesso, issuedAt, alerts: sefin.alertas || [] });
   } catch (error) {
     password = "";
     pfx.fill(0);
