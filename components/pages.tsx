@@ -1,6 +1,6 @@
 "use client";
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
-import { AlertCircle, ArrowUpRight, BookOpenCheck, Building2, CalendarDays, Check, CircleDollarSign, Clock3, Copy, Eye, EyeOff, FileCheck2, FilePlus2, Filter, KeyRound, Link2, Mail, MessageCircle, MoreHorizontal, Palette, Plus, Search, ShieldCheck, SlidersHorizontal, Trash2, UploadCloud, UserCog, UsersRound, WalletCards, X } from "lucide-react";
+import { AlertCircle, ArrowUpRight, BookOpenCheck, Building2, CalendarDays, Check, CircleDollarSign, Clock3, Copy, Eye, EyeOff, FileCheck2, FilePlus2, Filter, KeyRound, Link2, Mail, MessageCircle, MoreHorizontal, Palette, Plus, Search, ShieldCheck, SlidersHorizontal, Trash2, UploadCloud, UserCheck, UserCog, UsersRound, WalletCards, X } from "lucide-react";
 import type { AppPage, Role } from "./app-shell";
 import { createSupabaseBrowserClient } from "@/lib/supabase";
 import { authenticatedFetch } from "@/lib/authenticated-fetch";
@@ -9,6 +9,7 @@ import { AgendaEduStudentLinks } from "./agenda-edu-student-links";
 import { BrandLogo } from "./branding";
 import { useAccess } from "./access";
 import { SweducSettings } from "./sweduc-settings";
+import { LGPD_TERM_VERSION } from "@/lib/lgpd-consent";
 
 const money = (n: number) => n.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 const onlyDigits = (value: string, limit: number) => value.replace(/\D/g, "").slice(0, limit);
@@ -1765,10 +1766,11 @@ function Permissions() {
   const {isMaster,can}=useAccess();
   const canViewUsers=can("settings.users.view")||can("settings.users.manage");
   const canManageUsers=can("settings.users.manage");
-  const [section,setSection]=useState<"users"|"profiles">("users");
+  const [section,setSection]=useState<"users"|"profiles"|"lgpd">("users");
   const [selectedProfile,setSelectedProfile]=useState<RolePermissionRow["role"]>("admin");
   const [permissionNotice,setPermissionNotice]=useState("");
   const [rows,setRows]=useState<ManagedUser[]>([]);
+  const [acceptances,setAcceptances]=useState<Record<string,{accepted_at:string;term_version:string;ip_address:string|null;user_agent:string|null}>>({});
   const [definitions,setDefinitions]=useState<PermissionDefinition[]>([]);
   const [rolePermissions,setRolePermissions]=useState<RolePermissionRow[]>([]);
   const [open,setOpen]=useState(false);
@@ -1800,8 +1802,18 @@ function Permissions() {
     setRolePermissions((roleResult.data||[]) as RolePermissionRow[]);
   },[supabase,isMaster]);
 
+  const loadAcceptances=useCallback(async()=>{
+    if(!supabase||!isMaster)return;
+    const {data,error}=await supabase.from("lgpd_user_acceptances").select("user_id,accepted_at,term_version,ip_address,user_agent").eq("term_version",LGPD_TERM_VERSION).order("accepted_at",{ascending:false});
+    if(error){setError(error.message);return}
+    const next:Record<string,{accepted_at:string;term_version:string;ip_address:string|null;user_agent:string|null}>={};
+    for(const item of data||[])next[String(item.user_id)]={accepted_at:String(item.accepted_at),term_version:String(item.term_version),ip_address:item.ip_address?String(item.ip_address):null,user_agent:item.user_agent?String(item.user_agent):null};
+    setAcceptances(next);
+  },[supabase,isMaster]);
+
   useEffect(()=>{void loadUsers()},[loadUsers]);
   useEffect(()=>{if(isMaster)void loadMatrix()},[isMaster,loadMatrix]);
+  useEffect(()=>{if(isMaster)void loadAcceptances()},[isMaster,loadAcceptances]);
 
   const modules=useMemo(()=>{
     const grouped=new Map<string,{label:string;items:PermissionDefinition[]}>();
@@ -1902,6 +1914,7 @@ function Permissions() {
     <div className="permission-section-tabs">
       <button className={section==="users"?"active":""} onClick={()=>setSection("users")}><UsersRound/>Usuários</button>
       {isMaster&&<button className={section==="profiles"?"active":""} onClick={()=>setSection("profiles")}><SlidersHorizontal/>Permissões por perfil</button>}
+      {isMaster&&<button className={section==="lgpd"?"active":""} onClick={()=>setSection("lgpd")}><UserCheck/>LGPD e auditoria</button>}
     </div>
 
     {section==="users"&&<>
@@ -1954,6 +1967,28 @@ function Permissions() {
           </div>})}
         </section>)}
       </div>
+    </>}
+
+    {section==="lgpd"&&isMaster&&<>
+      <div className="permission-legend lgpd-audit-legend">
+        <div><ShieldCheck/><div><strong>Aceite LGPD e sigilo por usuário</strong><p>Comprovante interno de ciência: usuário, versão do termo, data/hora, IP e navegador ficam registrados no banco.</p></div></div>
+        <button className="secondary" onClick={()=>void loadAcceptances()}>Atualizar auditoria</button>
+      </div>
+      <div className="lgpd-audit-summary">
+        <div><span>Versão vigente</span><strong>{LGPD_TERM_VERSION}</strong></div>
+        <div><span>Usuários com aceite</span><strong>{rows.filter(user=>Boolean(acceptances[user.id])).length}</strong></div>
+        <div><span>Pendentes</span><strong>{rows.filter(user=>!acceptances[user.id]).length}</strong></div>
+      </div>
+      <div className="table-card permission-users-table"><table>
+        <thead><tr><th>Usuário</th><th>Perfil</th><th>Aceite</th><th>Comprovante</th><th>Navegador</th></tr></thead>
+        <tbody>{rows.map(user=>{const acceptance=acceptances[user.id];return <tr key={user.id}>
+          <td><div className="name-cell"><div className="avatar soft">{(user.nome||user.email)[0].toUpperCase()}</div><div><strong>{user.nome||"USUÁRIO CONVIDADO"}</strong><span className="subcell">{user.email}</span></div></div></td>
+          <td>{roleLabels[user.role]}</td>
+          <td>{acceptance?<Status>Aceito</Status>:<span className="status cancelada">Pendente</span>}</td>
+          <td>{acceptance?<div className="lgpd-proof"><strong>{new Date(acceptance.accepted_at).toLocaleString("pt-BR")}</strong><span>IP: {acceptance.ip_address||"não capturado"} · {acceptance.term_version}</span></div>:<span className="muted">Vai aparecer no próximo login do usuário.</span>}</td>
+          <td><span className="subcell lgpd-agent">{acceptance?.user_agent||"—"}</span></td>
+        </tr>})}</tbody>
+      </table></div>
     </>}
 
     {open&&canManageUsers&&<div className="modal-backdrop"><div className="modal-card small-modal">

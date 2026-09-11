@@ -10,6 +10,7 @@ import { createSupabaseBrowserClient } from "@/lib/supabase";
 import { authenticatedFetch } from "@/lib/authenticated-fetch";
 import { BrandLogo } from "./branding";
 import { useAccess } from "./access";
+import { LgpdConsentGate } from "./lgpd-consent-gate";
 
 export type Role = "Master"|"Administrador"|"Financeiro"|"Secretaria"|"Consulta";
 export type AppPage = "Painel"|"Alunos e Responsáveis"|"Mensalidades"|"Assistente de emissão"|"NFS-e"|"Ajustes NFS-e"|"Enviar notas"|"Configurações"|"Ajuda";
@@ -34,7 +35,7 @@ export function AppShell({email,accessToken,role,page,onPageChange,onSignOut}:{e
  const sefinCopy=sefinStatus==="available"?{title:"SEFIN disponível",detail:productionEnabled?"Pronto e enviando":"API de homologação confirmada"}:sefinStatus==="unstable"?{title:"SEFIN com oscilação",detail:"Teste novamente antes de enviar"}:sefinStatus==="unavailable"?{title:"SEFIN indisponível",detail:"Falha confirmada da API"}:sefinStatus==="session"?{title:"Sessão expirada",detail:"Entre novamente"}:sefinStatus==="unknown"?{title:"SEFIN não confirmado",detail:"Nova verificação em andamento"}:{title:"SEFIN verificando",detail:"Consultando API de emissão"};
  const sefinTone=sefinStatus==="available"?"available":sefinStatus==="unstable"?"unstable":sefinStatus==="unavailable"||sefinStatus==="session"?"unavailable":sefinStatus==="unknown"?"unknown":"checking";
  const content = page==="Painel"?<LiveDashboard/>:page==="Alunos e Responsáveis"?<LiveStudents role={role} onNavigate={onPageChange}/>:page==="Mensalidades"?<LivePayments role={role}/>:page==="Assistente de emissão"?<IssuanceAssistant onNavigate={onPageChange}/>:page==="NFS-e"?<LiveInvoices role={role} onNavigate={onPageChange}/>:page==="Ajustes NFS-e"?<LiveInvoices role={role} onNavigate={onPageChange} adjustmentsOnly/>:page==="Enviar notas"?<DeliveryCenter role={role} accessToken={accessToken} onNavigate={onPageChange}/>:page==="Ajuda"?<HelpPage onNavigate={onPageChange}/>:<SettingsPage accessToken={accessToken} onNavigate={onPageChange}/>;
- return <div className="app-layout"><aside className={open?"sidebar open":"sidebar"}>
+ return <div className="app-layout"><LgpdConsentGate accessToken={accessToken} role={role} email={email}/><aside className={open?"sidebar open":"sidebar"}>
   <div className="sidebar-head"><BrandLogo small/><div><strong>JPI Fiscal</strong><span>Gestão escolar</span></div><button className="close-mobile" onClick={()=>setOpen(false)}><X/></button></div>
   <nav><span className="nav-label">MENU PRINCIPAL</span>{visible.map(({name,icon:Icon})=><button key={name} className={page===name?"nav-item active":"nav-item"} onClick={()=>{onPageChange(name);setOpen(false)}}><Icon size={19}/>{name}</button>)}</nav>
   <div className="sidebar-foot"><button className={page==="Ajuda"?"nav-item active":"nav-item"} onClick={()=>{onPageChange("Ajuda");setOpen(false)}}><HelpCircle size={19}/>Central de ajuda</button><div className="school-badge"><BookOpen size={18}/><div><strong>João Paulo I</strong><span>Ambiente seguro</span></div></div></div>
