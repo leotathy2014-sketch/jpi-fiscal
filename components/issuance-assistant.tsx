@@ -623,7 +623,7 @@ export function IssuanceAssistant({onNavigate}:{onNavigate:(page:AppPage)=>void}
       if(deliveryChannel==="whatsapp-manual"){
         if(!whatsappInfo?.ready)throw new Error("O WhatsApp manual ainda não está configurado.");
         if(!manualSenderId)throw new Error("Escolha qual WhatsApp da escola será usado.");
-        const popup=window.open("about:blank","_blank");if(popup)popup.opener=null;
+        const popup=window.open("about:blank","_blank");if(popup){popup.opener=null;popup.document.write('<!doctype html><title>Preparando WhatsApp</title><body style="font-family:Arial,sans-serif;padding:32px"><h2>Preparando WhatsApp Web…</h2><p>Não feche esta aba. Se não abrir automaticamente, volte ao JPI Fiscal e clique em Abrir WhatsApp.</p></body>');popup.document.close()}
         try{
           const response=await authenticatedFetch("/api/deliveries/whatsapp-manual",{
             method:"POST",
@@ -635,7 +635,7 @@ export function IssuanceAssistant({onNavigate}:{onNavigate:(page:AppPage)=>void}
           if(!response.ok||!data.ok||!data.deliveryId||!data.whatsappUrl)throw new Error(data.error||"Não foi possível preparar o WhatsApp.");
           const whatsappUrl=new URL(data.whatsappUrl);
           if(whatsappUrl.protocol!=="https:"||!["wa.me","web.whatsapp.com"].includes(whatsappUrl.hostname))throw new Error("O endereço seguro do WhatsApp não pôde ser validado.");
-          if(popup)popup.location.href=whatsappUrl.toString();else window.open(whatsappUrl.toString(),"_blank","noopener,noreferrer");
+          if(popup){popup.document.body.innerHTML=`<h2 style="font-family:Arial,sans-serif">Abrindo WhatsApp Web…</h2><p style="font-family:Arial,sans-serif">Se não abrir automaticamente, <a href="${whatsappUrl.toString()}" target="_self" rel="noopener noreferrer">clique aqui para abrir o WhatsApp Web</a>.</p>`;popup.location.assign(whatsappUrl.toString())}else window.open(whatsappUrl.toString(),"_blank","noopener,noreferrer");
           setManualPending({deliveryId:data.deliveryId,whatsappUrl:whatsappUrl.toString(),actualRecipient:data.actualRecipient||"WhatsApp do responsável",sender:data.sender||whatsappInfo.senders.find(sender=>sender.id===manualSenderId)||null});
           setMessage("WhatsApp aberto. Depois de enviar a mensagem, confirme o envio no Assistente.");
         }catch(cause){popup?.close();throw cause}
@@ -1179,7 +1179,7 @@ export function IssuanceAssistant({onNavigate}:{onNavigate:(page:AppPage)=>void}
 
               {manualPending&&deliveryChannel==="whatsapp-manual"&&<div className="assistant-manual-confirm">
                 <MessageCircle size={22}/>
-                <div><strong>Mensagem preparada no WhatsApp</strong><span>Destino de teste: {manualPending.actualRecipient}{manualPending.sender?" · Remetente: "+manualPending.sender.nome:""}</span><small>Depois de clicar em Enviar no WhatsApp, confirme abaixo para registrar o histórico.</small></div>
+                <div><strong>Mensagem preparada no WhatsApp</strong><span>Destino do responsável: {manualPending.actualRecipient}{manualPending.sender?" · Remetente: "+manualPending.sender.nome:""}</span><small>Depois de clicar em Enviar no WhatsApp, confirme abaixo para registrar o histórico.</small></div>
                 <div>
                   {manualPending.whatsappUrl&&<button className="secondary" type="button" onClick={()=>window.open(manualPending.whatsappUrl||"","_blank","noopener,noreferrer")}>Abrir WhatsApp</button>}
                   <button className="primary" type="button" onClick={()=>void finishManualDelivery("confirm")} disabled={deliveryBusy}>Confirmar envio</button>
