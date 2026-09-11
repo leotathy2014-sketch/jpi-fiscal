@@ -320,7 +320,7 @@ export async function POST(request:NextRequest){
     return json({ok:true,syncYears,syncUnits,message:`Espelho SWeduc salvo: anos ${syncYears.join(", ")} · unidades ${syncUnits.join(", ")}.`});
   }
   if(action==="lookup"){
-    const rawYear=Number(body.academicYear||0);const search=String(body.search||"").trim();const course=String(body.course||"").trim();const serie=String(body.serie||"").trim();const turma=String(body.turma||"").trim();const page=Math.max(1,Math.min(Number(body.page||1),100));const pageSize=80;const from=(page-1)*pageSize;const to=from+pageSize-1;
+    const rawYear=Number(body.academicYear||0);const search=String(body.search||"").trim();const course=String(body.course||"").trim();const serie=String(body.serie||"").trim();const turma=String(body.turma||"").trim();const page=Math.max(1,Math.min(Number(body.page||1),100));const requestedPageSize=Number(body.pageSize||80);const pageSize=Number.isSafeInteger(requestedPageSize)?Math.max(25,Math.min(requestedPageSize,500)):80;const from=(page-1)*pageSize;const to=from+pageSize-1;const mirrorOnly=body.mirrorOnly===true;
     const {data:mirrorConfig}=await auth.supabase.from("sweduc_config").select("unidades_sincronizacao").eq("id",true).maybeSingle();
     const syncUnits=sanitizeSyncUnits(mirrorConfig?.unidades_sincronizacao);
     let query=auth.supabase.from("sweduc_alunos").select("matricula_id,aluno_id,nome,data_nascimento,numero_aluno,numero_matricula,status,unidade,curso,serie,turma,ano_letivo,responsaveis,financeiro,dados_origem,sincronizado_em",{count:"exact"}).in("unidade",syncUnits);
@@ -353,7 +353,7 @@ export async function POST(request:NextRequest){
       rows=((broadResult.data||[]) as Array<Record<string,unknown>>).filter(row=>matchesSearch(row,search)).slice(from,to+1);
       if(rows.length)return json({ok:true,students:rows,page,lastPage:1,nextPage:null,totalAvailable:rows.length,message:`Consulta local encontrou ${rows.length} matrícula(s) ignorando acentos e caracteres especiais. Nada foi salvo no cadastro fiscal.`});
     }
-    if(rows.length||(!search&&!course&&!serie&&!turma&&mirrorTotal>0))return json({ok:true,students:rows,page,lastPage:Math.max(1,Math.ceil(totalLocal/pageSize)),nextPage:to+1<totalLocal?page+1:null,totalAvailable:totalLocal,message:rows.length?`Consulta local concluída com ${totalLocal} matrícula(s) encontrada(s). Nada foi salvo no cadastro fiscal.`:"Nenhum aluno encontrado no espelho SWeduc para estes filtros."});
+    if(rows.length||mirrorOnly||(!search&&!course&&!serie&&!turma&&mirrorTotal>0))return json({ok:true,students:rows,page,lastPage:Math.max(1,Math.ceil(totalLocal/pageSize)),nextPage:to+1<totalLocal?page+1:null,totalAvailable:totalLocal,message:rows.length?`Consulta rápida no espelho SWeduc concluída com ${totalLocal} matrícula(s) encontrada(s). Nada foi salvo no cadastro fiscal.`:"Nenhum aluno encontrado no espelho SWeduc para estes filtros. Atualize o espelho nas Configurações se esta turma ainda não apareceu."});
     let activeCredentials:SweducCredentials|undefined;let activeAccessToken="";
     try{
       const creds=await credentials(auth.supabase);activeCredentials=creds;const resolved=await resolveSweducAcademicYear(creds.host,Number.isSafeInteger(rawYear)&&rawYear>1900?rawYear:undefined);const activeYear=resolved.selected;const token=await createSweducAccessToken(creds);activeAccessToken=token.accessToken;

@@ -124,7 +124,7 @@ export function SweducOperationalPicker({onStudentReady}:{onStudentReady:(studen
     try{
       const accessToken=await token();
       while(page<=1000){
-        const response=await authenticatedFetch("/api/integrations/sweduc",{method:"POST",headers:{Authorization:`Bearer ${accessToken}`,"Content-Type":"application/json"},body:JSON.stringify({action:"lookup",page,academicYear:activeYear,search:term,course:yearOverride?"":courseFilter,serie:yearOverride?"":serieFilter,turma:yearOverride?"":turmaFilter}),cache:"no-store"});
+        const response=await authenticatedFetch("/api/integrations/sweduc",{method:"POST",headers:{Authorization:`Bearer ${accessToken}`,"Content-Type":"application/json"},body:JSON.stringify({action:"lookup",page,pageSize:500,mirrorOnly:true,academicYear:activeYear,search:term,course:yearOverride?"":courseFilter,serie:yearOverride?"":serieFilter,turma:yearOverride?"":turmaFilter}),cache:"no-store"});
         const data=await response.json().catch(()=>({})) as {students?:SweducStudent[];nextPage?:number|null;lastPage?:number;academicYear?:number;totalAvailable?:number;error?:string;message?:string};
         if(!response.ok)throw new Error(data.error||"Não foi possível consultar a SWeduc.");
         const loaded=data.students||[];total+=loaded.length;setStudents(current=>sortStudents([...current,...loaded]));
