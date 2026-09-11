@@ -1116,7 +1116,11 @@ export function IssuanceAssistant({onNavigate}:{onNavigate:(page:AppPage)=>void}
 
           {selectedCanceled&&<section className="assistant-warning-box">
             <CircleAlert/>
-            <div><strong>NFS-e cancelada</strong><span>Esta chave fica guardada apenas no histórico. Para enviar novamente ao responsável, emita uma nova NFS-e para esta mensalidade.</span></div>
+            <div>
+              <strong>NFS-e cancelada</strong>
+              <span>Esta chave fica guardada apenas no histórico. Para enviar novamente ao responsável, emita uma nova NFS-e para esta mensalidade.</span>
+              <button className="primary compact-button" type="button" onClick={openOfficialHomologation}><Send size={16}/>Emitir nova NFS-e</button>
+            </div>
           </section>}
 
           {effectiveCurrent===7&&selected&&selectedActiveNfse&&<section className="assistant-sefin-result">
