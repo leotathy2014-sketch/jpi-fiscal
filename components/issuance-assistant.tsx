@@ -396,6 +396,7 @@ export function IssuanceAssistant({onNavigate}:{onNavigate:(page:AppPage)=>void}
   const effectiveCurrent=currentIndex<0?8:currentIndex;
   const nextTitle=newEmissionOpen
     ?selectedStudent?"Criar mensalidade e iniciar nota":"Selecionar aluno cadastrado"
+    :selectedCanceled?"Emitir nova NFS-e"
     :selected?[
       "Aluno selecionado",
       "Mensalidade criada",
@@ -1114,15 +1115,6 @@ export function IssuanceAssistant({onNavigate}:{onNavigate:(page:AppPage)=>void}
             </div>
           </section>}
 
-          {selectedCanceled&&<section className="assistant-warning-box">
-            <CircleAlert/>
-            <div>
-              <strong>NFS-e cancelada</strong>
-              <span>Esta chave fica guardada apenas no histórico. Para enviar novamente ao responsável, emita uma nova NFS-e para esta mensalidade.</span>
-              <button className="primary compact-button" type="button" onClick={openOfficialHomologation}><Send size={16}/>Emitir nova NFS-e</button>
-            </div>
-          </section>}
-
           {effectiveCurrent===7&&selected&&selectedActiveNfse&&<section className="assistant-sefin-result">
             <Check size={22}/>
             <div><span>HOMOLOGAÇÃO CONCLUÍDA</span><h3>NFS-e de teste confirmada pela SEFIN</h3><p>Chave: <strong>{selected.chave_nfse_homologacao}</strong></p>{selected.homologacao_emitida_em&&<small>Processada em {new Date(selected.homologacao_emitida_em).toLocaleString("pt-BR")}</small>}</div>
@@ -1230,7 +1222,7 @@ export function IssuanceAssistant({onNavigate}:{onNavigate:(page:AppPage)=>void}
           {!canPrepare&&effectiveCurrent>=2&&effectiveCurrent<8&&<div className="notice compact"><ShieldCheck/><span>Seu perfil pode acompanhar o processo, mas não possui permissão para preparar a NFS-e.</span></div>}
           {effectiveCurrent<8&&<div className="assistant-actions">
             <button className="primary assistant-main-action" onClick={continueProcess} disabled={Boolean(busyAction)||(!canPrepare&&effectiveCurrent>=2&&effectiveCurrent<8)}>
-              {busyAction==="validate"?"Validando…":busyAction==="save-dps"?"Salvando DPS…":busyAction==="approve"?"Aprovando…":busyAction==="xml"?"Gerando XML…":effectiveCurrent===2&&missing.length?"Corrigir cadastro":effectiveCurrent===2?"Validar nota":effectiveCurrent===3?"Salvar DPS e ver prévia":effectiveCurrent===4?"Aprovar prévia":effectiveCurrent===5?"Gerar e validar XML":effectiveCurrent===6?"Abrir homologação NFS-e":effectiveCurrent>=8?"Ir para envio":"Continuar processo"} <ChevronRight size={18}/>
+              {busyAction==="validate"?"Validando…":busyAction==="save-dps"?"Salvando DPS…":busyAction==="approve"?"Aprovando…":busyAction==="xml"?"Gerando XML…":selectedCanceled&&effectiveCurrent===6?"Emitir nova NFS-e":effectiveCurrent===2&&missing.length?"Corrigir cadastro":effectiveCurrent===2?"Validar nota":effectiveCurrent===3?"Salvar DPS e ver prévia":effectiveCurrent===4?"Aprovar prévia":effectiveCurrent===5?"Gerar e validar XML":effectiveCurrent===6?"Abrir homologação NFS-e":effectiveCurrent>=8?"Ir para envio":"Continuar processo"} <ChevronRight size={18}/>
             </button>
             <button className="secondary" type="button" onClick={()=>focusAndNavigate("Alunos e Responsáveis")} disabled={Boolean(busyAction)}><Settings size={17}/>Alterar cadastro/e-mail</button>
             {effectiveCurrent<=2&&selected.alunos?.sweduc_matricula_id&&<button className="secondary" type="button" onClick={()=>void openResponsibleSwitch()} disabled={Boolean(responsibleSwitchBusy)||!canPrepare}><UsersRound size={17}/>Trocar responsável</button>}
