@@ -225,7 +225,7 @@ function createPdf(data:DanfseData){
   top+=35;
 
   sectionTitle("Informações complementares",top);top+=20;
-  wrap("Documento gerado exclusivamente para conferência interna a partir do XML autorizado no ambiente de produção restrita. Sem validade fiscal ou jurídica.",105,3).forEach((entry,index)=>write(entry,MARGIN+5,top+index*9,{size:7}));
+  wrap("Documento auxiliar gerado pelo JPI Fiscal a partir do XML autorizado pela SEFIN Nacional. Confira a autenticidade no Portal Nacional da NFS-e.",105,3).forEach((entry,index)=>write(entry,MARGIN+5,top+index*9,{size:7}));
   top+=34;
   write("Consulta pública:",MARGIN+5,top,{bold:true,size:6});
   wrap(`https://www.nfse.gov.br/ConsultaPublica/?tpc=1&chave=${data.key}`,112,2).forEach((entry,index)=>write(entry,MARGIN+5,top+9+index*8,{size:7}));

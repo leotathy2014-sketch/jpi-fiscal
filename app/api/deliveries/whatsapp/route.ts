@@ -13,8 +13,8 @@ const brazilPhonePattern=/^55[1-9][0-9]{9,10}$/;
 const json=(body:Record<string,unknown>,status=200)=>NextResponse.json(body,{status,headers:{"Cache-Control":"no-store"}});
 const digits=(value:string)=>value.replace(/\D/g,"");
 const normalizeBrazilPhone=(value:string)=>{const phone=digits(value);return phone.length===10||phone.length===11?`55${phone}`:phone};
-const safeXmlFilename=(key:string)=>`nfse-homologacao-${key.replace(/[^a-z0-9]/gi,"").slice(0,60)||"documento"}.xml`;
-const safePdfFilename=(key:string)=>`danfse-homologacao-${key.replace(/[^a-z0-9]/gi,"").slice(0,60)||"documento"}.pdf`;
+const safeXmlFilename=(key:string)=>`nfse-${key.replace(/[^a-z0-9]/gi,"").slice(0,60)||"documento"}.xml`;
+const safePdfFilename=(key:string)=>`danfse-${key.replace(/[^a-z0-9]/gi,"").slice(0,60)||"documento"}.pdf`;
 const maskPhone=(value:string)=>value.length>=12?`+${value.slice(0,2)} (${value.slice(2,4)}) •••••-${value.slice(-4)}`:"Número interno configurado";
 
 type WhatsAppConfig={whatsapp_phone_number_id:string|null;whatsapp_business_account_id:string|null;whatsapp_sender_number:string|null;whatsapp_template_name:string;whatsapp_test_recipient:string|null;whatsapp_token_configurado:boolean;whatsapp_ultimo_status:string};
@@ -76,13 +76,13 @@ export async function POST(request:NextRequest){
   ]);
   const payment=paymentResult.data as unknown as PaymentSource|null;const document=documentResult.data as DocumentSource|null;const config=configResult.config;
   if(paymentResult.error||!payment)return json({error:"Mensalidade não encontrada."},404);
-  if(documentResult.error||!document)return json({error:"A versão ativa da NFS-e de teste não foi encontrada."},404);
+  if(documentResult.error||!document)return json({error:"A versão ativa da NFS-e não foi encontrada."},404);
   if(configResult.error||!config)return json({error:"Não foi possível carregar a configuração segura do WhatsApp."},503);
   const intendedRecipient=normalizeBrazilPhone(payment.alunos?.whatsapp||"");
   if(!brazilPhonePattern.test(intendedRecipient))return json({error:"O responsável não possui um WhatsApp brasileiro válido no cadastro."},400);
   if(!config.whatsapp_token_configurado||config.whatsapp_ultimo_status!=="conectado"||!config.whatsapp_phone_number_id)return json({error:"A integração do WhatsApp precisa estar configurada e testada antes das entregas."},400);
 
-  const subject=`TESTE — NFS-e de homologação · ${payment.alunos?.nome||"Aluno"} · ${payment.competencia}`;
+  const subject=`NFS-e · ${payment.alunos?.nome||"Aluno"} · ${payment.competencia}`;
   const insertResult=await auth.supabase.from("nfse_entregas").insert({mensalidade_id:monthlyId,documento_homologacao_id:documentId,request_id:requestId,canal:"whatsapp",ambiente:"homologacao",destinatario_pretendido:intendedRecipient,destinatario_utilizado:intendedRecipient,assunto:subject,status:"enviando",created_by:auth.user.id,updated_at:new Date().toISOString()}).select("id").single();
   if(insertResult.error){
     if(insertResult.error.code==="23505")return json({error:"Esta nota já possui um envio pelo WhatsApp em andamento. Aguarde a conclusão."},409);
@@ -113,7 +113,7 @@ export async function POST(request:NextRequest){
     const providerMessageId=messageResult.messages?.[0]?.id;if(!messageResponse.ok||!providerMessageId)throw new Error(messageResult.error?.message||"A Meta não confirmou a mensagem.");
     const sentAt=new Date().toISOString();const updateResult=await auth.supabase.from("nfse_entregas").update({status:"enviado",provider_message_id:providerMessageId,erro_mensagem:null,enviado_em:sentAt,updated_at:sentAt}).eq("id",deliveryId).select("id").maybeSingle();
     if(updateResult.error||!updateResult.data)return json({error:"A mensagem foi aceita pela Meta, mas o histórico ainda precisa ser conferido.",sent:true},500);
-    return json({ok:true,status:"enviado",sentAt,actualRecipient:maskPhone(intendedRecipient),intendedRecipient,message:"NFS-e de homologação enviada ao WhatsApp do responsável com PDF e link privado do XML."});
+    return json({ok:true,status:"enviado",sentAt,actualRecipient:maskPhone(intendedRecipient),intendedRecipient,message:"NFS-e enviada ao WhatsApp do responsável com PDF e link privado do XML."});
   }catch(error){
     const safeError=safeDeliveryError(error);await auth.supabase.from("nfse_entregas").update({status:"erro",erro_mensagem:safeError,updated_at:new Date().toISOString()}).eq("id",deliveryId);
     return json({error:safeError},400);

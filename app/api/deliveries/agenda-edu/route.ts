@@ -72,7 +72,7 @@ export async function POST(request:NextRequest){
   ]);
   const payment=paymentResult.data as unknown as PaymentSource|null;const document=documentResult.data as DocumentSource|null;
   if(paymentResult.error||!payment)return json({error:"Mensalidade não encontrada."},404);
-  if(documentResult.error||!document)return json({error:"A versão ativa da NFS-e de teste não foi encontrada."},404);
+  if(documentResult.error||!document)return json({error:"A versão ativa da NFS-e não foi encontrada."},404);
 
   const subject=`NFS-e · ${payment.alunos?.nome||"Aluno"} · ${payment.competencia}`;
   const usedRecipient=`agenda:producao:student:manual-${monthlyId}`;

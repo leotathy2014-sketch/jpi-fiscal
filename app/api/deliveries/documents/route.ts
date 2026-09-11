@@ -39,7 +39,7 @@ export async function GET(request:NextRequest){
   const selectedFormat=format as "pdf"|"xml";const selectedDisposition=disposition as "inline"|"attachment";
   const {data,error}=await auth.supabase.from("nfse_documentos_homologacao").select("id,chave_acesso,nfse_xml_path,estado").eq("id",documentId).maybeSingle();
   const document=data as DocumentSource|null;
-  if(error||!document)return json({error:"A NFS-e de homologação não foi encontrada."},404);
+  if(error||!document)return json({error:"A NFS-e não foi encontrada."},404);
   const {data:xmlBlob,error:xmlError}=await auth.supabase.storage.from(XML_BUCKET).download(document.nfse_xml_path);
   if(xmlError||!xmlBlob)return json({error:"O XML armazenado não pôde ser recuperado."},404);
   const xmlBuffer=Buffer.from(await xmlBlob.arrayBuffer());

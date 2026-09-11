@@ -52,7 +52,7 @@ function manualMessage(payment:PaymentSource,protectedUrl:string,template:string
   };
   const source=(template||DEFAULT_MANUAL_MESSAGE).trim();
   const body=source.replace(/\{(responsavel|aluno|competencia|valor|link)\}/g,(_match,key:string)=>values[key]||"");
-  return ["TESTE DE HOMOLOGAÇÃO — SEM VALIDADE FISCAL","",body].join("\n");
+  return body;
 }
 
 export async function GET(request:NextRequest){
@@ -104,13 +104,13 @@ export async function POST(request:NextRequest){
   ]);
   const payment=paymentResult.data as unknown as PaymentSource|null;const document=documentResult.data as DocumentSource|null;const config=configResult.config;const sender=senderResult.data as ManualSender|null;
   if(paymentResult.error||!payment)return json({error:"Mensalidade não encontrada."},404);
-  if(documentResult.error||!document)return json({error:"A versão ativa da NFS-e de teste não foi encontrada."},404);
+  if(documentResult.error||!document)return json({error:"A versão ativa da NFS-e não foi encontrada."},404);
   if(configResult.error||!config)return json({error:"Não foi possível carregar a configuração segura do WhatsApp."},503);
   if(senderResult.error||!sender)return json({error:"O número remetente escolhido não está disponível. Atualize a lista e escolha outro."},400);
   const intendedRecipient=normalizeBrazilPhone(payment.alunos?.whatsapp||"");
   if(!brazilPhonePattern.test(intendedRecipient))return json({error:"O responsável não possui um WhatsApp brasileiro válido no cadastro."},400);
 
-  const subject=`TESTE — NFS-e de homologação · ${payment.alunos?.nome||"Aluno"} · ${payment.competencia}`;
+  const subject=`NFS-e · ${payment.alunos?.nome||"Aluno"} · ${payment.competencia}`;
   const insert=await auth.supabase.from("nfse_entregas").insert({mensalidade_id:monthlyId,documento_homologacao_id:documentId,request_id:requestId,canal:"whatsapp_manual",ambiente:"homologacao",destinatario_pretendido:intendedRecipient,destinatario_utilizado:intendedRecipient,assunto:subject,status:"enviando",created_by:auth.user.id,aberto_por:auth.user.id,aberto_por_nome:auth.auditName,whatsapp_sender_id:sender.id,whatsapp_sender_nome:sender.nome,whatsapp_sender_numero:sender.numero,updated_at:new Date().toISOString()}).select("id").single();
   if(insert.error){
     if(insert.error.code==="23505")return json({error:"Esta nota já está aberta para envio em outro computador. Conclua ou cancele a tentativa atual."},409);
