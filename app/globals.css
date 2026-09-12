@@ -1073,3 +1073,36 @@
 .lgpd-proof{display:grid;gap:4px}.lgpd-proof span{font-size:11px;color:var(--muted)}.lgpd-agent{max-width:330px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .students-directory-panel{margin-top:16px}.students-directory-panel .panel-title{align-items:center;margin-bottom:14px}.students-loading{padding:18px;border:1px dashed #cbd7e6;border-radius:12px;background:#f8fbff;color:#607086;font-weight:800}.students-directory-table table{min-width:1050px}.students-directory-table td{vertical-align:top}
 @media(max-width:760px){.lgpd-card{padding:20px;border-radius:18px}.lgpd-header h2{font-size:20px}.lgpd-audit-summary{grid-template-columns:1fr}}
+/* Compact assistant layout: retain readable controls on narrow screens. */
+@media(max-width:760px){
+ .issuance-assistant-page{gap:10px;min-width:0}
+ .issuance-assistant-page .panel{padding:12px;min-width:0}
+ .issuance-assistant-page .assistant-action-panel{scroll-margin-top:80px}
+ .issuance-assistant-page .assistant-current-head{display:flex;flex-wrap:wrap;gap:6px;padding-bottom:8px}
+ .issuance-assistant-page .assistant-current-head>div{flex:1 1 210px;min-width:0}
+ .issuance-assistant-page .assistant-current-head h2{font-size:18px;line-height:1.2;margin:3px 0}
+ .issuance-assistant-page .assistant-current-head p{font-size:12px;line-height:1.35;overflow-wrap:anywhere}
+ .issuance-assistant-page .assistant-current-badge{font-size:12px;padding:5px 8px;align-self:flex-start}
+ .issuance-assistant-page .assistant-progress-panel{padding:8px;margin-top:8px;gap:6px}
+ .issuance-assistant-page .assistant-progress-head>div{flex-wrap:wrap;gap:4px 8px}
+ .issuance-assistant-page .assistant-progress-head small{white-space:normal;font-size:12px;line-height:1.3}
+ .issuance-assistant-page .assistant-stepper{grid-template-columns:repeat(9,minmax(0,1fr));gap:3px;overflow:visible;padding:0}
+ .issuance-assistant-page .assistant-stepper .assistant-step{min-width:0;padding:4px 0;justify-content:center;border-radius:7px}
+ .issuance-assistant-page .assistant-stepper .assistant-step>div,
+ .issuance-assistant-page .assistant-step-arrow{display:none}
+ .issuance-assistant-page .assistant-stepper .assistant-step-number{width:22px;height:22px;font-size:12px}
+ .issuance-assistant-page .assistant-summary{gap:6px;margin:8px 0}
+ .issuance-assistant-page .assistant-summary>div{padding:8px;gap:3px}
+ .issuance-assistant-page .assistant-summary>div>span{display:none}
+ .issuance-assistant-page .assistant-summary small{font-size:12px}
+ .issuance-assistant-page .assistant-summary strong{font-size:14px;white-space:normal;overflow-wrap:anywhere}
+ .issuance-assistant-page .assistant-next-card,
+ .issuance-assistant-page .assistant-warning-box{min-height:0;margin-top:8px;padding:9px;gap:8px}
+ .issuance-assistant-page .assistant-next-card>svg{width:20px;height:20px}
+ .issuance-assistant-page .assistant-next-card strong{font-size:14px}
+ .issuance-assistant-page .assistant-next-card span{font-size:12px;line-height:1.35}
+ .issuance-assistant-page .assistant-actions{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px;margin-top:10px}
+ .issuance-assistant-page .assistant-actions>button{width:100%;min-width:0;min-height:44px;height:auto;padding:8px;font-size:14px;line-height:1.25;white-space:normal;overflow-wrap:anywhere}
+ .issuance-assistant-page .assistant-actions>button>svg{width:16px;height:16px;flex:none}
+ .issuance-assistant-page input,.issuance-assistant-page select{min-width:0;max-width:100%;font-size:16px}
+}
