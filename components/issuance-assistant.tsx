@@ -895,6 +895,27 @@ export function IssuanceAssistant({onNavigate}:{onNavigate:(page:AppPage)=>void}
     setMessage("Escolha outro aluno para preparar a emissão.");
   }
 
+  function cancelPreparation(){
+    if(busyAction||responsibleSwitchBusy||deliveryBusy)return;
+    if(!newEmissionOpen&&(!selected||effectiveCurrent>2||selectedActiveNfse))return;
+    if(!window.confirm("Cancelar a preparação e voltar ao início? Os campos serão limpos. Cadastros e mensalidades já salvos serão preservados; nenhuma nota será emitida."))return;
+    sessionStorage.removeItem("jpi-assistant-prepared-sweduc-student");
+    sessionStorage.removeItem("jpi-assistant-student-focus");
+    sessionStorage.removeItem("jpi-assistant-resume-after-student-edit");
+    localStorage.removeItem("jpi-issuance-assistant-payment");
+    setSelectedId(null);
+    setResumePaymentId(null);
+    setNewSweducDueDate("");
+    setDraftCompetence("");
+    setDraftValue("");
+    setDraftDescription("");
+    setFiscalContext(null);
+    setResponsibleSwitchOpen(false);
+    setResponsibleSwitchOptions([]);
+    startNewEmission();
+    setMessage("Preparação cancelada. Selecione um aluno para começar do zero. Os registros já salvos foram preservados.");
+  }
+
   function continueProcess(){
     if(newEmissionOpen){void createPaymentFromStudent();return}
     if(!selected)return;
@@ -964,6 +985,7 @@ export function IssuanceAssistant({onNavigate}:{onNavigate:(page:AppPage)=>void}
             <div className="assistant-actions">
               <button className="primary assistant-main-action" onClick={continueProcess} disabled={Boolean(busyAction)||!canCreatePayment}>{busyAction==="create-payment"?"Criando mensalidade…":"Criar mensalidade e iniciar nota"} <ChevronRight size={18}/></button>
               <button className="secondary" onClick={resetPreparedStudent}>Trocar aluno</button>
+              <button className="secondary" type="button" style={{color:"#b42318",borderColor:"#efcaca"}} onClick={cancelPreparation} disabled={Boolean(busyAction)||Boolean(responsibleSwitchBusy)||deliveryBusy}>Cancelar processo</button>
             </div>
           </>
         </div>}
@@ -1224,6 +1246,7 @@ export function IssuanceAssistant({onNavigate}:{onNavigate:(page:AppPage)=>void}
             <button className="primary assistant-main-action" onClick={continueProcess} disabled={Boolean(busyAction)||(!canPrepare&&effectiveCurrent>=2&&effectiveCurrent<8)}>
               {busyAction==="validate"?"Validando…":busyAction==="save-dps"?"Salvando DPS…":busyAction==="approve"?"Aprovando…":busyAction==="xml"?"Gerando XML…":selectedCanceled&&effectiveCurrent===6?"Emitir nova NFS-e":effectiveCurrent===2&&missing.length?"Corrigir cadastro":effectiveCurrent===2?"Validar nota":effectiveCurrent===3?"Salvar DPS e ver prévia":effectiveCurrent===4?"Aprovar prévia":effectiveCurrent===5?"Gerar e validar XML":effectiveCurrent===6?"Abrir homologação NFS-e":effectiveCurrent>=8?"Ir para envio":"Continuar processo"} <ChevronRight size={18}/>
             </button>
+            {effectiveCurrent<=2&&!selectedActiveNfse&&<button className="secondary" type="button" style={{color:"#b42318",borderColor:"#efcaca"}} onClick={cancelPreparation} disabled={Boolean(busyAction)||Boolean(responsibleSwitchBusy)||deliveryBusy}>Cancelar processo</button>}
             <button className="secondary" type="button" onClick={()=>focusAndNavigate("Alunos e Responsáveis")} disabled={Boolean(busyAction)}><Settings size={17}/>Alterar cadastro/e-mail</button>
             {effectiveCurrent<=2&&selected.alunos?.sweduc_matricula_id&&<button className="secondary" type="button" onClick={()=>void openResponsibleSwitch()} disabled={Boolean(responsibleSwitchBusy)||!canPrepare}><UsersRound size={17}/>Trocar responsável</button>}
             {effectiveCurrent>2&&effectiveCurrent<8&&<button className="secondary" onClick={()=>effectiveCurrent===6?openOfficialHomologation():focusAndNavigate("NFS-e")}>{effectiveCurrent===6?"Abrir homologação oficial":"Abrir NFS-e atual"}</button>}
