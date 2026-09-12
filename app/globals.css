@@ -1019,6 +1019,34 @@
  .sweduc-year-toolbar,.sweduc-selection-grid,.sweduc-filter-row,.sweduc-search-row{grid-template-columns:1fr}
  .sweduc-import-panel{position:static}
 }
+@media(max-width:760px){
+ .sweduc-operational-picker{align-items:flex-start}
+ .sweduc-operational-picker>svg{display:none}
+ .sweduc-operational-picker>div{width:100%;min-width:0}
+ .sweduc-operational-picker .table-card{overflow:visible;border:0;background:transparent}
+ .sweduc-operational-picker .table-card table,.sweduc-operational-picker .table-card tbody{display:block;width:100%}
+ .sweduc-operational-picker .table-card thead{display:none}
+ .sweduc-operational-picker .table-card tbody>tr:not(.sweduc-responsible-row){display:grid;grid-template-columns:minmax(0,1fr) auto;gap:7px 12px;margin-bottom:10px;padding:13px;border:1px solid #d9e3ef;border-radius:12px;background:#fff;box-shadow:0 3px 10px rgba(20,38,61,.05)}
+ .sweduc-operational-picker .table-card tbody>tr:not(.sweduc-responsible-row)>td{display:block;width:auto!important;padding:0;border:0;white-space:normal;text-align:left!important;min-width:0}
+ .sweduc-operational-picker .table-card tbody>tr:not(.sweduc-responsible-row)>td:nth-child(3){grid-column:1/-1;grid-row:1}
+ .sweduc-operational-picker .table-card tbody>tr:not(.sweduc-responsible-row)>td:nth-child(3)>strong{font-size:14px;line-height:1.3;color:#17233a;white-space:normal;overflow:visible;text-overflow:clip}
+ .sweduc-operational-picker .table-card tbody>tr:not(.sweduc-responsible-row)>td:nth-child(3) .subcell{font-size:10.5px;white-space:normal;overflow:visible;text-overflow:clip}
+ .sweduc-operational-picker .table-card tbody>tr:not(.sweduc-responsible-row)>td:nth-child(2){grid-column:1;grid-row:2}
+ .sweduc-operational-picker .table-card tbody>tr:not(.sweduc-responsible-row)>td:nth-child(1){grid-column:2;grid-row:2;text-align:right!important}
+ .sweduc-operational-picker .table-card tbody>tr:not(.sweduc-responsible-row)>td:nth-child(4){grid-column:1/-1;grid-row:3}
+ .sweduc-operational-picker .table-card tbody>tr:not(.sweduc-responsible-row)>td:nth-child(5){grid-column:1;grid-row:4;align-self:center}
+ .sweduc-operational-picker .table-card tbody>tr:not(.sweduc-responsible-row)>td:nth-child(6){grid-column:2;grid-row:4;text-align:right!important}
+ .sweduc-operational-picker .table-card tbody>tr:not(.sweduc-responsible-row)>td:nth-child(1)::before,.sweduc-operational-picker .table-card tbody>tr:not(.sweduc-responsible-row)>td:nth-child(2)::before,.sweduc-operational-picker .table-card tbody>tr:not(.sweduc-responsible-row)>td:nth-child(4)::before,.sweduc-operational-picker .table-card tbody>tr:not(.sweduc-responsible-row)>td:nth-child(5)::before{display:block;margin-bottom:2px;color:#77869a;font-size:9px;font-weight:900;letter-spacing:.04em;text-transform:uppercase}
+ .sweduc-operational-picker .table-card tbody>tr:not(.sweduc-responsible-row)>td:nth-child(1)::before{content:"Ano letivo"}
+ .sweduc-operational-picker .table-card tbody>tr:not(.sweduc-responsible-row)>td:nth-child(2)::before{content:"Matrícula"}
+ .sweduc-operational-picker .table-card tbody>tr:not(.sweduc-responsible-row)>td:nth-child(4)::before{content:"Segmento / curso"}
+ .sweduc-operational-picker .table-card tbody>tr:not(.sweduc-responsible-row)>td:nth-child(5)::before{content:"Turma / série"}
+ .sweduc-operational-picker .table-card tbody>tr.selected-row{border-color:#7eb2ed;background:#eef6ff;box-shadow:0 0 0 2px rgba(20,102,223,.10)}
+ .sweduc-operational-picker .table-card tbody>tr.selected-row>td:first-child{box-shadow:none}
+ .sweduc-operational-picker .sweduc-responsible-row{display:block;margin:-4px 0 10px}
+ .sweduc-operational-picker .sweduc-responsible-row>td{display:block;width:100%!important;padding:10px!important;white-space:normal}
+ .sweduc-operational-picker .sweduc-select-student-button{min-width:92px}
+}
 @media(max-width:540px){
  .agenda-api-modal-title>span{width:40px;height:40px}
  .agenda-api-status-card{align-items:flex-start;flex-direction:column}
