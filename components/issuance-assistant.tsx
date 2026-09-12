@@ -948,7 +948,7 @@ export function IssuanceAssistant({onNavigate}:{onNavigate:(page:AppPage)=>void}
             <div className="assistant-dps-editor">
               <div className="assistant-edit-grid">
                 <label><span>Competência</span><input type="month" max={currentCompetenceInput()} value={newCompetence} onChange={e=>{const value=e.target.value;setNewCompetence(value);if(!newDescriptionEdited)setNewDescription(defaultServiceDescription(value,selectedStudent))}}/></label>
-                <label><span>Valor da mensalidade / NFS-e</span><input type="text" inputMode="numeric" placeholder="R$ 0,00" value={newValue} onChange={e=>setNewValue(currencyInput(e.target.value))}/></label>
+                <label><span style={{display:"flex",flexWrap:"wrap",alignItems:"baseline",gap:"6px 12px"}}>Valor da mensalidade / NFS-e<small id="monthly-value-reminder" style={{color:"#b42318",fontSize:"14px",fontWeight:700,lineHeight:1.4,textTransform:"none",letterSpacing:"normal"}}>Atenção: confira o valor e o status do pagamento antes de emitir a nota.</small></span><input type="text" inputMode="numeric" placeholder="R$ 0,00" aria-describedby="monthly-value-reminder" value={newValue} onChange={e=>setNewValue(currencyInput(e.target.value))}/></label>
                 <label><span>Vencimento SWeduc</span><input type="text" value={newSweducDueDate} onChange={e=>setNewSweducDueDate(e.target.value)} placeholder="Ex.: 10/01/2026"/></label>
               </div>
               <label><span>Status do pagamento</span><select value={newPaymentStatus} onChange={e=>setNewPaymentStatus(e.target.value)}><option value="Aberto">Pendente</option><option value="Pago">Pago</option></select></label>
