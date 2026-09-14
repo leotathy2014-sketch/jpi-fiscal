@@ -145,36 +145,13 @@ export async function getSweducStudentDetailsWithToken(host:string,accessToken:s
     });
   };
   const fetchFinancial=async()=>{
-    const baseQueries=[
-      `matricula_id=${matriculaId}`,
-      `id_matricula=${matriculaId}`,
-      `matricula=${matriculaId}`,
+    const paths=[
+      `/api/v2/alunos/financeiro?matricula_id=${matriculaId}`,
+      `/api/v2/alunos/financeiro?id_matricula=${matriculaId}`,
+      `/api/v2/financeiro?matricula_id=${matriculaId}`,
+      `/api/v2/financeiro/titulos?matricula_id=${matriculaId}`,
+      `/api/v2/titulos?matricula_id=${matriculaId}`,
     ];
-    const statusQueries=[
-      "",
-      "&status=todos",
-      "&status=all",
-      "&situacao=todos",
-      "&situacao=pagos",
-      "&situacao=pago",
-      "&situacao=baixados",
-      "&situacao=baixado",
-      "&situacao=liquidados",
-      "&situacao=liquidado",
-      "&baixados=true",
-      "&incluir_baixados=true",
-      "&incluir_pagos=true",
-      "&somente_abertos=false",
-    ];
-    const endpoints=[
-      "/api/v2/alunos/financeiro",
-      "/api/v2/financeiro",
-      "/api/v2/financeiro/titulos",
-      "/api/v2/titulos",
-      "/api/v2/contas-receber",
-      "/api/v2/receber/titulos",
-    ];
-    const paths=endpoints.flatMap(endpoint=>baseQueries.flatMap(query=>statusQueries.map(status=>`${endpoint}?${query}${status}`)));
     const collected:Array<Record<string,unknown>>=[];
     for(const path of paths){
       const response=await fetchImpl(`${base}${path}`,{headers,cache:"no-store",redirect:"error",signal:AbortSignal.timeout(SWEDUC_TIMEOUT_MS)}).catch(()=>null);

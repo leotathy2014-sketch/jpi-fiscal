@@ -74,8 +74,7 @@ const firstNestedText=(source:SweducResponsible|undefined,keys:Array<keyof Swedu
 const sweducResponsibleDocument=(responsible:SweducResponsible)=>responsible.cpf||responsible.cpf_cnpj||responsible.documento||"Documento não informado";
 const sweducResponsibleContact=(responsible:SweducResponsible)=>responsible.telefones?.[0]?.numero||responsible.telefones?.[0]?.telefone||responsible.emails?.[0]?.email||"Contato não informado";
 const isSweducTrueFlag=(value:unknown)=>value===true||value===1||String(value).trim().toLowerCase()==="1"||String(value).trim().toLowerCase()==="true"||String(value).trim().toLowerCase()==="sim";
-const hasSweducYesMarker=(text:string,label:string)=>new RegExp(`${label}\\s*\\?\\s*sim`,"i").test(text.normalize("NFD").replace(/[\u0300-\u036f]/g,"").toLocaleLowerCase("pt-BR"));
-const isSweducFinancialResponsible=(responsible:SweducResponsible)=>isSweducTrueFlag(responsible.responsavel_financeiro)||isSweducTrueFlag(responsible.financeiro)||isSweducTrueFlag(responsible.eh_financeiro)||hasSweducYesMarker(JSON.stringify(responsible),"responsavel financeiro")||hasSweducYesMarker(JSON.stringify(responsible),"segundo responsavel financeiro");
+const isSweducFinancialResponsible=(responsible:SweducResponsible)=>isSweducTrueFlag(responsible.responsavel_financeiro)||isSweducTrueFlag(responsible.financeiro)||isSweducTrueFlag(responsible.eh_financeiro);
 const sweducResponsibleRoleText=(responsible:SweducResponsible)=>`${responsible.parentesco||"Parentesco não informado"} · ${isSweducTrueFlag(responsible.responsavel_pedagogico)?"pedagógico":"não pedagógico"}`;
 const applySweducResponsible=(student:AssistantStudent,responsible:SweducResponsible,index:number):AssistantStudent=>{
   const responsavel=responsible.nome||"RESPONSÁVEL NÃO INFORMADO";
