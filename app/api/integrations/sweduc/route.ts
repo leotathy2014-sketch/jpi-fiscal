@@ -158,7 +158,11 @@ function defaultRecentYears(academicYears:{year:number}[],currentYear:number){
 }
 
 function normalizeSearchText(value:unknown){return String(value||"").normalize("NFD").replace(/[\u0300-\u036f]/g,"").replace(/[^\p{L}\p{N}\s]/gu," ").replace(/\s+/g," ").trim().toLocaleLowerCase("pt-BR")}
-function matchesSearch(row:Record<string,unknown>,term:string){const normalized=normalizeSearchText(term);if(!normalized)return true;return [row.nome,row.numero_matricula,row.matricula_id,row.turma,row.serie,row.curso].some(value=>normalizeSearchText(value).includes(normalized))}
+function responsibleSearchSource(row:Record<string,unknown>){
+  const responsaveis=Array.isArray(row.responsaveis)?row.responsaveis:[];
+  return responsaveis.flatMap(item=>item&&typeof item==="object"?Object.values(item as Record<string,unknown>).flatMap(value=>typeof value==="string"||typeof value==="number"||typeof value==="boolean"?[String(value)]:Array.isArray(value)?value.flatMap(entry=>entry&&typeof entry==="object"?Object.values(entry as Record<string,unknown>).map(String):[String(entry||"")]):[]):[]);
+}
+function matchesSearch(row:Record<string,unknown>,term:string){const normalized=normalizeSearchText(term);if(!normalized)return true;return [row.nome,row.numero_matricula,row.matricula_id,row.turma,row.serie,row.curso,row.ano_letivo,...responsibleSearchSource(row)].some(value=>normalizeSearchText(value).includes(normalized))}
 function looseAcademic(value:unknown){return normalizeAcademicReference(value).replace(/\bii\b/g,"2").replace(/\bi\b/g,"1").replace(/\b(matriz|filial|manha|tarde|noite)\b/g,"").replace(/\bm\b/g,"").replace(/\s+/g," ").trim()}
 function sameAcademic(value:unknown,expected:string){const current=looseAcademic(value);const wanted=looseAcademic(expected);return !wanted||Boolean(current)&&(current===wanted||current.includes(wanted)||wanted.includes(current))}
 function matchesAcademic(row:Record<string,unknown>,course:string,serie:string,turma:string){return sameAcademic(row.curso,course)&&sameAcademic(row.serie,serie)&&sameAcademic(row.turma,turma)}
