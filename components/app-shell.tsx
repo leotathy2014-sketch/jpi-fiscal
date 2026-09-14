@@ -1,11 +1,12 @@
 "use client";
 import { useEffect, useMemo, useState } from "react";
-import { BarChart3, BookOpen, GraduationCap, HelpCircle, KeyRound, LogOut, MailCheck, Menu, ReceiptText, RefreshCw, Search, Settings, Sparkles, WalletCards, X } from "lucide-react";
+import { BarChart3, BookOpen, FileText, GraduationCap, HelpCircle, KeyRound, LogOut, MailCheck, Menu, ReceiptText, RefreshCw, Search, Settings, Sparkles, WalletCards, X } from "lucide-react";
 import { SettingsPage } from "./pages";
 import { LiveDashboard, LiveStudents, LivePayments, LiveInvoices } from "./live-pages";
 import { HelpPage } from "./help-page";
 import { DeliveryCenter } from "./delivery-center";
 import { IssuanceAssistant } from "./issuance-assistant";
+import { DeclarationsPage } from "./declarations-page";
 import { createSupabaseBrowserClient } from "@/lib/supabase";
 import { authenticatedFetch } from "@/lib/authenticated-fetch";
 import { BrandLogo } from "./branding";
@@ -13,12 +14,13 @@ import { useAccess } from "./access";
 import { LgpdConsentGate } from "./lgpd-consent-gate";
 
 export type Role = "Master"|"Administrador"|"Financeiro"|"Secretaria"|"Consulta";
-export type AppPage = "Painel"|"Alunos e Responsáveis"|"Mensalidades"|"Assistente de emissão"|"NFS-e"|"Ajustes NFS-e"|"Enviar notas"|"Configurações"|"Ajuda";
+export type AppPage = "Painel"|"Alunos e Responsáveis"|"Mensalidades"|"Declarações"|"Assistente de emissão"|"NFS-e"|"Ajustes NFS-e"|"Enviar notas"|"Configurações"|"Ajuda";
 type SefinAvailability = "checking"|"available"|"unstable"|"unavailable"|"unknown"|"session";
 const nav: {name:AppPage; icon: typeof BarChart3; permissions:string[]}[] = [
  {name:"Painel",icon:BarChart3,permissions:["dashboard.view"]},
  {name:"Alunos e Responsáveis",icon:GraduationCap,permissions:["students.view"]},
  {name:"Mensalidades",icon:WalletCards,permissions:["payments.view"]},
+ {name:"Declarações",icon:FileText,permissions:["students.view","payments.view"]},
  {name:"Assistente de emissão",icon:Sparkles,permissions:["nfse.view"]},
  {name:"NFS-e",icon:ReceiptText,permissions:["nfse.view"]},
  {name:"Ajustes NFS-e",icon:RefreshCw,permissions:["nfse.view"]},
@@ -34,7 +36,7 @@ export function AppShell({email,accessToken,role,page,onPageChange,onSignOut}:{e
  const certificateDays=certificateExpiry?Math.ceil((new Date(`${certificateExpiry}T23:59:59`).getTime()-Date.now())/86400000):null;const certificateUrgent=certificateDays!==null&&certificateDays<=30;
  const sefinCopy=sefinStatus==="available"?{title:"SEFIN disponível",detail:productionEnabled?"Pronto e enviando":"API fiscal confirmada"}:sefinStatus==="unstable"?{title:"SEFIN com oscilação",detail:"Teste novamente antes de enviar"}:sefinStatus==="unavailable"?{title:"SEFIN indisponível",detail:"Falha confirmada da API"}:sefinStatus==="session"?{title:"Sessão expirada",detail:"Entre novamente"}:sefinStatus==="unknown"?{title:"SEFIN não confirmado",detail:"Nova verificação em andamento"}:{title:"SEFIN verificando",detail:"Consultando API de emissão"};
  const sefinTone=sefinStatus==="available"?"available":sefinStatus==="unstable"?"unstable":sefinStatus==="unavailable"||sefinStatus==="session"?"unavailable":sefinStatus==="unknown"?"unknown":"checking";
- const content = page==="Painel"?<LiveDashboard/>:page==="Alunos e Responsáveis"?<LiveStudents role={role} onNavigate={onPageChange}/>:page==="Mensalidades"?<LivePayments role={role}/>:page==="Assistente de emissão"?<IssuanceAssistant onNavigate={onPageChange}/>:page==="NFS-e"?<LiveInvoices role={role} onNavigate={onPageChange}/>:page==="Ajustes NFS-e"?<LiveInvoices role={role} onNavigate={onPageChange} adjustmentsOnly/>:page==="Enviar notas"?<DeliveryCenter role={role} accessToken={accessToken} onNavigate={onPageChange}/>:page==="Ajuda"?<HelpPage onNavigate={onPageChange}/>:<SettingsPage accessToken={accessToken} onNavigate={onPageChange}/>;
+ const content = page==="Painel"?<LiveDashboard/>:page==="Alunos e Responsáveis"?<LiveStudents role={role} onNavigate={onPageChange}/>:page==="Mensalidades"?<LivePayments role={role}/>:page==="Declarações"?<DeclarationsPage/>:page==="Assistente de emissão"?<IssuanceAssistant onNavigate={onPageChange}/>:page==="NFS-e"?<LiveInvoices role={role} onNavigate={onPageChange}/>:page==="Ajustes NFS-e"?<LiveInvoices role={role} onNavigate={onPageChange} adjustmentsOnly/>:page==="Enviar notas"?<DeliveryCenter role={role} accessToken={accessToken} onNavigate={onPageChange}/>:page==="Ajuda"?<HelpPage onNavigate={onPageChange}/>:<SettingsPage accessToken={accessToken} onNavigate={onPageChange}/>;
  return <div className="app-layout"><LgpdConsentGate accessToken={accessToken} role={role} email={email}/><aside className={open?"sidebar open":"sidebar"}>
   <div className="sidebar-head"><BrandLogo small/><div><strong>JPI Fiscal</strong><span>Gestão escolar</span></div><button className="close-mobile" onClick={()=>setOpen(false)}><X/></button></div>
   <nav><span className="nav-label">MENU PRINCIPAL</span>{visible.map(({name,icon:Icon})=><button key={name} className={page===name?"nav-item active":"nav-item"} onClick={()=>{onPageChange(name);setOpen(false)}}><Icon size={19}/>{name}</button>)}</nav>
