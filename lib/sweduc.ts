@@ -127,6 +127,40 @@ export async function getSweducStudentDetailsWithToken(host:string,accessToken:s
   const base=normalizeSweducHost(host);
   const headers={Accept:"application/json",Authorization:`Bearer ${accessToken}`};
   const attempts=[`matricula_id=${matriculaId}`,`id_matricula=${matriculaId}`,`matricula=${matriculaId}`];
+  const asRecords=(value:unknown)=>Array.isArray(value)?value.filter(item=>item&&typeof item==="object") as Array<Record<string,unknown>>:[];
+  const collectArrays=(source:unknown,keys:string[],depth=0):Array<Record<string,unknown>>=>{
+    if(!source||typeof source!=="object"||depth>4)return [];
+    const record=source as Record<string,unknown>;
+    const direct=keys.flatMap(key=>asRecords(record[key]));
+    const nested=Object.values(record).flatMap(value=>Array.isArray(value)?[]:collectArrays(value,keys,depth+1));
+    return [...direct,...nested];
+  };
+  const mergeRecords=(rows:Array<Record<string,unknown>>)=>{
+    const seen=new Set<string>();
+    return rows.filter(row=>{
+      const key=String(row.id??row.titulo_id??row.numero_titulo??row.codigo??JSON.stringify(row)).slice(0,400);
+      if(seen.has(key))return false;
+      seen.add(key);
+      return true;
+    });
+  };
+  const fetchFinancial=async()=>{
+    const paths=[
+      `/api/v2/alunos/financeiro?matricula_id=${matriculaId}`,
+      `/api/v2/alunos/financeiro?id_matricula=${matriculaId}`,
+      `/api/v2/financeiro?matricula_id=${matriculaId}`,
+      `/api/v2/financeiro/titulos?matricula_id=${matriculaId}`,
+      `/api/v2/titulos?matricula_id=${matriculaId}`,
+    ];
+    const collected:Array<Record<string,unknown>>=[];
+    for(const path of paths){
+      const response=await fetchImpl(`${base}${path}`,{headers,cache:"no-store",redirect:"error",signal:AbortSignal.timeout(SWEDUC_TIMEOUT_MS)}).catch(()=>null);
+      if(!response?.ok)continue;
+      const payload=await response.json().catch(()=>null) as unknown;
+      collected.push(...collectArrays(payload,["financeiro","titulos","títulos","titulos_financeiros","mensalidades","parcelas","contas_receber","cobrancas","cobranças","data"]));
+    }
+    return mergeRecords(collected);
+  };
   let lastError="";
   for(const query of attempts){
     const response=await fetchImpl(`${base}/api/v2/alunos/detalhes?${query}`,{headers,cache:"no-store",redirect:"error",signal:AbortSignal.timeout(SWEDUC_TIMEOUT_MS)});
@@ -141,7 +175,9 @@ export async function getSweducStudentDetailsWithToken(host:string,accessToken:s
       return [];
     };
     const detalhes=(result.detalhes&&typeof result.detalhes==="object"?result.detalhes:null)||(result.data&&typeof result.data==="object"?result.data:null)||result;
-    return {detalhes:detalhes as Record<string,unknown>,responsaveis:Array.isArray(nested("responsaveis"))?nested("responsaveis") as Array<Record<string,unknown>>:[],financeiro:Array.isArray(nested("financeiro"))?nested("financeiro") as Array<Record<string,unknown>>:[]};
+    const detalheFinanceiro=collectArrays(result,["financeiro","titulos","títulos","titulos_financeiros","mensalidades","parcelas","contas_receber","cobrancas","cobranças"]);
+    const extraFinanceiro=await fetchFinancial();
+    return {detalhes:detalhes as Record<string,unknown>,responsaveis:Array.isArray(nested("responsaveis"))?nested("responsaveis") as Array<Record<string,unknown>>:[],financeiro:mergeRecords([...detalheFinanceiro,...extraFinanceiro])};
   }
   throw new Error(lastError||"A SWeduc não permitiu consultar os detalhes da matrícula.");
 }

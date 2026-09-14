@@ -26,9 +26,9 @@ function titlesFromFinancial(student:SweducStudent):DeclarationTitle[]{
   const descricao=textOf(row,["descricao","descrição","titulo","título","nome","tipo","categoria","historico","histórico"])||`Título SWeduc ${index+1}`;
   const vencimento=textOf(row,["vencimento","data_vencimento","dt_vencimento","data","competencia","competência"]);
   const pagamento=textOf(row,["pagamento","data_pagamento","dt_pagamento","pago_em"]);
-  const status=textOf(row,["status","situacao","situação","estado"])||(pagamento?"Pago":"Aberto");
+  const status=textOf(row,["status","situacao","situação","estado","baixado","liquidado","recebido"])||(pagamento?"Pago":"Aberto");
   const competencia=competenceOf(textOf(row,["competencia","competência","referencia","referência","mes","mês"])||vencimento)||student.ano_letivo||"";
-  return {id:String(textOf(row,["id","titulo_id","título_id","codigo","código"])||`${student.matricula_id}-${index}`),descricao,competencia,vencimento:formatDate(vencimento),status,valor:numberOf(row,["valor_pago","valor","valor_total","valor_original","total","liquido","líquido"])};
+  return {id:String(textOf(row,["id","titulo_id","título_id","codigo","código","numero_titulo"])||`${student.matricula_id}-${index}`),descricao,competencia,vencimento:formatDate(vencimento),status,valor:numberOf(row,["valor_pago","valor_baixado","valor_recebido","valor_liquido","valor","valor_total","valor_original","total","liquido","líquido"])};
  });
 }
 
@@ -62,7 +62,7 @@ export function DeclarationsPage({accessToken}:{accessToken:string|null}){
  const titles=useMemo(()=>selected?titlesFromFinancial(selected):[],[selected]);
  useEffect(()=>{setSelectedTitles(new Set(titles.map(title=>title.id)));setValues(Object.fromEntries(titles.map(title=>[title.id,title.valor?money(title.valor):""])))},[titles]);
  const periods=useMemo(()=>Array.from(new Set(titles.map(title=>title.competencia).filter(Boolean))).sort().reverse(),[titles]);
- const visibleTitles=useMemo(()=>titles.filter(title=>{const normalized=title.status.toLocaleLowerCase("pt-BR");const matchesStatus=status==="todos"||(status==="pagos"&&(normalized.includes("pago")||normalized.includes("quitado")))||(status==="abertos"&&(normalized.includes("aberto")||normalized.includes("pendente")||normalized.includes("vencido")))||(status==="cancelados"&&normalized.includes("cancel"));return matchesStatus&&(!period||title.competencia===period)}),[period,status,titles]);
+ const visibleTitles=useMemo(()=>titles.filter(title=>{const normalized=title.status.normalize("NFD").replace(/[\u0300-\u036f]/g,"").toLocaleLowerCase("pt-BR");const matchesStatus=status==="todos"||(status==="pagos"&&(normalized.includes("pago")||normalized.includes("quitado")||normalized.includes("baixado")||normalized.includes("liquidado")||normalized.includes("recebido")))||(status==="abertos"&&(normalized.includes("aberto")||normalized.includes("pendente")||normalized.includes("vencido")))||(status==="cancelados"&&normalized.includes("cancel"));return matchesStatus&&(!period||title.competencia===period)}),[period,status,titles]);
  const includedTitles=visibleTitles.filter(title=>selectedTitles.has(title.id));
  const total=includedTitles.reduce((sum,title)=>sum+Number(values[title.id]?.replace(/[^\d,]/g,"").replace(",",".")||title.valor||0),0);
  const declarationTitle=kind==="debito"?"DECLARAÇÃO DE DÉBITOS EM ABERTO":kind==="quitacao"?"DECLARAÇÃO DE QUITAÇÃO":"DECLARAÇÃO DE MENSALIDADES PAGAS";
