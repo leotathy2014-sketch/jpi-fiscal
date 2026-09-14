@@ -12,6 +12,7 @@ type DeclarationTitle = { id:string; descricao:string; competencia:string; venci
 const money=(value:number)=>Number(value||0).toLocaleString("pt-BR",{style:"currency",currency:"BRL"});
 const textOf=(record:Record<string,unknown>,keys:string[])=>{for(const key of keys){const value=record[key];if(value!==undefined&&value!==null&&String(value).trim())return String(value).trim()}return ""};
 const numberOf=(record:Record<string,unknown>,keys:string[])=>{const raw=textOf(record,keys);if(!raw)return 0;const normalized=raw.replace(/[^\d,.-]/g,"").replace(/\.(?=\d{3}(?:\D|$))/g,"").replace(",",".");const value=Number(normalized);return Number.isFinite(value)?value:0};
+const titleValueOf=(record:Record<string,unknown>)=>numberOf(record,["valor_titulo","valorTítulo","valorTitulo","vl_titulo","vlr_titulo","valor_original","valorOriginal","valor_bruto","valorBruto","valor_mensalidade","valorMensalidade","valor_total","valorTotal","total","valor","Valor","VALOR"])||numberOf(record,["valor_pago","valor_baixado","valor_recebido","valor_liquido","valorLíquido","valorLiquido","liquido","líquido"]);
 const competenceOf=(value:string)=>{const match=value.match(/(\d{2})[/-](\d{4})|(\d{4})[/-](\d{2})/);if(!match)return "";return match[1]?`${match[1]}/${match[2]}`:`${match[4]}/${match[3]}`};
 const formatDate=(value:string)=>{if(!value)return "";const date=new Date(value);if(Number.isNaN(date.getTime()))return value;return date.toLocaleDateString("pt-BR",{timeZone:"America/Sao_Paulo"})};
 const isTrueFlag=(value:unknown)=>value===true||value===1||["true","sim","s","1"].includes(String(value||"").trim().toLocaleLowerCase("pt-BR"));
@@ -28,7 +29,7 @@ function titlesFromFinancial(student:SweducStudent):DeclarationTitle[]{
   const pagamento=textOf(row,["pagamento","data_pagamento","dt_pagamento","pago_em"]);
   const status=textOf(row,["status","situacao","situação","estado","baixado","liquidado","recebido"])||(pagamento?"Pago":"Aberto");
   const competencia=competenceOf(textOf(row,["competencia","competência","referencia","referência","mes","mês"])||vencimento)||student.ano_letivo||"";
-  return {id:String(textOf(row,["id","titulo_id","título_id","codigo","código","numero_titulo"])||`${student.matricula_id}-${index}`),descricao,competencia,vencimento:formatDate(vencimento),status,valor:numberOf(row,["valor_pago","valor_baixado","valor_recebido","valor_liquido","valor","valor_total","valor_original","total","liquido","líquido"])};
+  return {id:String(textOf(row,["id","titulo_id","título_id","codigo","código","numero_titulo"])||`${student.matricula_id}-${index}`),descricao,competencia,vencimento:formatDate(vencimento),status,valor:titleValueOf(row)};
  });
 }
 
