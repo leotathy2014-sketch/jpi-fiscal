@@ -16,6 +16,7 @@ const titleValueOf=(record:Record<string,unknown>)=>numberOf(record,["valor_titu
 const competenceOf=(value:string)=>{const match=value.match(/(\d{2})[/-](\d{4})|(\d{4})[/-](\d{2})/);if(!match)return "";return match[1]?`${match[1]}/${match[2]}`:`${match[4]}/${match[3]}`};
 const formatDate=(value:string)=>{if(!value)return "";const date=new Date(value);if(Number.isNaN(date.getTime()))return value;return date.toLocaleDateString("pt-BR",{timeZone:"America/Sao_Paulo"})};
 const isTrueFlag=(value:unknown)=>value===true||value===1||["true","sim","s","1"].includes(String(value||"").trim().toLocaleLowerCase("pt-BR"));
+const titleStatusOf=(row:Record<string,unknown>)=>{const explicit=textOf(row,["status","situacao","situação","estado"]);if(explicit)return explicit;if(["baixado","liquidado","recebido","pago","quitado"].some(key=>isTrueFlag(row[key])))return "Pago/Baixado";return textOf(row,["pagamento","data_pagamento","dt_pagamento","pago_em","data_baixa","baixado_em"])?"Pago/Baixado":"Aberto"};
 const isFinancialResponsible=(responsible:SweducResponsible)=>isTrueFlag(responsible.responsavel_financeiro)||isTrueFlag(responsible.financeiro)||isTrueFlag(responsible.eh_financeiro);
 const responsibleName=(responsible?:SweducResponsible|null)=>responsible?textOf(responsible,["nome","nome_completo","responsavel","responsável","nome_responsavel","nomeResponsavel","name","razao_social","razão_social"])||"Responsável não informado":"Responsável não informado";
 const responsibleDocument=(responsible?:SweducResponsible|null)=>responsible?textOf(responsible,["cpf_cnpj","cpf","cnpj","documento","numero_documento","document","doc"])||"Documento não informado":"Documento não informado";
@@ -25,8 +26,7 @@ function titlesFromFinancial(student:SweducStudent):DeclarationTitle[]{
  const rows=Array.isArray(student.financeiro)?student.financeiro:[];
  return rows.map((row,index)=>{
   const vencimento=textOf(row,["vencimento","data_vencimento","dt_vencimento","data","competencia","competência"]);
-  const pagamento=textOf(row,["pagamento","data_pagamento","dt_pagamento","pago_em"]);
-  const status=textOf(row,["status","situacao","situação","estado","baixado","liquidado","recebido"])||(pagamento?"Pago":"Aberto");
+  const status=titleStatusOf(row);
   const competencia=competenceOf(textOf(row,["competencia","competência","referencia","referência","mes","mês"])||vencimento)||student.ano_letivo||"";
   const descricao=textOf(row,["descricao","descrição","descricao_titulo","descricaoTitulo","descricao_item","descricaoItem","nome_titulo","nomeTitulo","titulo","título","numero_titulo","parcela","nome","tipo","categoria","historico","histórico","plano_conta","planoContas","conta","receita","servico","serviço"])||`Mensalidade escolar${competencia?` — ${competencia}`:""}${vencimento?` · venc. ${formatDate(vencimento)}`:""}`;
   return {id:String(textOf(row,["id","titulo_id","título_id","codigo","código","numero_titulo"])||`${student.matricula_id}-${index}`),descricao,competencia,vencimento:formatDate(vencimento),status,valor:titleValueOf(row)};
