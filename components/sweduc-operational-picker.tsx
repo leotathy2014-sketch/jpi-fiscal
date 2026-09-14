@@ -13,7 +13,8 @@ type SweducStudent={matricula_id:number;nome:string;numero_matricula:string|null
 function responsibleDocument(responsible:SweducResponsible){return responsible.cpf||responsible.cpf_cnpj||responsible.documento||"Documento não informado"}
 function responsibleContact(responsible:SweducResponsible){return responsible.telefones?.[0]?.numero||responsible.telefones?.[0]?.telefone||responsible.emails?.[0]?.email||"Contato não informado"}
 function isTrueFlag(value:unknown){return value===true||value===1||String(value).trim().toLowerCase()==="1"||String(value).trim().toLowerCase()==="true"||String(value).trim().toLowerCase()==="sim"}
-function isFinancialResponsible(responsible:SweducResponsible){return isTrueFlag(responsible.responsavel_financeiro)||isTrueFlag(responsible.financeiro)||isTrueFlag(responsible.eh_financeiro)}
+function hasYesMarker(text:string,label:string){return new RegExp(`${label}\\s*\\?\\s*sim`,"i").test(text.normalize("NFD").replace(/[\u0300-\u036f]/g,"").toLocaleLowerCase("pt-BR"))}
+function isFinancialResponsible(responsible:SweducResponsible){return isTrueFlag(responsible.responsavel_financeiro)||isTrueFlag(responsible.financeiro)||isTrueFlag(responsible.eh_financeiro)||hasYesMarker(JSON.stringify(responsible),"responsavel financeiro")}
 function responsibleRoleText(responsible:SweducResponsible){return `${responsible.parentesco||"Parentesco não informado"} · ${isTrueFlag(responsible.responsavel_pedagogico)?"pedagógico":"não pedagógico"}`}
 function normalizeSearchText(value:unknown){return String(value||"").normalize("NFD").replace(/[\u0300-\u036f]/g,"").replace(/[^\p{L}\p{N}\s]/gu," ").replace(/\s+/g," ").trim().toLocaleLowerCase("pt-BR")}
 function normalizeAcademicText(value:unknown){

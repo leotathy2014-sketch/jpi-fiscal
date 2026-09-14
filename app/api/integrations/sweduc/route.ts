@@ -249,17 +249,19 @@ function responsibleContact(item:Record<string,unknown>){
   return phone||email||financialText(item,["telefone","celular","email"]);
 }
 function isTrueFlag(value:unknown){return value===true||value===1||String(value).trim().toLowerCase()==="1"||String(value).trim().toLowerCase()==="true"||String(value).trim().toLowerCase()==="sim"}
+function hasYesMarker(text:string,label:string){return new RegExp(`${label}\\s*\\?\\s*sim`,"i").test(text.normalize("NFD").replace(/[\u0300-\u036f]/g,"").toLocaleLowerCase("pt-BR"))}
+function isSweducFinancialResponsible(responsible:Record<string,unknown>){return isTrueFlag(responsible.responsavel_financeiro)||isTrueFlag(responsible.financeiro)||isTrueFlag(responsible.eh_financeiro)||isTrueFlag(responsible.segundo_responsavel_financeiro)||hasYesMarker(JSON.stringify(responsible),"responsavel financeiro")||hasYesMarker(JSON.stringify(responsible),"segundo responsavel financeiro")}
 function financialResponsibleCandidates(responsaveis:Array<Record<string,unknown>>){
   return responsaveis.map((responsible,index)=>{
     const text=normalizeSearchText(responsibleText(responsible));
     const signals=[
-      isTrueFlag(responsible.responsavel_financeiro)||isTrueFlag(responsible.financeiro)||isTrueFlag(responsible.eh_financeiro)?"responsável financeiro=true":"",
+      isSweducFinancialResponsible(responsible)?"responsável financeiro=true":"",
       text.includes("financeiro")?"texto contém financeiro":"",
       isTrueFlag(responsible.responsavel_pedagogico)?"responsável pedagógico=true":"",
       responsibleDocument(responsible)?"tem documento":"",
       responsibleContact(responsible)?"tem contato":"",
     ].filter(Boolean) as string[];
-    return {index,nome:financialText(responsible,["nome","responsavel","name"])||`Responsável ${index+1}`,parentesco:financialText(responsible,["parentesco","grau_parentesco","grauParentesco"])||null,documento:responsibleDocument(responsible)||null,contato:responsibleContact(responsible)||null,responsavel_pedagogico:isTrueFlag(responsible.responsavel_pedagogico),responsavel_financeiro:isTrueFlag(responsible.responsavel_financeiro)||isTrueFlag(responsible.financeiro)||isTrueFlag(responsible.eh_financeiro),provavel_financeiro:signals.some(signal=>signal.includes("financeiro")),pistas:signals,raw:responsible};
+    return {index,nome:financialText(responsible,["nome","responsavel","name"])||`Responsável ${index+1}`,parentesco:financialText(responsible,["parentesco","grau_parentesco","grauParentesco"])||null,documento:responsibleDocument(responsible)||null,contato:responsibleContact(responsible)||null,responsavel_pedagogico:isTrueFlag(responsible.responsavel_pedagogico),responsavel_financeiro:isSweducFinancialResponsible(responsible),provavel_financeiro:signals.some(signal=>signal.includes("financeiro")),pistas:signals,raw:responsible};
   }).sort((a,b)=>Number(b.provavel_financeiro)-Number(a.provavel_financeiro)||Number(b.responsavel_pedagogico)-Number(a.responsavel_pedagogico)||b.pistas.length-a.pistas.length);
 }
 
@@ -438,7 +440,7 @@ export async function POST(request:NextRequest){
     try{activeCredentials=await credentials(auth.supabase);const token=await createSweducAccessToken(activeCredentials);activeAccessToken=token.accessToken;detail=await getSweducStudentDetailsWithToken(activeCredentials.host,token.accessToken,matriculaId);await saveSweducMirrorDetails(auth.supabase,matriculaId,student,detail)}catch(error){return json({error:safeSweducError(error,activeCredentials,[activeAccessToken])},400)}
     student.responsaveis=detail.responsaveis;student.financeiro=detail.financeiro;student.dados_origem={...((student.dados_origem as Record<string,unknown>|undefined)||{}),detalhes:detail.detalhes};
     const responsaveis=detail.responsaveis;
-    const automaticResponsibleIndex=responsaveis.findIndex(responsible=>isTrueFlag(responsible.responsavel_financeiro)||isTrueFlag(responsible.financeiro)||isTrueFlag(responsible.eh_financeiro));
+    const automaticResponsibleIndex=responsaveis.findIndex(isSweducFinancialResponsible);
     const pedagogicalResponsibleIndex=responsaveis.findIndex(responsible=>isTrueFlag(responsible.responsavel_pedagogico));
     const resolvedResponsibleIndex=responsibleIndex>0?responsibleIndex:automaticResponsibleIndex>=0?automaticResponsibleIndex:pedagogicalResponsibleIndex>=0?pedagogicalResponsibleIndex:0;
     const selectedResponsible=responsaveis[Math.max(0,Math.min(resolvedResponsibleIndex,responsaveis.length-1))]||null;
