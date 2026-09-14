@@ -24,11 +24,11 @@ const responsibleAddress=(responsible?:SweducResponsible|null)=>responsible?[tex
 function titlesFromFinancial(student:SweducStudent):DeclarationTitle[]{
  const rows=Array.isArray(student.financeiro)?student.financeiro:[];
  return rows.map((row,index)=>{
-  const descricao=textOf(row,["descricao","descrição","titulo","título","nome","tipo","categoria","historico","histórico"])||`Título SWeduc ${index+1}`;
   const vencimento=textOf(row,["vencimento","data_vencimento","dt_vencimento","data","competencia","competência"]);
   const pagamento=textOf(row,["pagamento","data_pagamento","dt_pagamento","pago_em"]);
   const status=textOf(row,["status","situacao","situação","estado","baixado","liquidado","recebido"])||(pagamento?"Pago":"Aberto");
   const competencia=competenceOf(textOf(row,["competencia","competência","referencia","referência","mes","mês"])||vencimento)||student.ano_letivo||"";
+  const descricao=textOf(row,["descricao","descrição","descricao_titulo","descricaoTitulo","descricao_item","descricaoItem","nome_titulo","nomeTitulo","titulo","título","numero_titulo","parcela","nome","tipo","categoria","historico","histórico","plano_conta","planoContas","conta","receita","servico","serviço"])||`Mensalidade escolar${competencia?` — ${competencia}`:""}${vencimento?` · venc. ${formatDate(vencimento)}`:""}`;
   return {id:String(textOf(row,["id","titulo_id","título_id","codigo","código","numero_titulo"])||`${student.matricula_id}-${index}`),descricao,competencia,vencimento:formatDate(vencimento),status,valor:titleValueOf(row)};
  });
 }
