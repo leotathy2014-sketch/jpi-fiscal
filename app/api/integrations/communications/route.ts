@@ -49,10 +49,9 @@ const normalizeText=(value:unknown)=>String(value||"").normalize("NFD").replace(
 const normalizeKey=(value:unknown)=>normalizeText(value).toLocaleUpperCase("pt-BR").replace(/[^A-Z0-9]+/g,"_").replace(/^_+|_+$/g,"")||"NAO_INFORMADO";
 const firstEmail=(responsible:unknown)=>Array.isArray((responsible as {emails?:unknown[]})?.emails)?String(((responsible as {emails:unknown[]}).emails[0] as {email?:unknown})?.email||"").trim().toLowerCase():"";
 const firstPhone=(responsible:unknown)=>Array.isArray((responsible as {telefones?:unknown[]})?.telefones)?digits(String(((responsible as {telefones:unknown[]}).telefones[0] as {telefone?:unknown;numero?:unknown})?.telefone||((responsible as {telefones:unknown[]}).telefones[0] as {numero?:unknown})?.numero||"")):"";
-const hasYesMarker=(text:string,label:string)=>new RegExp(`${label}\\s*\\?\\s*sim`,"i").test(text.normalize("NFD").replace(/[\u0300-\u036f]/g,"").toLocaleLowerCase("pt-BR"));
 const isFinancialResponsible=(responsible:unknown)=>{
   const row=responsible as Record<string,unknown>;
-  return row?.responsavel_financeiro===1||row?.responsavel_financeiro===true||row?.segundo_responsavel_financeiro===1||row?.segundo_responsavel_financeiro===true||hasYesMarker(JSON.stringify(row),"responsavel financeiro")||hasYesMarker(JSON.stringify(row),"segundo responsavel financeiro");
+  return row?.responsavel_financeiro===1||row?.responsavel_financeiro===true||row?.segundo_responsavel_financeiro===1||row?.segundo_responsavel_financeiro===true;
 };
 const inferPeriod=(turma:unknown)=>{
   const value=normalizeText(turma).toLocaleLowerCase("pt-BR");
