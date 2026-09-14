@@ -947,6 +947,7 @@
 .table-card tr.selected-row{background:#eef6ff}
 .table-card tr.selected-row td:first-child{box-shadow:inset 3px 0 0 #1466df}
 .declaration-title-actions{display:flex;align-items:center;gap:10px;margin:10px 0 12px;flex-wrap:wrap}.declaration-title-actions span{font-size:12px;color:var(--muted);font-weight:700}.declaration-title-paid td{background:#f1fbf6;color:#106b4b}.declaration-title-paid td:first-child{box-shadow:inset 3px 0 0 var(--green)}.status-pill.paid{background:#e1f6ed!important;color:#0f7a54!important;border-color:#9ed9c1!important}
+.declaration-financial-debug{margin-top:12px;border:1px dashed #c9d5e2;border-radius:10px;background:#f8fafc}.declaration-financial-debug summary{cursor:pointer;padding:11px 13px;font-weight:800;color:#32445c}.declaration-financial-debug pre{max-height:320px;overflow:auto;margin:0;padding:13px;border-top:1px dashed #c9d5e2;color:#233247;font-size:11px;white-space:pre-wrap}
 .sweduc-responsible-row td{padding:10px 16px 16px!important;background:#f8fbff;border-bottom:1px solid #d9e7f7!important}
 .sweduc-responsible-row .sweduc-responsible-confirm{margin:0;border-color:#bcd6f3;box-shadow:0 8px 20px rgba(20,102,223,.08)}
 .sweduc-financial-preview{display:grid;gap:7px;padding:10px 11px;border:1px solid #e0e7ef;border-radius:10px;background:#fff}
