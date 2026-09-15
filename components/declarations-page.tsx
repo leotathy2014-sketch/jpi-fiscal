@@ -9,6 +9,7 @@ import { useAccess } from "@/components/access";
 type SweducResponsible = Record<string,unknown> & { nome?:string; nome_completo?:string; responsavel_financeiro?:boolean|number|string; financeiro?:boolean|number|string; eh_financeiro?:boolean|number|string; cpf?:string; cpf_cnpj?:string; documento?:string; logradouro?:string; endereco?:string; numero?:string; complemento?:string; bairro?:string; cidade?:string; uf?:string; cep?:string };
 type SweducStudent = { matricula_id:number; nome:string; numero_matricula:string|null; ano_letivo:string|null; unidade:string|null; curso:string|null; serie:string|null; turma:string|null; responsaveis:SweducResponsible[]|null; financeiro:Array<Record<string,unknown>>|null };
 type DeclarationTitle = { id:string; numero:string; descricao:string; competencia:string; vencimento:string; status:string; valor:number };
+type DeclarationSigner={id:string;name:string;role:string;active:boolean;profiles:string[]};
 
 const money=(value:number)=>Number(value||0).toLocaleString("pt-BR",{style:"currency",currency:"BRL"});
 const defaultDeclarationHeader=`JARDIM ESCOLA JOÃO PAULO I
@@ -58,7 +59,7 @@ function titlesFromFinancial(student:SweducStudent):DeclarationTitle[]{
 
 export function DeclarationsPage({accessToken}:{accessToken:string|null}){
  const supabase=useMemo(()=>createSupabaseBrowserClient(),[]);
- const {isMaster}=useAccess();
+ const {isMaster,role}=useAccess();
  const [students,setStudents]=useState<SweducStudent[]>([]);
  const [selectedId,setSelectedId]=useState<number|null>(null);
  const [academicYear,setAcademicYear]=useState("");
@@ -78,12 +79,13 @@ export function DeclarationsPage({accessToken}:{accessToken:string|null}){
  const [signatureMode,setSignatureMode]=useState("instituicao");
  const [signatureSigner,setSignatureSigner]=useState("instituicao");
  const [configuredSigner,setConfiguredSigner]=useState("Jardim Escola João Paulo I · Instituição");
+ const [configuredSigners,setConfiguredSigners]=useState<DeclarationSigner[]>([{id:"instituicao",name:"Jardim Escola João Paulo I",role:"Instituição",active:true,profiles:["Master","Administrador","Financeiro","Secretaria"]}]);
  const [notes,setNotes]=useState("Declaração gerada em formato de teste a partir dos dados espelhados da SWeduc.");
  const [error,setError]=useState("");
  const [detailsBusy,setDetailsBusy]=useState(false);
  const [detailsMessage,setDetailsMessage]=useState("");
  const [detailsLoadedId,setDetailsLoadedId]=useState<number|null>(null);
- useEffect(()=>{function loadDeclarationSettings(){try{const saved=localStorage.getItem("jpi-declaration-settings");if(!saved)return;const parsed=JSON.parse(saved) as {header?:string;headerHtml?:string;defaultSigner?:string;showCpf?:boolean;logoData?:string;types?:typeof defaultDeclarationTypes;signerName?:string};setHeaderText(parsed.headerHtml||parsed.header||defaultDeclarationHeader);setDeclarationLogo(parsed.logoData||"");setDeclarationTypes(parsed.types?.length?parsed.types:defaultDeclarationTypes);setShowResponsibleCpf(parsed.showCpf!==false);setConfiguredSigner(parsed.signerName||"Jardim Escola João Paulo I · Instituição");setSignatureMode("instituicao");setSignatureSigner("instituicao")}catch{}}loadDeclarationSettings();window.addEventListener("jpi-declaration-settings-updated",loadDeclarationSettings);return()=>window.removeEventListener("jpi-declaration-settings-updated",loadDeclarationSettings)},[]);
+ useEffect(()=>{function loadDeclarationSettings(){try{const saved=localStorage.getItem("jpi-declaration-settings");if(!saved)return;const parsed=JSON.parse(saved) as {header?:string;headerHtml?:string;defaultSigner?:string;showCpf?:boolean;logoData?:string;types?:typeof defaultDeclarationTypes;signerName?:string;signers?:DeclarationSigner[]};setHeaderText(parsed.headerHtml||parsed.header||defaultDeclarationHeader);setDeclarationLogo(parsed.logoData||"");setDeclarationTypes(parsed.types?.length?parsed.types:defaultDeclarationTypes);setShowResponsibleCpf(parsed.showCpf!==false);setConfiguredSigner(parsed.signerName||"Jardim Escola João Paulo I · Instituição");setConfiguredSigners(parsed.signers?.length?parsed.signers:[{id:"instituicao",name:parsed.signerName||"Jardim Escola João Paulo I",role:"Instituição",active:true,profiles:["Master","Administrador","Financeiro","Secretaria"]}]);setSignatureMode("instituicao");setSignatureSigner("instituicao")}catch{}}loadDeclarationSettings();window.addEventListener("jpi-declaration-settings-updated",loadDeclarationSettings);return()=>window.removeEventListener("jpi-declaration-settings-updated",loadDeclarationSettings)},[]);
  const load=useCallback(async()=>{if(!supabase)return;setError("");const {data,error}=await supabase.from("sweduc_alunos").select("matricula_id,nome,numero_matricula,ano_letivo,unidade,curso,serie,turma,responsaveis,financeiro").order("nome",{ascending:true}).limit(5000);if(error){setError(error.message);return}setStudents((data||[]) as SweducStudent[])},[supabase]);
  useEffect(()=>{void load()},[load]);
  const academicYears=useMemo(()=>Array.from(new Set(students.map(student=>student.ano_letivo).filter(Boolean) as string[])).sort((a,b)=>b.localeCompare(a,"pt-BR")),[students]);
@@ -97,7 +99,7 @@ export function DeclarationsPage({accessToken}:{accessToken:string|null}){
  const responsible=responsibles[selectedResponsibleIndex]||responsibles[financialResponsibleIndex]||responsibles[0]||null;
  const declarationResponsibles=responsibles.filter((_,index)=>selectedResponsibleIndexes.has(index));
  const declarationResponsibleText=(declarationResponsibles.length?declarationResponsibles:[responsible].filter(Boolean) as SweducResponsible[]).map(item=>`${responsibleName(item)}${showResponsibleCpf?`, CPF/CNPJ ${responsibleDocument(item)}`:""}${responsibleAddress(item)!=="Endereço não informado"?`, endereço cadastral: ${responsibleAddress(item)}`:""}`).join("; ")||"Responsável não informado";
- const signatureOptions=[{value:"instituicao",label:configuredSigner}];
+ const allowedSigners=(configuredSigners.length?configuredSigners:[{id:"instituicao",name:configuredSigner,role:"Instituição",active:true,profiles:["Master"]}]).filter(item=>item.active&&(isMaster||!item.profiles?.length||item.profiles.includes(role))); const signatureOptions=(allowedSigners.length?allowedSigners:[{id:"instituicao",name:configuredSigner,role:"Instituição",active:true,profiles:[]}]).map(item=>({value:item.id,label:`${item.name}${item.role?` · ${item.role}`:""}`}));
  const signatureLabel=signatureOptions.find(option=>option.value===signatureSigner)?.label||signatureOptions[0]?.label||"Jardim Escola João Paulo I · Instituição";
  const titles=useMemo(()=>selected?titlesFromFinancial(selected):[],[selected]);
  useEffect(()=>{setSelectedTitles(new Set());setValues(Object.fromEntries(titles.map(title=>[title.id,title.valor?money(title.valor):""])))},[titles]);
