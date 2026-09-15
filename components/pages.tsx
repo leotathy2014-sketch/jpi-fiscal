@@ -455,7 +455,7 @@ type CompanyConfig = {
   branding_updated_at: string;
   updated_at: string;
 };
-type Tab = "Empresa" | "Declarações" | "Identidade Visual" | "Certificado A1" | "Integrações" | "Usuários e Permissões";
+type Tab = "Empresa" | "Declarações" | "Identidade Visual" | "Certificado A1" | "Integrações" | "Comunicados" | "Usuários e Permissões";
 export function SettingsPage({accessToken,onNavigate}:{accessToken:string|null;onNavigate?:(page:AppPage)=>void}) {
   const {canAny}=useAccess();
   const availableTabs=useMemo(()=>[
@@ -464,6 +464,7 @@ export function SettingsPage({accessToken,onNavigate}:{accessToken:string|null;o
     {name:"Identidade Visual" as Tab,label:"Identidade Visual",Icon:Palette,permissions:["settings.branding.view","settings.branding.edit"]},
     {name:"Certificado A1" as Tab,label:"Certificado A1",Icon:KeyRound,permissions:["settings.certificate.view","settings.certificate.manage"]},
     {name:"Integrações" as Tab,label:"Integrações",Icon:Link2,permissions:["settings.integrations.view","settings.integrations.edit"]},
+    {name:"Comunicados" as Tab,label:"Comunicados",Icon:Mail,permissions:["system.announcements.send","settings.users.manage"]},
     {name:"Usuários e Permissões" as Tab,label:"Usuários e Permissões",Icon:UserCog,permissions:["settings.users.view","settings.users.manage"]},
   ].filter(item=>canAny(item.permissions)),[canAny]);
   const [tab,setTab]=useState<Tab>(()=>typeof window==="undefined"?"Empresa":(sessionStorage.getItem("jpi-settings-tab") as Tab)||"Empresa");
@@ -476,7 +477,7 @@ export function SettingsPage({accessToken,onNavigate}:{accessToken:string|null;o
       <div className="tabs">
         {availableTabs.map(({name,label,Icon})=><button key={name} className={tab===name?"active":""} onClick={()=>setTab(name)}><Icon/>{label}</button>)}
       </div>
-      {tab==="Empresa"?<CompanySettings/>:tab==="Declarações"?<DeclarationSettings/>:tab==="Identidade Visual"?<BrandingSettings/>:tab==="Certificado A1"?<CertificateSettings/>:tab==="Integrações"?<Integrations accessToken={accessToken} onNavigate={onNavigate}/>:<Permissions/>}
+      {tab==="Empresa"?<CompanySettings/>:tab==="Declarações"?<DeclarationSettings/>:tab==="Identidade Visual"?<BrandingSettings/>:tab==="Certificado A1"?<CertificateSettings/>:tab==="Integrações"?<Integrations accessToken={accessToken} onNavigate={onNavigate}/>:tab==="Comunicados"?<SystemAnnouncements/>:<Permissions/>}
     </>
   );
 }
@@ -1824,6 +1825,66 @@ const roleLabels:Record<ManagedRole,string>={
   secretaria:"Secretaria",
   consulta:"Consulta",
 };
+
+type AnnouncementHistory={id:number;subject:string;recipients_count:number;success_count:number;error_count:number;status:string;sent_by_email:string|null;created_at:string;error_message:string|null};
+function SystemAnnouncements(){
+  const {can}=useAccess();const canSend=can("system.announcements.send")||can("settings.users.manage");
+  const [users,setUsers]=useState<ManagedUser[]>([]);const [history,setHistory]=useState<AnnouncementHistory[]>([]);
+  const [mode,setMode]=useState<"all"|"selected">("all");const [selected,setSelected]=useState<Set<number>>(()=>new Set());
+  const [subject,setSubject]=useState("Comunicado importante sobre o uso do JPI Fiscal");const [message,setMessage]=useState("Olá!\n\nInformamos que o sistema JPI Fiscal estará em uso integral amanhã para emissão, conferência e envio das notas fiscais.\n\nPedimos que todos acessem com seu usuário individual e acompanhem os avisos internos do sistema.\n\nAtenciosamente,\nAdministração JPI Fiscal");
+  const [busy,setBusy]=useState(false);const [error,setError]=useState("");const [notice,setNotice]=useState("");
+  const load=useCallback(async()=>{
+    setError("");
+    const [usersResponse,historyResponse]=await Promise.all([
+      authenticatedFetch("/api/manage-users",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({action:"list"})}),
+      authenticatedFetch("/api/admin/announcements",{cache:"no-store"}),
+    ]);
+    const usersData=await usersResponse.json().catch(()=>({}));const historyData=await historyResponse.json().catch(()=>({}));
+    if(usersResponse.ok)setUsers((usersData.users||[]) as ManagedUser[]);else setError(usersData.error||"Não foi possível carregar os usuários.");
+    if(historyResponse.ok)setHistory((historyData.items||[]) as AnnouncementHistory[]);
+  },[]);
+  useEffect(()=>{if(canSend)void load()},[canSend,load]);
+  const activeUsers=users.filter(user=>user.active&&/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(user.email));
+  const selectedUsers=activeUsers.filter(user=>selected.has(user.id));
+  function toggleUser(id:number){setSelected(current=>{const next=new Set(current);if(next.has(id))next.delete(id);else next.add(id);return next})}
+  async function sendAnnouncement(event:FormEvent<HTMLFormElement>){
+    event.preventDefault();if(!canSend)return;setBusy(true);setError("");setNotice("");
+    const recipientIds=mode==="selected"?Array.from(selected):[];
+    if(mode==="selected"&&!recipientIds.length){setBusy(false);setError("Selecione pelo menos um usuário para mensagem reservada.");return}
+    const response=await authenticatedFetch("/api/admin/announcements",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({subject,message,recipientIds,onlyActive:true})});
+    const data=await response.json().catch(()=>({}));
+    setBusy(false);
+    if(!response.ok||data.error){setError(data.error||"Não foi possível enviar o comunicado.");return}
+    setNotice(`Comunicado enviado: ${data.successCount} de ${data.recipients} usuário(s).${data.errorCount?` Falharam: ${data.errorCount}.`:""}`);
+    if(mode==="selected")setSelected(new Set());
+    await load();
+  }
+  if(!canSend)return <div className="notice warning"><ShieldCheck/><span>Seu perfil não possui permissão para enviar comunicados.</span></div>;
+  return <div className="declaration-settings-grid">
+    <section className="settings-card declaration-settings-card">
+      <div className="communication-channel-head"><span className="integration-icon blue"><Mail/></span><div><h3>Comunicados do sistema</h3><small>Envie avisos para todos os usuários ou mensagens reservadas para usuários selecionados.</small></div><Status>{`${activeUsers.length} destinatário(s)`}</Status></div>
+      {error&&<div className="error-box">{error}</div>}{notice&&<div className="success-box">{notice}</div>}
+      <form className="data-form" onSubmit={sendAnnouncement}>
+        <label>Assunto<input value={subject} onChange={event=>setSubject(event.target.value)} minLength={6} maxLength={120} spellCheck lang="pt-BR" required/></label>
+        <label>Mensagem<textarea value={message} onChange={event=>setMessage(event.target.value)} rows={10} minLength={20} maxLength={4000} spellCheck lang="pt-BR" required/><small>O corretor ortográfico do navegador fica ativo neste campo. Revise antes de enviar.</small></label>
+        <div className="profile-permission-selector">
+          <label>Destino<select value={mode} onChange={event=>setMode(event.target.value as "all"|"selected")}><option value="all">Todos os usuários ativos</option><option value="selected">Selecionar usuários específicos</option></select></label>
+          <div className="profile-permission-summary"><span>Vai enviar para</span><strong>{mode==="all"?activeUsers.length:selectedUsers.length}</strong><small>{mode==="all"?"usuário(s) ativo(s)":"usuário(s) selecionado(s)"}</small></div>
+        </div>
+        {mode==="selected"&&<div className="panel compact-panel">
+          <div className="permission-module-title"><strong>Selecionar usuários</strong><span>{selectedUsers.length}/{activeUsers.length}</span></div>
+          {activeUsers.map(user=><label key={user.id} className="checkbox-line"><input type="checkbox" checked={selected.has(user.id)} onChange={()=>toggleUser(user.id)}/><span><strong>{user.nome||user.email}</strong><small>{user.email} · {roleLabels[user.role]}</small></span></label>)}
+        </div>}
+        <div className="notice compact"><ShieldCheck/><span>O envio usa o e-mail oficial configurado na Locaweb. A senha fica protegida no cofre e não aparece para o usuário.</span></div>
+        <div className="form-actions"><button className="primary" disabled={busy}>{busy?"Enviando comunicado…":"Enviar comunicado"}</button></div>
+      </form>
+    </section>
+    <section className="settings-card declaration-settings-card">
+      <h3>Histórico de comunicados</h3>
+      <div className="table-card permission-users-table"><table><thead><tr><th>Data</th><th>Assunto</th><th>Envios</th><th>Status</th></tr></thead><tbody>{history.map(item=><tr key={item.id}><td>{new Date(item.created_at).toLocaleString("pt-BR",{dateStyle:"short",timeStyle:"short"})}</td><td><strong>{item.subject}</strong><span className="subcell">{item.sent_by_email||"Sistema"}</span></td><td>{item.success_count}/{item.recipients_count}</td><td>{item.error_count?<span className="status cancelada">Parcial</span>:<Status>Enviado</Status>}</td></tr>)}</tbody></table>{!history.length&&<div className="empty-row">Nenhum comunicado enviado ainda.</div>}</div>
+    </section>
+  </div>
+}
 
 function Permissions() {
   const supabase=useMemo(()=>createSupabaseBrowserClient(),[]);
