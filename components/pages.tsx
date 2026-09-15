@@ -1847,7 +1847,9 @@ function Permissions() {
   const loadUsers=useCallback(async()=>{
     if(!supabase||!canViewUsers)return;
     setError("");
-    const {data,error}=await supabase.functions.invoke("manage-users",{body:{action:"list"}});
+    const response=await authenticatedFetch("/api/manage-users",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({action:"list"})});
+    const data=await response.json().catch(()=>({}));
+    const error=response.ok?null:{message:data?.error||"Não foi possível carregar os usuários."};
     if(error||data?.error)setError(data?.error||error?.message||"Não foi possível carregar os usuários.");
     else setRows((data.users||[]) as ManagedUser[]);
   },[supabase,canViewUsers]);
@@ -1931,7 +1933,9 @@ function Permissions() {
     if(!supabase||!canManageUsers||user.role==="master")return;
     setBusy(true);setError("");setMessage("");
     const next={role:changes.role??user.role,active:changes.active??user.active};
-    const {data,error}=await supabase.functions.invoke("manage-users",{body:{action:"update",id:user.id,...next}});
+    const response=await authenticatedFetch("/api/manage-users",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({action:"update",id:user.id,...next})});
+    const data=await response.json().catch(()=>({}));
+    const error=response.ok?null:{message:data?.error||"Não foi possível atualizar o usuário."};
     setBusy(false);
     if(error||data?.error){setError(data?.error||error?.message||"Não foi possível atualizar o usuário.");return}
     setMessage(changes.active!==undefined?`Usuário ${next.active?"ATIVADO":"BLOQUEADO"} com sucesso.`:`Perfil do usuário alterado para ${roleLabels[next.role]} com sucesso.`);await loadUsers();
@@ -1947,7 +1951,9 @@ function Permissions() {
     const email=String(form.get("email")||"").trim().toLowerCase();
     const emailChanged=email!==editingUser.email.toLowerCase();
     const invitePending=Boolean(editingUser.invited_at&&!editingUser.confirmed_at);
-    const {data,error}=await supabase.functions.invoke("manage-users",{body:{action:"update_identity",id:editingUser.id,nome,cpf,email}});
+    const response=await authenticatedFetch("/api/manage-users",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({action:"update_identity",id:editingUser.id,nome,cpf,email})});
+    const data=await response.json().catch(()=>({}));
+    const error=response.ok?null:{message:data?.error||"Não foi possível alterar os dados do usuário."};
     setBusy(false);
     if(error||data?.error){setError(data?.error||error?.message||"Não foi possível alterar os dados do usuário.");return}
     setEditingUser(null);
@@ -2081,6 +2087,7 @@ function Permissions() {
     </div></div>}
   </>;
 }
+
 
 
 
