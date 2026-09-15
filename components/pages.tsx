@@ -24,7 +24,7 @@ Ensino Médio - Formação Geral - Portaria 2844/CDCE 13/08/92
 Técnico em Processamento de Dados - Portaria 4019/CDCR 29/09/94
 CNPJ: 30.041.545/0001-07`;
 const defaultDeclarationTypes = [
-  { id: "pagas", label: "Mensalidades pagas", title: "DECLARAÇÃO DE MENSALIDADES PAGAS", body: "Declaramos, para os devidos fins, que o(a) aluno(a) @aluno_nome, matrícula @matricula, turma @turma, ano letivo @ano_letivo, possui mensalidades pagas conforme títulos selecionados.\n\nResponsável financeiro: @responsavel_nome - @responsavel_documento.\nEndereço: @responsavel_endereco.\n\nTítulos selecionados:\n@titulos\n\nTotal informado: @total_titulos.\nData: @data_atual." },
+  { id: "pagas", label: "Mensalidades pagas", title: "DECLARAÇÃO DE MENSALIDADES PAGAS", body: "Declaramos, para os devidos fins, que o(a) aluno(a) @aluno_nome, matrícula @matricula, turma @turma, ano letivo @ano_letivo, possui mensalidades pagas conforme títulos selecionados.\n\nResponsável financeiro: @responsavel_nome.\nEndereço cadastral: @responsavel_endereco.\n\nTítulos selecionados:\n@titulos\n\nTotal informado: @total_titulos.\nData: @data_atual." },
   { id: "quitacao", label: "Quitação", title: "DECLARAÇÃO DE QUITAÇÃO", body: "Declaramos, para os devidos fins, que o(a) aluno(a) @aluno_nome, matrícula @matricula, turma @turma, ano letivo @ano_letivo, encontra-se com quitação conforme os títulos selecionados abaixo.\n\n@titulos\n\nTotal informado: @total_titulos.\nData: @data_atual." },
   { id: "debito", label: "Débitos em aberto", title: "DECLARAÇÃO DE DÉBITOS EM ABERTO", body: "Declaramos, para os devidos fins, que o(a) aluno(a) @aluno_nome, matrícula @matricula, turma @turma, ano letivo @ano_letivo, possui os seguintes débitos em aberto conforme títulos selecionados.\n\n@titulos\n\nTotal em aberto informado: @total_titulos.\nData: @data_atual." },
 ];
@@ -2081,6 +2081,7 @@ function Permissions() {
     </div></div>}
   </>;
 }
+
 
 
 
