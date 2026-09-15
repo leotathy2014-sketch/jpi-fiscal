@@ -66,6 +66,7 @@ export async function POST(request: NextRequest) {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
   const backendSecret = process.env.JPI_BACKEND_SECRET;
+  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
   const authorization = request.headers.get("authorization");
   const token = authorization?.replace(/^Bearer\s+/i, "");
   if (!supabaseUrl || !supabaseKey || !backendSecret) return json({ error: "O cofre de senhas do certificado ainda não foi configurado no servidor." }, 503);
@@ -87,7 +88,23 @@ export async function POST(request: NextRequest) {
   const { data: { user }, error: userError } = await supabase.auth.getUser(token);
   if (userError || !user?.email) return json({ error: "Sessão expirada. Entre novamente." }, 401);
 
-  if (!await hasServerPermission(supabase,"nfse.test_connection")) {
+  const canTestConnection = await hasServerPermission(supabase,"nfse.test_connection");
+  if (action === "server-status" && !canTestConnection) {
+    try {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 12000);
+      const response = await fetch(PARAMETERIZATION_TEST_URL, { method: "GET", cache: "no-store", signal: controller.signal });
+      clearTimeout(timer);
+      return json({
+        ready: response.status < 500,
+        checkedBy: "public-status",
+        diagnosticCode: response.status < 500 ? "NFSE_PUBLIC_STATUS_OK" : "NFSE_PUBLIC_STATUS_UNSTABLE",
+      }, response.status < 500 ? 200 : 503);
+    } catch {
+      return json({ ready: false, checkedBy: "public-status", diagnosticCode: "NFSE_PUBLIC_STATUS_UNKNOWN" }, 503);
+    }
+  }
+  if (!canTestConnection) {
     return json({ error: "Seu usuário não possui permissão para testar ou consultar a integração fiscal." }, 403);
   }
   if (action === "server-status" && cachedServerStatus && cachedServerStatus.expiresAt > Date.now()) {
@@ -98,7 +115,10 @@ export async function POST(request: NextRequest) {
     return json(body, status);
   };
 
-  const { data: certificate, error: certificateError } = await supabase
+  const dataClient = action === "server-status" && serviceRoleKey
+    ? createClient(supabaseUrl, serviceRoleKey, { auth: { persistSession: false, autoRefreshToken: false } })
+    : supabase;
+  const { data: certificate, error: certificateError } = await dataClient
     .from("certificados_a1")
     .select("id,arquivo_caminho,validade,senha_configurada")
     .eq("status", "ATIVO")
@@ -116,7 +136,7 @@ export async function POST(request: NextRequest) {
   let password = typeof storedPassword === "string" ? storedPassword : "";
   if (passwordError || !password) return json({ error: "Não foi possível abrir a senha protegida do certificado." }, 500);
 
-  const { data: file, error: downloadError } = await supabase.storage.from(CERTIFICATE_BUCKET).download(certificate.arquivo_caminho);
+  const { data: file, error: downloadError } = await dataClient.storage.from(CERTIFICATE_BUCKET).download(certificate.arquivo_caminho);
   if (downloadError || !file) {
     password = "";
     return json({ error: "Não foi possível acessar o arquivo privado do certificado." }, 403);
@@ -185,3 +205,4 @@ export async function POST(request: NextRequest) {
     return json({ error: safeConnectionMessage(error), diagnosticCode: "NFSE_HML_TESTAR_CONEXAO", transport: "vercel-node" }, 502);
   }
 }
+

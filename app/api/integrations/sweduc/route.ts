@@ -261,7 +261,7 @@ function financialResponsibleCandidates(responsaveis:Array<Record<string,unknown
 
 export async function GET(request:NextRequest){
   const auth=await authorize(request);if(!auth.ok)return auth.response;
-  if(!await hasServerPermission(auth.supabase,"settings.integrations.view")&&!await hasServerPermission(auth.supabase,"settings.integrations.edit")&&!await hasServerPermission(auth.supabase,"students.view")&&!await hasServerPermission(auth.supabase,"students.create")&&!await hasServerPermission(auth.supabase,"students.edit")&&!await hasServerPermission(auth.supabase,"payments.create")&&!await hasServerPermission(auth.supabase,"nfse.prepare"))return json({error:"Seu usuário não possui permissão para consultar esta integração."},403);
+  if(!await hasServerPermission(auth.supabase,"settings.integrations.view")&&!await hasServerPermission(auth.supabase,"settings.integrations.edit")&&!await hasServerPermission(auth.supabase,"students.view")&&!await hasServerPermission(auth.supabase,"students.create")&&!await hasServerPermission(auth.supabase,"students.edit")&&!await hasServerPermission(auth.supabase,"payments.create")&&!await hasServerPermission(auth.supabase,"nfse.prepare")&&!await hasServerPermission(auth.supabase,"declarations.view"))return json({error:"Seu usuário não possui permissão para consultar esta integração."},403);
   const reader=serviceSupabaseClient()||auth.supabase;
   const {data:config,error}=await reader.from("sweduc_config").select("host,credencial_configurada,ultimo_status,testada_em,sincronizada_em,ultimo_erro,total_sincronizado,anos_sincronizacao,unidades_sincronizacao").eq("id",true).maybeSingle();
   if(error||!config)return json({error:"A estrutura da integração SWeduc ainda não foi aplicada ao banco."},503);
@@ -288,7 +288,7 @@ export async function POST(request:NextRequest){
   let body:Record<string,unknown>;try{body=await request.json()}catch{return json({error:"Dados da solicitação inválidos."},400)}
   const action=String(body.action||"");
   if(["save","test","save_years"].includes(action)&&!await hasServerPermission(auth.supabase,"settings.integrations.edit"))return json({error:"Seu usuário não possui permissão para configurar a SWeduc."},403);
-  if(["lookup","sync","details","financial_test"].includes(action)&&!await hasServerPermission(auth.supabase,"settings.integrations.view")&&!await hasServerPermission(auth.supabase,"settings.integrations.edit")&&!await hasServerPermission(auth.supabase,"students.view")&&!await hasServerPermission(auth.supabase,"students.create")&&!await hasServerPermission(auth.supabase,"students.edit")&&!await hasServerPermission(auth.supabase,"payments.create")&&!await hasServerPermission(auth.supabase,"nfse.prepare"))return json({error:"Seu usuário não possui permissão para consultar alunos da SWeduc."},403);
+  if(["lookup","sync","details","financial_test"].includes(action)&&!await hasServerPermission(auth.supabase,"settings.integrations.view")&&!await hasServerPermission(auth.supabase,"settings.integrations.edit")&&!await hasServerPermission(auth.supabase,"students.view")&&!await hasServerPermission(auth.supabase,"students.create")&&!await hasServerPermission(auth.supabase,"students.edit")&&!await hasServerPermission(auth.supabase,"payments.create")&&!await hasServerPermission(auth.supabase,"nfse.prepare")&&!await hasServerPermission(auth.supabase,"declarations.view"))return json({error:"Seu usuário não possui permissão para consultar alunos da SWeduc."},403);
   if(action==="save"){
     let host:string;try{host=normalizeSweducHost(String(body.host||""))}catch(error){return json({error:error instanceof Error?error.message:"Informe um HOST válido."},400)}
     const clientIdInput=String(body.clientId||"").trim();const clientSecretInput=String(body.clientSecret||"").trim();const usernameInput=String(body.username||"").trim();const passwordInput=String(body.password||"");
@@ -447,3 +447,4 @@ export async function POST(request:NextRequest){
   }
   return json({error:"Ação SWeduc inválida."},400);
 }
+
