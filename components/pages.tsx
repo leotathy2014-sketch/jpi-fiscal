@@ -516,7 +516,7 @@ function DeclarationSettings() {
   return <form className="panel data-form declaration-settings-page" onSubmit={save}>
     <div className="panel-title"><div><h2>Configuração das declarações</h2><p>Centralize o modelo usado nas futuras declarações, antes de liberar no oficial.</p></div><FileText/></div>
     {message&&<div className="success-box">{message}</div>}
-    <div className="notice compact"><ShieldCheck/><span>Ambiente de teste: estes campos validam o modelo sem alterar emissão fiscal, SWeduc ou Agenda Edu.</span></div>
+    <div className="notice compact"><ShieldCheck/><span>Configure aqui os modelos, textos, logos e assinantes usados nas declarações.</span></div>
     <section className="declaration-config-grid">
       <div className="declaration-wide declaration-editor-field"><span>Cabeçalho padrão</span><div className="declaration-editor-toolbar" aria-label="Formatação do cabeçalho"><button type="button" disabled={!canEdit} onClick={()=>formatHeader("bold")}>N</button><button type="button" disabled={!canEdit} onClick={()=>formatHeader("italic")}>I</button><button type="button" disabled={!canEdit} onClick={()=>formatHeader("underline")}>S</button><button type="button" disabled={!canEdit} onClick={()=>formatHeader("justifyLeft")}>Esq.</button><button type="button" disabled={!canEdit} onClick={()=>formatHeader("justifyCenter")}>Centro</button><button type="button" disabled={!canEdit} onClick={()=>formatHeader("insertUnorderedList")}>Lista</button><button type="button" disabled={!canEdit} onClick={()=>formatHeader("removeFormat")}>Limpar</button></div><div ref={headerEditorRef} className="declaration-rich-editor" contentEditable={canEdit} suppressContentEditableWarning onInput={event=>setHeader(event.currentTarget.innerHTML)} onBlur={event=>setHeader(event.currentTarget.innerHTML)} /><small>Este texto aparece no topo da prévia da declaração.</small></div>
       <label className="file-field branding-logo-field declaration-wide"><span>Logomarca da declaração</span><div className={`company-logo-preview ${logoData?"loaded":""}`}>{logoData?<img src={logoData} alt="Logo da declaração"/>:<span className="declaration-logo-empty">Sem logo</span>}<section><strong>{logoData?"Logo da declaração carregada":"Sem logo específica da declaração"}</strong><small>Esta logo é usada apenas nas declarações, separada da logo do sistema.</small></section></div><div><UploadCloud/><input name="declaration_logo" type="file" accept="image/png,image/jpeg,image/webp" disabled={!canEdit}/><small>PNG, JPG ou WEBP — máximo 1 MB</small></div></label>
@@ -2087,6 +2087,7 @@ function Permissions() {
     </div></div>}
   </>;
 }
+
 
 
 
