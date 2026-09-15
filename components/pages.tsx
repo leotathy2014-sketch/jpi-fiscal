@@ -23,6 +23,11 @@ Reconhecimento: Parecer 282/90 de 12/10/90 - Portaria 1546/CDCE de 1/4/91
 Ensino Médio - Formação Geral - Portaria 2844/CDCE 13/08/92
 Técnico em Processamento de Dados - Portaria 4019/CDCR 29/09/94
 CNPJ: 30.041.545/0001-07`;
+const defaultDeclarationTypes = [
+  { id: "pagas", label: "Mensalidades pagas", title: "DECLARAÇÃO DE MENSALIDADES PAGAS" },
+  { id: "quitacao", label: "Quitação", title: "DECLARAÇÃO DE QUITAÇÃO" },
+  { id: "debito", label: "Débitos em aberto", title: "DECLARAÇÃO DE DÉBITOS EM ABERTO" },
+];
 const onlyDigits = (value: string, limit: number) => value.replace(/\D/g, "").slice(0, limit);
 const maskCnpj = (value: string) =>
   onlyDigits(value, 14)
@@ -481,9 +486,12 @@ function DeclarationSettings() {
   const [defaultSigner,setDefaultSigner]=useState("instituicao");
   const [showCpf,setShowCpf]=useState(true);
   const [logoData,setLogoData]=useState("");
+  const [types,setTypes]=useState(defaultDeclarationTypes);
+  const [newType,setNewType]=useState("");
   const [message,setMessage]=useState("");
-  useEffect(()=>{try{const saved=localStorage.getItem("jpi-declaration-settings");if(saved){const parsed=JSON.parse(saved) as {header?:string;defaultSigner?:string;showCpf?:boolean;logoData?:string};setHeader(parsed.header||defaultDeclarationHeader);setDefaultSigner(parsed.defaultSigner||"instituicao");setShowCpf(parsed.showCpf!==false);setLogoData(parsed.logoData||"")}}catch{}},[]);
-  async function save(event:FormEvent<HTMLFormElement>){event.preventDefault();if(!canEdit)return;const form=new FormData(event.currentTarget);const logo=form.get("declaration_logo") as File;let nextLogoData=logoData;if(logo?.size){if(!["image/png","image/jpeg","image/webp"].includes(logo.type)){setMessage("Use uma logo nos formatos PNG, JPG ou WEBP.");return}if(logo.size>1024*1024){setMessage("A logo da declaração deve ter no máximo 1 MB.");return}nextLogoData=await new Promise<string>((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>resolve(String(reader.result||""));reader.onerror=()=>reject(reader.error);reader.readAsDataURL(logo)});setLogoData(nextLogoData)}localStorage.setItem("jpi-declaration-settings",JSON.stringify({header,defaultSigner,showCpf,logoData:nextLogoData}));window.dispatchEvent(new Event("jpi-declaration-settings-updated"));setMessage("Modelo de declaração salvo para teste neste navegador.")}
+  useEffect(()=>{try{const saved=localStorage.getItem("jpi-declaration-settings");if(saved){const parsed=JSON.parse(saved) as {header?:string;defaultSigner?:string;showCpf?:boolean;logoData?:string;types?:typeof defaultDeclarationTypes};setHeader(parsed.header||defaultDeclarationHeader);setDefaultSigner(parsed.defaultSigner||"instituicao");setShowCpf(parsed.showCpf!==false);setLogoData(parsed.logoData||"");setTypes(parsed.types?.length?parsed.types:defaultDeclarationTypes)}}catch{}},[]);
+  async function save(event:FormEvent<HTMLFormElement>){event.preventDefault();if(!canEdit)return;const form=new FormData(event.currentTarget);const logo=form.get("declaration_logo") as File;let nextLogoData=logoData;if(logo?.size){if(!["image/png","image/jpeg","image/webp"].includes(logo.type)){setMessage("Use uma logo nos formatos PNG, JPG ou WEBP.");return}if(logo.size>1024*1024){setMessage("A logo da declaração deve ter no máximo 1 MB.");return}nextLogoData=await new Promise<string>((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>resolve(String(reader.result||""));reader.onerror=()=>reject(reader.error);reader.readAsDataURL(logo)});setLogoData(nextLogoData)}localStorage.setItem("jpi-declaration-settings",JSON.stringify({header,defaultSigner,showCpf,logoData:nextLogoData,types}));window.dispatchEvent(new Event("jpi-declaration-settings-updated"));setMessage("Modelo de declaração salvo para teste neste navegador.")}
+  function addType(){const label=newType.trim();if(!label)return;const id=`custom-${Date.now()}`;setTypes(current=>[...current,{id,label,title:label.toLocaleUpperCase("pt-BR")}]);setNewType("")}
   return <form className="panel data-form declaration-settings-page" onSubmit={save}>
     <div className="panel-title"><div><h2>Configuração das declarações</h2><p>Centralize o modelo usado nas futuras declarações, antes de liberar no oficial.</p></div><FileText/></div>
     {message&&<div className="success-box">{message}</div>}
@@ -493,6 +501,7 @@ function DeclarationSettings() {
       <label className="file-field branding-logo-field declaration-wide"><span>Logomarca da declaração</span><div className={`company-logo-preview ${logoData?"loaded":""}`}>{logoData?<img src={logoData} alt="Logo da declaração"/>:<BrandLogo preview/>}<section><strong>{logoData?"Logo da declaração carregada":"Sem logo específica da declaração"}</strong><small>Esta logo é usada apenas nas declarações, separada da logo do sistema.</small></section></div><div><UploadCloud/><input name="declaration_logo" type="file" accept="image/png,image/jpeg,image/webp" disabled={!canEdit}/><small>PNG, JPG ou WEBP — máximo 1 MB</small></div></label>
       <label>Assinante padrão<select value={defaultSigner} disabled={!canEdit} onChange={event=>setDefaultSigner(event.target.value)}><option value="instituicao">Instituição</option><option value="financeiro">Responsável financeiro</option><option value="manual">Escolher no momento da declaração</option></select></label>
       <label className="declaration-check"><input type="checkbox" checked={showCpf} disabled={!canEdit} onChange={event=>setShowCpf(event.target.checked)}/>Mostrar CPF/CNPJ dos responsáveis por padrão</label>
+      <div className="declaration-type-manager declaration-wide"><span>Tipos de declaração disponíveis</span><div className="declaration-type-list">{types.map(type=><label key={type.id}><input value={type.label} disabled={!canEdit||defaultDeclarationTypes.some(item=>item.id===type.id)} onChange={event=>setTypes(current=>current.map(item=>item.id===type.id?{...item,label:event.target.value,title:event.target.value.toLocaleUpperCase("pt-BR")}:item))}/>{!defaultDeclarationTypes.some(item=>item.id===type.id)&&canEdit&&<button type="button" className="secondary mini" onClick={()=>setTypes(current=>current.filter(item=>item.id!==type.id))}>Remover</button>}</label>)}</div>{canEdit&&<div className="declaration-add-type"><input value={newType} onChange={event=>setNewType(event.target.value)} placeholder="Ex.: Declaração para imposto de renda"/><button type="button" className="secondary" onClick={addType}>Adicionar tipo</button></div>}<small>Esses tipos aparecem na combobox da tela Declarações.</small></div>
     </section>
     {canEdit&&<div className="form-actions"><button className="primary">Salvar modelo de teste</button></div>}
   </form>;
