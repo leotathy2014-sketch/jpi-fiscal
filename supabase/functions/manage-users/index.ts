@@ -20,6 +20,11 @@ const corsHeaders = {
 const allowedRoles = new Set(["admin", "financeiro", "secretaria", "consulta"]);
 const reply = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), { status, headers: corsHeaders });
+const onlyDigits = (value: unknown) => String(value ?? "").replace(/\D/g, "");
+const cpfValue = (value: unknown) => {
+  const digits = onlyDigits(value);
+  return digits ? digits.slice(0, 11) : null;
+};
 
 function invitationEmail(config: EmailDeliveryConfig, input: { nome: string; role: string; inviteUrl: string; logoUrl: string }) {
   const primary = safeColor(config.primary_color, "#1466DF");
@@ -104,7 +109,7 @@ Deno.serve(async (req: Request) => {
       const [{ data: authData, error: authError }, { data: appUsers, error: appError }] =
         await Promise.all([
           admin.auth.admin.listUsers({ page: 1, perPage: 1000 }),
-          admin.from("app_users").select("id,user_id,nome,email,role,active,created_at,invite_resent_at").order("created_at"),
+          admin.from("app_users").select("id,user_id,nome,email,cpf,role,active,created_at,invite_resent_at").order("created_at"),
         ]);
       if (authError || appError) throw authError ?? appError;
       const users = (appUsers ?? []).map((item) => {
@@ -123,13 +128,14 @@ Deno.serve(async (req: Request) => {
     if (action === "invite" || action === "resend_invite") {
       let email = String(body.email ?? "").trim().toLowerCase();
       let nome = String(body.nome ?? "").trim().toLocaleUpperCase("pt-BR");
+      let cpf = cpfValue(body.cpf);
       let role = String(body.role ?? "");
       if (action === "resend_invite") {
         const id = Number(body.id);
         if (!Number.isInteger(id)) return reply({ error: "Usuário inválido." }, 400);
         const { data: target, error: targetError } = await admin
           .from("app_users")
-          .select("id,user_id,nome,email,role,active")
+          .select("id,user_id,nome,email,cpf,role,active")
           .eq("id", id)
           .single();
         if (targetError) throw targetError;
@@ -138,6 +144,7 @@ Deno.serve(async (req: Request) => {
         }
         email = String(target.email ?? "").trim().toLowerCase();
         nome = String(target.nome ?? "").trim().toLocaleUpperCase("pt-BR");
+        cpf = cpfValue(target.cpf);
         role = String(target.role ?? "");
       }
       if (!email || !nome || !allowedRoles.has(role)) {
@@ -165,6 +172,7 @@ Deno.serve(async (req: Request) => {
         user_id: invited.user.id,
         nome,
         email,
+        cpf,
         role,
         active: true,
         updated_at: new Date().toISOString(),
@@ -229,6 +237,7 @@ Deno.serve(async (req: Request) => {
       const id = Number(body.id);
       const nome = String(body.nome ?? "").trim().toLocaleUpperCase("pt-BR");
       const email = String(body.email ?? "").trim().toLowerCase();
+      const cpf = cpfValue(body.cpf);
       const validEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
       if (!Number.isInteger(id) || nome.length < 2 || nome.length > 120 || email.length > 254 || !validEmail) {
         return reply({ error: "Informe um nome e um e-mail válidos." }, 400);
@@ -240,9 +249,6 @@ Deno.serve(async (req: Request) => {
         .eq("id", id)
         .single();
       if (targetError) throw targetError;
-      if (target.role === "master") {
-        return reply({ error: "Os dados do perfil Master são protegidos e não podem ser alterados por esta tela." }, 400);
-      }
 
       const { data: duplicate, error: duplicateError } = await admin
         .from("app_users")
@@ -269,8 +275,8 @@ Deno.serve(async (req: Request) => {
       const emailChanged = email !== target.email.toLowerCase();
       const previousMetadata = authUser.user_metadata ?? {};
       const authChanges = emailChanged
-        ? { email, email_confirm: Boolean(authUser.email_confirmed_at), user_metadata: { ...previousMetadata, nome } }
-        : { user_metadata: { ...previousMetadata, nome } };
+        ? { email, email_confirm: Boolean(authUser.email_confirmed_at), user_metadata: { ...previousMetadata, nome, cpf } }
+        : { user_metadata: { ...previousMetadata, nome, cpf } };
       const { error: authUpdateError } = await admin.auth.admin.updateUserById(authUserId, authChanges);
       if (authUpdateError) {
         const duplicateAuth = authUpdateError.message.toLowerCase().includes("already") || authUpdateError.message.toLowerCase().includes("registered");
@@ -278,7 +284,7 @@ Deno.serve(async (req: Request) => {
       }
 
       const changedAt = new Date().toISOString();
-      const appUpdate: Record<string, unknown> = { user_id: authUserId, nome, email, updated_at: changedAt };
+      const appUpdate: Record<string, unknown> = { user_id: authUserId, nome, email, cpf, updated_at: changedAt };
       if (emailChanged) appUpdate.invite_resent_at = null;
       const { error: appUpdateError } = await admin.from("app_users").update(appUpdate).eq("id", id);
       if (appUpdateError) {
