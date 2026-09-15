@@ -1,6 +1,6 @@
 "use client";
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
-import { AlertCircle, ArrowUpRight, BookOpenCheck, Building2, CalendarDays, Check, CircleDollarSign, Clock3, Copy, Eye, EyeOff, FileCheck2, FilePlus2, Filter, KeyRound, Link2, Mail, MessageCircle, MoreHorizontal, Palette, Plus, Search, ShieldCheck, SlidersHorizontal, Trash2, UploadCloud, UserCheck, UserCog, UsersRound, WalletCards, X } from "lucide-react";
+import { AlertCircle, ArrowUpRight, BookOpenCheck, Building2, CalendarDays, Check, CircleDollarSign, Clock3, Copy, Eye, EyeOff, FileCheck2, FilePlus2, FileText, Filter, KeyRound, Link2, Mail, MessageCircle, MoreHorizontal, Palette, Plus, Search, ShieldCheck, SlidersHorizontal, Trash2, UploadCloud, UserCheck, UserCog, UsersRound, WalletCards, X } from "lucide-react";
 import type { AppPage, Role } from "./app-shell";
 import { createSupabaseBrowserClient } from "@/lib/supabase";
 import { authenticatedFetch } from "@/lib/authenticated-fetch";
@@ -12,6 +12,17 @@ import { SweducSettings } from "./sweduc-settings";
 import { LGPD_TERM_VERSION } from "@/lib/lgpd-consent";
 
 const money = (n: number) => n.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+const defaultDeclarationHeader = `JARDIM ESCOLA JOÃO PAULO I
+
+EDUCAÇÃO INFANTIL - ENSINO FUNDAMENTAL - ENSINO MÉDIO
+
+Rua Baalbeck, 215 - Senador Camará - Rio de Janeiro/RJ CEP: 21833-130 - TELFAX - 2404-5173
+
+Reconhecimento: Parecer 282/90 de 12/10/90 - Portaria 1546/CDCE de 1/4/91
+
+Ensino Médio - Formação Geral - Portaria 2844/CDCE 13/08/92
+Técnico em Processamento de Dados - Portaria 4019/CDCR 29/09/94
+CNPJ: 30.041.545/0001-07`;
 const onlyDigits = (value: string, limit: number) => value.replace(/\D/g, "").slice(0, limit);
 const maskCnpj = (value: string) =>
   onlyDigits(value, 14)
@@ -439,11 +450,12 @@ type CompanyConfig = {
   branding_updated_at: string;
   updated_at: string;
 };
-type Tab = "Empresa" | "Identidade Visual" | "Certificado A1" | "Integrações" | "Usuários e Permissões";
+type Tab = "Empresa" | "Declarações" | "Identidade Visual" | "Certificado A1" | "Integrações" | "Usuários e Permissões";
 export function SettingsPage({accessToken,onNavigate}:{accessToken:string|null;onNavigate?:(page:AppPage)=>void}) {
   const {canAny}=useAccess();
   const availableTabs=useMemo(()=>[
     {name:"Empresa" as Tab,label:"Empresa",Icon:Building2,permissions:["settings.company.view","settings.company.edit"]},
+    {name:"Declarações" as Tab,label:"Declarações",Icon:FileText,permissions:["settings.company.view","settings.company.edit"]},
     {name:"Identidade Visual" as Tab,label:"Identidade Visual",Icon:Palette,permissions:["settings.branding.view","settings.branding.edit"]},
     {name:"Certificado A1" as Tab,label:"Certificado A1",Icon:KeyRound,permissions:["settings.certificate.view","settings.certificate.manage"]},
     {name:"Integrações" as Tab,label:"Integrações",Icon:Link2,permissions:["settings.integrations.view","settings.integrations.edit"]},
@@ -459,9 +471,30 @@ export function SettingsPage({accessToken,onNavigate}:{accessToken:string|null;o
       <div className="tabs">
         {availableTabs.map(({name,label,Icon})=><button key={name} className={tab===name?"active":""} onClick={()=>setTab(name)}><Icon/>{label}</button>)}
       </div>
-      {tab==="Empresa"?<CompanySettings/>:tab==="Identidade Visual"?<BrandingSettings/>:tab==="Certificado A1"?<CertificateSettings/>:tab==="Integrações"?<Integrations accessToken={accessToken} onNavigate={onNavigate}/>:<Permissions/>}
+      {tab==="Empresa"?<CompanySettings/>:tab==="Declarações"?<DeclarationSettings/>:tab==="Identidade Visual"?<BrandingSettings/>:tab==="Certificado A1"?<CertificateSettings/>:tab==="Integrações"?<Integrations accessToken={accessToken} onNavigate={onNavigate}/>:<Permissions/>}
     </>
   );
+}
+function DeclarationSettings() {
+  const {can}=useAccess();const canEdit=can("settings.company.edit");
+  const [header,setHeader]=useState(defaultDeclarationHeader);
+  const [defaultSigner,setDefaultSigner]=useState("instituicao");
+  const [showCpf,setShowCpf]=useState(true);
+  const [message,setMessage]=useState("");
+  useEffect(()=>{try{const saved=localStorage.getItem("jpi-declaration-settings");if(saved){const parsed=JSON.parse(saved) as {header?:string;defaultSigner?:string;showCpf?:boolean};setHeader(parsed.header||defaultDeclarationHeader);setDefaultSigner(parsed.defaultSigner||"instituicao");setShowCpf(parsed.showCpf!==false)}}catch{}},[]);
+  function save(event:FormEvent<HTMLFormElement>){event.preventDefault();if(!canEdit)return;localStorage.setItem("jpi-declaration-settings",JSON.stringify({header,defaultSigner,showCpf}));window.dispatchEvent(new Event("jpi-declaration-settings-updated"));setMessage("Modelo de declaração salvo para teste neste navegador.")}
+  return <form className="panel data-form declaration-settings-page" onSubmit={save}>
+    <div className="panel-title"><div><h2>Configuração das declarações</h2><p>Centralize o modelo usado nas futuras declarações, antes de liberar no oficial.</p></div><FileText/></div>
+    {message&&<div className="success-box">{message}</div>}
+    <div className="notice compact"><ShieldCheck/><span>Ambiente de teste: estes campos validam o modelo sem alterar emissão fiscal, SWeduc ou Agenda Edu.</span></div>
+    <section className="declaration-config-grid">
+      <label className="declaration-wide">Cabeçalho padrão<textarea rows={9} value={header} disabled={!canEdit} onChange={event=>setHeader(event.target.value)}/><small>Este texto aparece no topo da prévia da declaração.</small></label>
+      <label className="file-field branding-logo-field declaration-wide"><span>Logomarca da escola</span><div className="company-logo-preview loaded"><BrandLogo preview/><section><strong>Logo atual da empresa</strong><small>Para trocar a logo global, use Configurações → Identidade Visual. A declaração usa esta mesma logo.</small></section></div></label>
+      <label>Assinante padrão<select value={defaultSigner} disabled={!canEdit} onChange={event=>setDefaultSigner(event.target.value)}><option value="instituicao">Instituição</option><option value="financeiro">Responsável financeiro</option><option value="manual">Escolher no momento da declaração</option></select></label>
+      <label className="declaration-check"><input type="checkbox" checked={showCpf} disabled={!canEdit} onChange={event=>setShowCpf(event.target.checked)}/>Mostrar CPF/CNPJ dos responsáveis por padrão</label>
+    </section>
+    {canEdit&&<div className="form-actions"><button className="primary">Salvar modelo de teste</button></div>}
+  </form>;
 }
 function BrandingSettings() {
   const supabase=useMemo(()=>createSupabaseBrowserClient(),[]);const {can}=useAccess();const canEdit=can("settings.branding.edit");
@@ -573,6 +606,7 @@ function CompanySettings() {
     setError("");
     setMessage("");
     const f = new FormData(e.currentTarget);
+    const logo = f.get("logo") as File;
     const text = (name: string) => String(f.get(name) || "").trim();
     const pisRate = Number(text("pis_aliquota").replace(",", "."));
     const cofinsRate = Number(text("cofins_aliquota").replace(",", "."));
@@ -580,6 +614,24 @@ function CompanySettings() {
       setError("Informe alíquotas válidas de PIS e COFINS entre 0 e 100%.");
       setBusy(false);
       return;
+    }
+    if (logo?.size) {
+      if (!["image/png", "image/jpeg", "image/webp"].includes(logo.type)) {
+        setError("Use uma logo nos formatos PNG, JPG ou WEBP.");
+        setBusy(false);
+        return;
+      }
+      if (logo.size > 2 * 1024 * 1024) {
+        setError("A logo deve ter no máximo 2 MB.");
+        setBusy(false);
+        return;
+      }
+      const { error: logoError } = await supabase.storage.from("logos-empresa").upload("empresa/logo", logo, { contentType: logo.type, cacheControl: "60", upsert: true });
+      if (logoError) {
+        setError(logoError.message);
+        setBusy(false);
+        return;
+      }
     }
     const payload = {
       cnpj: maskCnpj(text("cnpj")),
@@ -610,7 +662,8 @@ function CompanySettings() {
       return;
     }
     setConfig(data as CompanyConfig);
-    setMessage("Dados da empresa salvos com sucesso.");
+    if (logo?.size) window.dispatchEvent(new Event("jpi-branding-updated"));
+    setMessage(logo?.size ? "Dados da empresa e logomarca salvos com sucesso." : "Dados da empresa salvos com sucesso.");
   }
   if (!config) return <div className="panel">{error || "Carregando dados da empresa…"}</div>;
   return (
