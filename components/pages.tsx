@@ -1955,6 +1955,11 @@ function Permissions() {
     return rolePermissions.find(item=>item.role===role&&item.permission_key===permissionKey)?.allowed===true;
   }
   function lgpdAcceptanceFor(user:ManagedUser){return acceptances[String(user.user_id||"")]||acceptances[user.email.toLowerCase()]||null}
+  function previewAsUser(user:ManagedUser){
+    if(!isMaster||user.role==="master")return;
+    const permissions=rolePermissions.filter(item=>item.role===user.role&&item.allowed).map(item=>item.permission_key);
+    window.dispatchEvent(new CustomEvent("jpi-user-preview-start",{detail:{name:user.nome||user.email,email:user.email,role:roleLabels[user.role],permissions}}));
+  }
 
   async function togglePermission(role:RolePermissionRow["role"],permissionKey:string){
     if(!supabase||!isMaster)return;
@@ -2065,7 +2070,7 @@ function Permissions() {
           </select>}</td>
           <td><Status>{user.active&&user.invited_at&&!user.confirmed_at?"Convite pendente":user.active?"Ativo":"Bloqueado"}</Status></td>
           <td>{user.last_sign_in_at?new Date(user.last_sign_in_at).toLocaleString("pt-BR"):user.invited_at?"Convite pendente":"Nunca acessou"}</td>
-          <td>{canManageUsers?<div className="user-access-actions"><button type="button" className="secondary edit-user" disabled={busy} onClick={()=>{setError("");setMessage("");setEditingUser(user)}}><UserCog/>Editar dados</button>{user.role==="master"?<span className="master-lock"><ShieldCheck/>Protegido</span>:<>{user.active&&user.invited_at&&!user.confirmed_at&&<button type="button" className="secondary resend-invite" disabled={busy} onClick={()=>void resendInvite(user)}><Mail/>Reenviar convite</button>}<button className={`access-toggle ${user.active?"active":"blocked"}`} disabled={busy} onClick={()=>updateUser(user,{active:!user.active})}>{user.active?"Bloquear":"Ativar"}</button></>}</div>:<span className="muted">Somente leitura</span>}</td>
+          <td>{canManageUsers?<div className="user-access-actions">{isMaster&&user.role!=="master"&&<button type="button" className="secondary preview-user" disabled={busy||!user.active} onClick={()=>previewAsUser(user)}><Eye/>Visualizar como</button>}<button type="button" className="secondary edit-user" disabled={busy} onClick={()=>{setError("");setMessage("");setEditingUser(user)}}><UserCog/>Editar dados</button>{user.role==="master"?<span className="master-lock"><ShieldCheck/>Protegido</span>:<>{user.active&&user.invited_at&&!user.confirmed_at&&<button type="button" className="secondary resend-invite" disabled={busy} onClick={()=>void resendInvite(user)}><Mail/>Reenviar convite</button>}<button className={`access-toggle ${user.active?"active":"blocked"}`} disabled={busy} onClick={()=>updateUser(user,{active:!user.active})}>{user.active?"Bloquear":"Ativar"}</button></>}</div>:<span className="muted">Somente leitura</span>}</td>
         </tr>)}</tbody>
       </table>{rows.length===0&&!error&&<div className="empty-row">Nenhum usuário encontrado.</div>}</div>
     </>}

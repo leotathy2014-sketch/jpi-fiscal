@@ -7,6 +7,7 @@ import { InviteConfirm, Login, RecoveryConfirm, SetPassword } from "@/components
 import { BrandLogo } from "@/components/branding";
 import { AccessProvider } from "@/components/access";
 
+type UserPreview = { name:string; email:string; role:Role; permissions:string[] };
 
 export default function Home() {
   const supabase = useMemo(() => createSupabaseBrowserClient(), []);
@@ -24,6 +25,21 @@ export default function Home() {
   const [inviteTokenHash,setInviteTokenHash]=useState("");
   const [authError, setAuthError] = useState("");
   const [authMessage, setAuthMessage] = useState("");
+  const [userPreview,setUserPreview]=useState<UserPreview|null>(null);
+
+  useEffect(()=>{
+    const start=(event:Event)=>{
+      if(role!=="Master")return;
+      const detail=(event as CustomEvent<UserPreview>).detail;
+      if(!detail?.email||detail.role==="Master")return;
+      setUserPreview(detail);
+      setPage("Painel");
+    };
+    const stop=()=>setUserPreview(null);
+    window.addEventListener("jpi-user-preview-start",start);
+    window.addEventListener("jpi-user-preview-stop",stop);
+    return()=>{window.removeEventListener("jpi-user-preview-start",start);window.removeEventListener("jpi-user-preview-stop",stop)};
+  },[role]);
 
   useEffect(() => {
     if (!supabase) { setLoading(false); return; }
@@ -131,7 +147,7 @@ export default function Home() {
     if (error) throw error;
   }
 
-  async function signOut() { if (supabase) await supabase.auth.signOut({ scope: "local" }); localStorage.removeItem("jpi-demo-session"); setAccessReady(false);setOpeningReady(false);setPermissions([]);setAccessToken(null);setEmail(null); }
+  async function signOut() { if (supabase) await supabase.auth.signOut({ scope: "local" }); localStorage.removeItem("jpi-demo-session"); setUserPreview(null);setAccessReady(false);setOpeningReady(false);setPermissions([]);setAccessToken(null);setEmail(null); }
   useEffect(() => {
     if (!supabase || !email) return;
     let active = true;
@@ -237,5 +253,7 @@ export default function Home() {
   if (email&&(needsPassword||passwordRecovery)) return <SetPassword onSave={definePassword} recovery={passwordRecovery}/>;
   if (email&&!accessReady) return <div className="splash"><BrandLogo/><p>Verificando permissões…</p></div>;
   if (email&&accessReady&&!openingReady) return <div className="splash"><BrandLogo/><p>Preparando sistema…</p><div className="splash-progress" aria-label="Carregamento do sistema"><span style={{width:"100%"}}/></div><small>100%</small></div>;
-  return <AccessProvider role={role} permissions={permissions}><AppShell email={email ?? "administrador@jpi.edu.br"} accessToken={accessToken} role={role} page={page} onPageChange={setPage} onSignOut={signOut} /></AccessProvider>;
+  const effectiveRole=userPreview?.role||role;
+  const effectivePermissions=userPreview?.permissions||permissions;
+  return <AccessProvider role={effectiveRole} permissions={effectivePermissions}><AppShell email={userPreview?.email||email||"administrador@jpi.edu.br"} accessToken={accessToken} role={effectiveRole} page={page} onPageChange={setPage} onSignOut={signOut} previewUser={userPreview} onEndPreview={()=>{setUserPreview(null);setPage("Configurações")}} /></AccessProvider>;
 }
