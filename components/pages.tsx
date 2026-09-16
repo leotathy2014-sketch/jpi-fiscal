@@ -459,13 +459,13 @@ type Tab = "Empresa" | "Declarações" | "Identidade Visual" | "Certificado A1" 
 export function SettingsPage({accessToken,onNavigate}:{accessToken:string|null;onNavigate?:(page:AppPage)=>void}) {
   const {canAny}=useAccess();
   const availableTabs=useMemo(()=>[
-    {name:"Empresa" as Tab,label:"Empresa",Icon:Building2,permissions:["settings.company.view","settings.company.edit"]},
-    {name:"Declarações" as Tab,label:"Declarações",Icon:FileText,permissions:["declarations.manage"]},
-    {name:"Identidade Visual" as Tab,label:"Identidade Visual",Icon:Palette,permissions:["settings.branding.view","settings.branding.edit"]},
-    {name:"Certificado A1" as Tab,label:"Certificado A1",Icon:KeyRound,permissions:["settings.certificate.view","settings.certificate.manage"]},
-    {name:"Integrações" as Tab,label:"Integrações",Icon:Link2,permissions:["settings.integrations.view","settings.integrations.edit"]},
-    {name:"Comunicados" as Tab,label:"Comunicados",Icon:Mail,permissions:["system.announcements.send","settings.users.manage"]},
-    {name:"Usuários e Permissões" as Tab,label:"Usuários e Permissões",Icon:UserCog,permissions:["settings.users.view","settings.users.manage"]},
+    {name:"Empresa" as Tab,label:"Empresa",description:"Dados cadastrais e fiscais da instituição",Icon:Building2,permissions:["settings.company.view","settings.company.edit"]},
+    {name:"Declarações" as Tab,label:"Declarações",description:"Modelos, textos, logo e assinaturas",Icon:FileText,permissions:["declarations.manage"]},
+    {name:"Identidade Visual" as Tab,label:"Identidade Visual",description:"Marca, cores e aparência do sistema",Icon:Palette,permissions:["settings.branding.view","settings.branding.edit"]},
+    {name:"Certificado A1" as Tab,label:"Certificado A1",description:"Validade e segurança da emissão fiscal",Icon:KeyRound,permissions:["settings.certificate.view","settings.certificate.manage"]},
+    {name:"Integrações" as Tab,label:"Integrações",description:"SWeduc, e-mail e canais conectados",Icon:Link2,permissions:["settings.integrations.view","settings.integrations.edit"]},
+    {name:"Comunicados" as Tab,label:"Comunicados",description:"Avisos gerais e mensagens reservadas",Icon:Mail,permissions:["system.announcements.send","settings.users.manage"]},
+    {name:"Usuários e Permissões" as Tab,label:"Usuários e Permissões",description:"Acessos, perfis e auditoria de usuários",Icon:UserCog,permissions:["settings.users.view","settings.users.manage"]},
   ].filter(item=>canAny(item.permissions)),[canAny]);
   const [tab,setTab]=useState<Tab>(()=>typeof window==="undefined"?"Empresa":(sessionStorage.getItem("jpi-settings-tab") as Tab)||"Empresa");
   useEffect(()=>{const target=sessionStorage.getItem("jpi-settings-tab") as Tab|null;if(target){sessionStorage.removeItem("jpi-settings-tab");setTab(target)}},[]);
@@ -473,10 +473,15 @@ export function SettingsPage({accessToken,onNavigate}:{accessToken:string|null;o
   if(!availableTabs.length)return <><Heading title="Configurações" desc="Seu perfil não possui módulos de configuração liberados."/><div className="notice warning"><ShieldCheck/><span>Solicite ao Master a liberação das permissões necessárias.</span></div></>;
   return (
     <>
-      <Heading title="Configurações" desc="Acesse somente as áreas liberadas para o seu perfil." />
-      <div className="tabs">
-        {availableTabs.map(({name,label,Icon})=><button key={name} className={tab===name?"active":""} onClick={()=>setTab(name)}><Icon/>{label}</button>)}
+      <Heading title="Configurações" desc="Visão geral dos módulos de administração liberados para o seu perfil." />
+      <div className="settings-overview" aria-label="Módulos de configurações">
+        {availableTabs.map(({name,label,description,Icon})=><button key={name} type="button" className={tab===name?"active":""} onClick={()=>setTab(name)} aria-pressed={tab===name}>
+          <span className="settings-overview-icon"><Icon/></span>
+          <span className="settings-overview-copy"><strong>{label}</strong><small>{description}</small></span>
+          <span className="settings-overview-state">{tab===name?"Em exibição":"Abrir"}</span>
+        </button>)}
       </div>
+      <div className="settings-current-module"><span>Módulo selecionado</span><strong>{tab}</strong></div>
       {tab==="Empresa"?<CompanySettings/>:tab==="Declarações"?<DeclarationSettings/>:tab==="Identidade Visual"?<BrandingSettings/>:tab==="Certificado A1"?<CertificateSettings/>:tab==="Integrações"?<Integrations accessToken={accessToken} onNavigate={onNavigate}/>:tab==="Comunicados"?<SystemAnnouncements/>:<Permissions/>}
     </>
   );
