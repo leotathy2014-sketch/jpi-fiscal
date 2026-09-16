@@ -460,7 +460,7 @@ export function SettingsPage({accessToken,onNavigate}:{accessToken:string|null;o
   const {canAny}=useAccess();
   const availableTabs=useMemo(()=>[
     {name:"Empresa" as Tab,label:"Empresa",Icon:Building2,permissions:["settings.company.view","settings.company.edit"]},
-    {name:"Declarações" as Tab,label:"Declarações",Icon:FileText,permissions:["declarations.view","declarations.manage"]},
+    {name:"Declarações" as Tab,label:"Declarações",Icon:FileText,permissions:["declarations.manage"]},
     {name:"Identidade Visual" as Tab,label:"Identidade Visual",Icon:Palette,permissions:["settings.branding.view","settings.branding.edit"]},
     {name:"Certificado A1" as Tab,label:"Certificado A1",Icon:KeyRound,permissions:["settings.certificate.view","settings.certificate.manage"]},
     {name:"Integrações" as Tab,label:"Integrações",Icon:Link2,permissions:["settings.integrations.view","settings.integrations.edit"]},

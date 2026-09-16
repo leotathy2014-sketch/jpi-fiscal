@@ -89,22 +89,8 @@ export async function POST(request: NextRequest) {
   if (userError || !user?.email) return json({ error: "Sessão expirada. Entre novamente." }, 401);
 
   const canTestConnection = await hasServerPermission(supabase,"nfse.test_connection");
-  if (action === "server-status" && !canTestConnection) {
-    try {
-      const controller = new AbortController();
-      const timer = setTimeout(() => controller.abort(), 12000);
-      const response = await fetch(PARAMETERIZATION_TEST_URL, { method: "GET", cache: "no-store", signal: controller.signal });
-      clearTimeout(timer);
-      return json({
-        ready: response.status < 500,
-        checkedBy: "public-status",
-        diagnosticCode: response.status < 500 ? "NFSE_PUBLIC_STATUS_OK" : "NFSE_PUBLIC_STATUS_UNSTABLE",
-      }, response.status < 500 ? 200 : 503);
-    } catch {
-      return json({ ready: false, checkedBy: "public-status", diagnosticCode: "NFSE_PUBLIC_STATUS_UNKNOWN" }, 503);
-    }
-  }
-  if (!canTestConnection) {
+  const canViewSystemStatus = action === "server-status" && await hasServerPermission(supabase,"system.status.view");
+  if (!canTestConnection && !canViewSystemStatus) {
     return json({ error: "Seu usuário não possui permissão para testar ou consultar a integração fiscal." }, 403);
   }
   if (action === "server-status" && cachedServerStatus && cachedServerStatus.expiresAt > Date.now()) {
@@ -129,10 +115,10 @@ export async function POST(request: NextRequest) {
   if (new Date(`${certificate.validade}T23:59:59-03:00`).getTime() < Date.now()) return json({ error: "O certificado A1 está vencido." }, 400);
   if (!certificate.senha_configurada) return json({ error: "Guarde primeiro a senha do certificado em Configurações > Certificado A1." }, 400);
 
-  const { data: storedPassword, error: passwordError } = await supabase.rpc("get_certificate_password", {
-    p_certificate_id: certificate.id,
-    p_backend_secret: backendSecret,
-  });
+  const passwordResult = canTestConnection
+    ? await supabase.rpc("get_certificate_password", {p_certificate_id:certificate.id,p_backend_secret:backendSecret})
+    : await dataClient.rpc("get_certificate_password_service", {p_certificate_id:certificate.id});
+  const { data: storedPassword, error: passwordError } = passwordResult;
   let password = typeof storedPassword === "string" ? storedPassword : "";
   if (passwordError || !password) return json({ error: "Não foi possível abrir a senha protegida do certificado." }, 500);
 
