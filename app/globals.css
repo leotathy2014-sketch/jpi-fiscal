@@ -1120,6 +1120,18 @@
 .declaration-titles-summary{width:100%;border-collapse:collapse;margin:12px 0 16px;font-size:11px}.declaration-titles-summary th{background:#f1f5f9;color:#526176;text-transform:uppercase;letter-spacing:.35px;font-size:9px;text-align:left;padding:8px;border:1px solid #cbd8e6}.declaration-titles-summary td{padding:8px;border:1px solid #dfe7ef;vertical-align:top;color:#172033}.declaration-titles-summary td strong{display:block;font-size:11px;color:#172033}.declaration-titles-summary td small{display:block;margin-top:2px;color:#64748b;font-size:9px}.declaration-titles-summary tr.paid td{background:#eefaf4;color:#047857}.declaration-titles-summary tr.paid td strong{color:#047857}.declaration-titles-summary td:last-child{font-weight:900;white-space:nowrap}
 .declaration-type-card{grid-template-columns:1fr!important;gap:12px!important}.declaration-type-card-head{display:flex;align-items:center;justify-content:space-between;gap:10px;padding-bottom:10px;border-bottom:1px solid #e5edf5}.declaration-type-card-head strong{font-size:13px;color:#172033}.declaration-type-card .form-row{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.4fr);gap:12px}.declaration-type-card label{min-width:0}.declaration-type-card textarea{width:100%;min-height:180px;resize:vertical;font-size:13px;line-height:1.55;padding:14px}.declaration-type-card .declaration-editor-toolbar{border-radius:10px;background:#f8fafc;margin-bottom:0}.danger-soft{border-color:#fecaca!important;background:#fff5f5!important;color:#991b1b!important}.declaration-type-list{display:grid;gap:14px}.declaration-type-manager{display:grid;gap:10px}
 .declaration-type-card.collapsed{padding:12px 14px;background:#fbfdff}.declaration-type-card.collapsed .declaration-type-card-head{padding-bottom:0;border-bottom:0}
+
+/* O espaço de trabalho da declaração deve conservar a grade aprovada em todos
+   os perfis. A regra anterior dependia do painel de diagnóstico, visível apenas
+   para o Master, e fazia os demais usuários herdarem a grade genérica de 3 colunas. */
+.settings-grid:has(.declaration-form){
+  grid-template-columns:minmax(360px,.9fr) minmax(520px,1.25fr);
+  align-items:start;
+  gap:18px;
+}
+@media(max-width:1100px){
+  .settings-grid:has(.declaration-form){grid-template-columns:1fr}
+}
 .declaration-type-card-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap;justify-content:flex-end}
 .declaration-ready-message{display:grid;gap:6px;padding:10px;border:1px dashed #cbd8e6;border-radius:12px;background:#fbfdff}.declaration-ready-message label{display:grid!important;gap:6px}.declaration-ready-message small{font-size:11px;color:#64748b}
 .declaration-signers-manager{display:grid;gap:12px;padding:14px;border:1px solid #dfe7ef;border-radius:14px;background:#fbfdff}.declaration-signer-list{display:grid;gap:12px}.declaration-signer-card{display:grid;gap:10px;padding:12px;border:1px solid #e5edf5;border-radius:12px;background:#fff}.declaration-profile-list{display:flex;flex-wrap:wrap;gap:8px;align-items:center}.declaration-profile-list>span{width:100%;font-size:10px;font-weight:900;text-transform:uppercase;color:#64748b}.declaration-profile-list label{display:flex!important;align-items:center;gap:5px;padding:6px 8px;border:1px solid #dfe7ef;border-radius:999px;background:#f8fafc;font-size:11px!important;text-transform:none!important;letter-spacing:0!important}.declaration-profile-list input{width:14px;height:14px}
