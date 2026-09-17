@@ -50,6 +50,14 @@ export async function POST(request:NextRequest){
     const action=String(body.action||"save");
     const {data:current,error:currentError}=await context.admin.from("domain_settings").select("*").eq("id",true).single();
     if(currentError)throw currentError;
+    if(action==="restore_vercel"){
+      const restoredAt=new Date().toISOString();
+      const originalDomain="jpi-fiscal.vercel.app";
+      const {data,error}=await context.admin.from("domain_settings").update({current_domain:originalDomain,status:current.desired_domain?"planejado":"nao_configurado",activated_at:null,updated_at:restoredAt,updated_by:context.user.id}).eq("id",true).select().single();
+      if(error)throw error;
+      await context.admin.from("domain_change_history").insert({action:"restaurar_vercel",previous_domain:current.current_domain,requested_domain:originalDomain,dns_value:null,status:"ativo",details:"O endereço original da Vercel voltou a ser a referência principal no painel. O domínio personalizado foi preservado.",created_by:context.user.id,created_by_email:context.user.email});
+      return json({ok:true,config:data});
+    }
     if(action==="verify"){
       const desired=String(current.desired_domain||"").toLowerCase();
       if(!desired)return json({error:"Salve primeiro o domínio desejado."},400);
