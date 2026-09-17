@@ -1,6 +1,6 @@
 "use client";
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { AlertCircle, ArrowUpRight, BookOpenCheck, Building2, CalendarDays, Check, CircleDollarSign, Clock3, Copy, Eye, EyeOff, FileCheck2, FilePlus2, FileText, Filter, KeyRound, Link2, Mail, MessageCircle, MoreHorizontal, Palette, Plus, Search, ShieldCheck, SlidersHorizontal, Trash2, UploadCloud, UserCheck, UserCog, UsersRound, WalletCards, X } from "lucide-react";
+import { AlertCircle, ArrowUpRight, BookOpenCheck, Building2, CalendarDays, Check, CircleDollarSign, Clock3, Copy, Eye, EyeOff, FileCheck2, FilePlus2, FileText, Filter, Globe2, KeyRound, Link2, Mail, MessageCircle, MoreHorizontal, Palette, Plus, Search, ShieldCheck, SlidersHorizontal, Trash2, UploadCloud, UserCheck, UserCog, UsersRound, WalletCards, X } from "lucide-react";
 import type { AppPage, Role } from "./app-shell";
 import { createSupabaseBrowserClient } from "@/lib/supabase";
 import { authenticatedFetch } from "@/lib/authenticated-fetch";
@@ -10,6 +10,7 @@ import { BrandLogo } from "./branding";
 import { useAccess } from "./access";
 import { SweducSettings } from "./sweduc-settings";
 import { LGPD_TERM_VERSION } from "@/lib/lgpd-consent";
+import { DomainSettings } from "./domain-settings";
 
 const money = (n: number) => n.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 const defaultDeclarationHeader = `JARDIM ESCOLA JOÃO PAULO I
@@ -455,18 +456,19 @@ type CompanyConfig = {
   branding_updated_at: string;
   updated_at: string;
 };
-type Tab = "Empresa" | "Declarações" | "Identidade Visual" | "Certificado A1" | "Integrações" | "Comunicados" | "Usuários e Permissões";
+type Tab = "Empresa" | "Domínio" | "Declarações" | "Identidade Visual" | "Certificado A1" | "Integrações" | "Comunicados" | "Usuários e Permissões";
 export function SettingsPage({accessToken,onNavigate}:{accessToken:string|null;onNavigate?:(page:AppPage)=>void}) {
-  const {canAny}=useAccess();
+  const {canAny,isMaster}=useAccess();
   const availableTabs=useMemo(()=>[
     {name:"Empresa" as Tab,label:"Empresa",description:"Dados cadastrais e fiscais da instituição",Icon:Building2,permissions:["settings.company.view","settings.company.edit"]},
+    ...(isMaster?[{name:"Domínio" as Tab,label:"Domínio",description:"Endereço oficial e apontamento da Locaweb",Icon:Globe2,permissions:[]}]:[]),
     {name:"Declarações" as Tab,label:"Declarações",description:"Modelos, textos, logo e assinaturas",Icon:FileText,permissions:["declarations.manage"]},
     {name:"Identidade Visual" as Tab,label:"Identidade Visual",description:"Marca, cores e aparência do sistema",Icon:Palette,permissions:["settings.branding.view","settings.branding.edit"]},
     {name:"Certificado A1" as Tab,label:"Certificado A1",description:"Validade e segurança da emissão fiscal",Icon:KeyRound,permissions:["settings.certificate.view","settings.certificate.manage"]},
     {name:"Integrações" as Tab,label:"Integrações",description:"SWeduc, e-mail e canais conectados",Icon:Link2,permissions:["settings.integrations.view","settings.integrations.edit"]},
     {name:"Comunicados" as Tab,label:"Comunicados",description:"Avisos gerais e mensagens reservadas",Icon:Mail,permissions:["system.announcements.send","settings.users.manage"]},
     {name:"Usuários e Permissões" as Tab,label:"Usuários e Permissões",description:"Acessos, perfis e auditoria de usuários",Icon:UserCog,permissions:["settings.users.view","settings.users.manage"]},
-  ].filter(item=>canAny(item.permissions)),[canAny]);
+  ].filter(item=>item.name==="Domínio"?isMaster:canAny(item.permissions)),[canAny,isMaster]);
   const [tab,setTab]=useState<Tab>(()=>typeof window==="undefined"?"Empresa":(sessionStorage.getItem("jpi-settings-tab") as Tab)||"Empresa");
   useEffect(()=>{const target=sessionStorage.getItem("jpi-settings-tab") as Tab|null;if(target){sessionStorage.removeItem("jpi-settings-tab");setTab(target)}},[]);
   useEffect(()=>{if(availableTabs.length&&!availableTabs.some(item=>item.name===tab))setTab(availableTabs[0].name)},[availableTabs,tab]);
@@ -482,7 +484,7 @@ export function SettingsPage({accessToken,onNavigate}:{accessToken:string|null;o
         </button>)}
       </div>
       <div className="settings-current-module"><span>Módulo selecionado</span><strong>{tab}</strong></div>
-      {tab==="Empresa"?<CompanySettings/>:tab==="Declarações"?<DeclarationSettings/>:tab==="Identidade Visual"?<BrandingSettings/>:tab==="Certificado A1"?<CertificateSettings/>:tab==="Integrações"?<Integrations accessToken={accessToken} onNavigate={onNavigate}/>:tab==="Comunicados"?<SystemAnnouncements/>:<Permissions/>}
+      {tab==="Empresa"?<CompanySettings/>:tab==="Domínio"?<DomainSettings accessToken={accessToken}/>:tab==="Declarações"?<DeclarationSettings/>:tab==="Identidade Visual"?<BrandingSettings/>:tab==="Certificado A1"?<CertificateSettings/>:tab==="Integrações"?<Integrations accessToken={accessToken} onNavigate={onNavigate}/>:tab==="Comunicados"?<SystemAnnouncements/>:<Permissions/>}
     </>
   );
 }
