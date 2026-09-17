@@ -65,14 +65,16 @@ export async function POST(request:NextRequest){
     }
     const baseDomain=String(body.baseDomain||"").trim().toLowerCase().replace(/^https?:\/\//,"").replace(/\/$/,"");
     const subdomain=String(body.subdomain||"").trim().toLowerCase();
-    if(!hostnamePattern.test(baseDomain))return json({error:"Informe um domínio válido registrado na Locaweb, sem http ou caminho."},400);
+    const provider=String(body.provider||"locaweb");
+    if(!hostnamePattern.test(baseDomain))return json({error:"Informe um domínio válido registrado no provedor, sem http ou caminho."},400);
     if(!labelPattern.test(subdomain))return json({error:"Informe somente o nome do subdomínio, como fiscal ou sistema."},400);
+    if(!["locaweb","registro_br"].includes(provider))return json({error:"Selecione Locaweb ou Registro.br."},400);
     const desiredDomain=`${subdomain}.${baseDomain}`;
     const updatedAt=new Date().toISOString();
-    const payload={base_domain:baseDomain,subdomain,desired_domain:desiredDomain,dns_type:"CNAME",dns_target:"cname.vercel-dns-0.com",status:"planejado",last_dns_value:null,last_checked_at:null,updated_at:updatedAt,updated_by:context.user.id};
+    const payload={base_domain:baseDomain,subdomain,desired_domain:desiredDomain,dns_provider:provider,dns_type:"CNAME",dns_target:"cname.vercel-dns-0.com",status:"planejado",last_dns_value:null,last_checked_at:null,updated_at:updatedAt,updated_by:context.user.id};
     const {data,error}=await context.admin.from("domain_settings").update(payload).eq("id",true).select().single();
     if(error)throw error;
-    await context.admin.from("domain_change_history").insert({action:"salvar_planejamento",previous_domain:current.current_domain,requested_domain:desiredDomain,dns_value:payload.dns_target,status:"planejado",details:"Planejamento salvo; nenhum DNS foi alterado automaticamente.",created_by:context.user.id,created_by_email:context.user.email});
+    await context.admin.from("domain_change_history").insert({action:"salvar_planejamento",previous_domain:current.current_domain,requested_domain:desiredDomain,dns_value:payload.dns_target,status:"planejado",details:`Planejamento salvo para ${provider==="registro_br"?"Registro.br":"Locaweb"}; nenhum DNS foi alterado automaticamente.`,created_by:context.user.id,created_by_email:context.user.email});
     return json({ok:true,config:data});
   }catch(error){return json({error:error instanceof Error?error.message:"Não foi possível salvar a configuração de domínio."},500)}
 }
