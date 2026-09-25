@@ -3,108 +3,48 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 
 const deliveryApiSource=readFileSync(new URL("../app/api/deliveries/agenda-edu/route.ts",import.meta.url),"utf8");
-const communicationsApiSource=readFileSync(new URL("../app/api/integrations/communications/route.ts",import.meta.url),"utf8");
 const deliveryUiSource=readFileSync(new URL("../components/delivery-center.tsx",import.meta.url),"utf8");
-const settingsUiSource=readFileSync(new URL("../components/pages.tsx",import.meta.url),"utf8");
-const studentLinksSource=readFileSync(new URL("../components/agenda-edu-student-links.tsx",import.meta.url),"utf8");
-const migrationSource=readFileSync(new URL("../supabase/migrations/20260827171000_preparar_integracao_agenda_edu.sql",import.meta.url),"utf8");
-const agendaClientSource=readFileSync(new URL("../lib/agenda-edu.ts",import.meta.url),"utf8");
 const accessMigrationSource=readFileSync(new URL("../supabase/migrations/20260828184500_registrar_visualizacao_nfse_agenda_edu.sql",import.meta.url),"utf8");
-const agendaProductionMigrationSource=readFileSync(new URL("../supabase/migrations/20260908143000_habilitar_agenda_edu_producao.sql",import.meta.url),"utf8");
+const permissionMigrationSource=readFileSync(new URL("../supabase/migrations/20260925103410_liberar_envios_secretaria_sem_vinculo_agenda.sql",import.meta.url),"utf8");
 const protectedPageSource=readFileSync(new URL("../app/nota/[token]/protected-note.tsx",import.meta.url),"utf8");
 const protectedAccessSource=readFileSync(new URL("../lib/protected-delivery.ts",import.meta.url),"utf8");
 
-test("envia pelo módulo Mensagens com os responsáveis no ambiente configurado",()=>{
-  assert.match(deliveryApiSource,/agenda_edu_environment==="producao"/);
-  assert.match(deliveryApiSource,/resolveAgendaEduFamilyChat/);
-  assert.match(deliveryApiSource,/sendAgendaEduAttachment/);
-  assert.match(deliveryApiSource,/providerIds\.pdf/);
-  assert.match(deliveryApiSource,/providerIds\.xml/);
-  assert.match(deliveryApiSource,/duas mensagens/);
-  assert.doesNotMatch(deliveryApiSource,/agenda_edu_ultimo_status!=="conectado"/);
+test("gera link manual da Agenda Edu sem exigir vínculo do aluno",()=>{
+  assert.match(deliveryApiSource,/hasServerPermission\(supabase,"deliveries\.send_agenda"\)/);
+  assert.match(deliveryApiSource,/const usedRecipient=.*agenda:producao:student:manual-/);
+  assert.match(deliveryApiSource,/create_nfse_delivery_access/);
+  assert.match(deliveryApiSource,/manualAgendaMessage/);
+  assert.match(deliveryApiSource,/status:"aguardando_confirmacao"/);
+  assert.doesNotMatch(deliveryApiSource,/agenda_edu_student_id|sweduc_matricula_id|resolveAgendaEduFamilyChat|sendAgendaEduAttachment/);
 });
 
-test("protege a rota e separa credenciais, documentos e destinatário",()=>{
-  assert.match(deliveryApiSource,/supabase\.auth\.getUser\(token\)/);
-  assert.match(deliveryApiSource,/get_communication_secret/);
-  assert.match(deliveryApiSource,/documentos-nfse/);
-  assert.match(deliveryApiSource,/agenda:\$\{environment\}:student:/);
-  assert.match(deliveryApiSource,/sweduc_matricula_id/);
-  assert.match(deliveryApiSource,/useExternalId/);
-  assert.doesNotMatch(deliveryUiSource,/clientSecret/);
+test("oferece mensagem pronta para copiar e confirmar manualmente",()=>{
+  assert.match(deliveryUiSource,/Gerar link para colar/);
+  assert.match(deliveryUiSource,/Sem API da Agenda Edu: copie e cole no canal correto/);
+  assert.match(deliveryUiSource,/copyAgendaMessage/);
+  assert.match(deliveryUiSource,/Gerar link e mensagem/);
+  assert.match(deliveryApiSource,/action==="confirm"/);
+  assert.match(deliveryApiSource,/Mensagem marcada como enviada manualmente na Agenda Edu/);
 });
 
-test("prepara vínculo por aluno, histórico duplo e políticas RLS",()=>{
-  assert.match(migrationSource,/agenda_edu_student_id text/);
-  assert.match(migrationSource,/agenda_edu_use_external_id boolean/);
-  assert.match(migrationSource,/provider_message_ids jsonb/);
-  assert.match(migrationSource,/p_channel = 'agenda_edu'/);
-  assert.match(agendaProductionMigrationSource,/agenda_edu_environment in \('homologacao','producao'\)/);
-  assert.match(agendaProductionMigrationSource,/\^agenda:\(homologacao\|producao\):student:/);
-  assert.match(migrationSource,/get_agenda_edu_delivery_config/);
+test("usa o mesmo identificador do canal ao gravar e consultar o histórico",()=>{
+  assert.match(deliveryApiSource,/canal:"agenda_edu"/);
+  assert.match(deliveryUiSource,/channel==="agenda-edu"\?"agenda_edu":channel/);
 });
 
-test("oferece configuração e vínculo administrativo sem expor segredos",()=>{
-  assert.match(settingsUiSource,/Mensagens com os responsáveis/);
-  assert.match(settingsUiSource,/Salvar configuração da Agenda Edu/);
-  assert.match(settingsUiSource,/Client ID/);
-  assert.match(settingsUiSource,/Client Secret/);
-  assert.match(settingsUiSource,/X-School-Token/);
-  assert.match(settingsUiSource,/Plataforma oficial/);
-  assert.match(communicationsApiSource,/store_communication_secret/);
-  assert.match(studentLinksSource,/Vincular alunos à Agenda Edu/);
-  assert.match(studentLinksSource,/agenda_edu_student_id/);
-  assert.match(studentLinksSource,/Localizar na Agenda Edu/);
-  assert.match(communicationsApiSource,/find-agenda-student/);
-  assert.match(communicationsApiSource,/diagnose-agenda/);
-  assert.match(communicationsApiSource,/prepare-agenda-structure/);
-  assert.match(settingsUiSource,/Diagnóstico da API Agenda Edu/);
-  assert.match(settingsUiSource,/Estrutura escolar Agenda Edu/);
-  assert.match(settingsUiSource,/Preparar estrutura SWeduc sem gravar/);
-  assert.match(settingsUiSource,/Nome do aluno/);
-  assert.match(settingsUiSource,/Matrícula SWeduc/);
+test("autoriza cada canal por permissão e mantém as configurações protegidas",()=>{
+  assert.match(permissionMigrationSource,/role = 'secretaria'/);
+  assert.match(permissionMigrationSource,/'deliveries\.send_whatsapp'/);
+  assert.match(permissionMigrationSource,/'deliveries\.send_agenda'/);
+  assert.match(permissionMigrationSource,/private\.has_jpi_permission\('deliveries\.send_whatsapp'\)/);
+  assert.match(permissionMigrationSource,/private\.has_jpi_permission\('deliveries\.send_agenda'\)/);
+  assert.doesNotMatch(permissionMigrationSource,/current_jpi_role\(\) not in/);
+  assert.doesNotMatch(permissionMigrationSource,/settings\.integrations\.edit/);
 });
 
-test("oferece lote, histórico e reenvio no canal Agenda Edu",()=>{
-  assert.match(deliveryUiSource,/\/api\/deliveries\/agenda-edu/);
-  assert.match(deliveryUiSource,/Mensagens com os responsáveis/);
-  assert.match(deliveryUiSource,/Enviar selecionadas/);
-  assert.match(deliveryUiSource,/Reenviar pelo/);
-  assert.match(deliveryUiSource,/sentAttemptsByDocument/);
-});
-
-test("usa os endpoints e o contrato oficial da Agenda Edu v2",()=>{
-  assert.match(agendaClientSource,/https:\/\/sandbox-api\.agendaedu\.dev\/v2/);
-  assert.match(agendaClientSource,/https:\/\/api\.agendaedu\.com\/v2/);
-  assert.match(agendaClientSource,/AgendaEduEnvironment/);
-  assert.match(agendaClientSource,/grant_type:"client_credentials"/);
-  assert.match(agendaClientSource,/"x-school-token"/);
-  assert.match(agendaClientSource,/kind:"family"/);
-  assert.match(agendaClientSource,/searchAgendaEduStudents/);
-  assert.match(agendaClientSource,/\/student_profiles/);
-  assert.match(agendaClientSource,/chatIds\[\]/);
-  assert.match(agendaClientSource,/form\.append\("attachment"/);
-});
-
-test("prepara estrutura escolar da Agenda Edu a partir da SWeduc sem gravar",()=>{
-  assert.match(communicationsApiSource,/buildAgendaStructure/);
-  assert.match(communicationsApiSource,/legacy_id/);
-  assert.match(communicationsApiSource,/classroom_id/);
-  assert.match(communicationsApiSource,/financial:isFinancialResponsible/);
-  assert.match(communicationsApiSource,/Nada foi gravado na Agenda Edu/);
-  assert.match(communicationsApiSource,/Listar alunos — student_profiles/);
-});
-
-test("não promete leitura inexistente na API pública de Mensagens",()=>{
-  assert.match(migrationSource,/não documenta confirmação de leitura/);
-  assert.doesNotMatch(deliveryApiSource,/status:"lido"/);
-  assert.doesNotMatch(deliveryApiSource,/seenAt|confirmedAt/);
-});
-
-test("registra a visualização somente após ação explícita no link protegido",()=>{
+test("mantém o link protegido e registra visualização somente após ação explícita",()=>{
   assert.match(deliveryApiSource,/randomBytes\(32\)/);
   assert.match(deliveryApiSource,/create_nfse_delivery_access/);
-  assert.match(deliveryApiSource,/Acesso individual protegido/);
   assert.match(protectedPageSource,/Visualizar NFS-e/);
   assert.match(protectedPageSource,/method:"POST"/);
   assert.match(protectedAccessSource,/createHmac/);
