@@ -1,6 +1,6 @@
 "use client";
-import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
-import { AlertCircle, ArrowUpRight, BookOpenCheck, Building2, CalendarDays, Check, CircleDollarSign, Clock3, Copy, Eye, EyeOff, FileCheck2, FilePlus2, Filter, KeyRound, Link2, Mail, MessageCircle, MoreHorizontal, Palette, Plus, Search, ShieldCheck, SlidersHorizontal, Trash2, UploadCloud, UserCheck, UserCog, UsersRound, WalletCards, X } from "lucide-react";
+import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { AlertCircle, ArrowUpRight, BookOpenCheck, Building2, CalendarDays, Check, CircleDollarSign, Clock3, Copy, Eye, EyeOff, FileCheck2, FilePlus2, FileText, Filter, Globe2, KeyRound, Link2, Mail, MessageCircle, MoreHorizontal, Palette, Plus, Search, ShieldCheck, SlidersHorizontal, Trash2, UploadCloud, UserCheck, UserCog, UsersRound, WalletCards, X } from "lucide-react";
 import type { AppPage, Role } from "./app-shell";
 import { createSupabaseBrowserClient } from "@/lib/supabase";
 import { authenticatedFetch } from "@/lib/authenticated-fetch";
@@ -10,8 +10,25 @@ import { BrandLogo } from "./branding";
 import { useAccess } from "./access";
 import { SweducSettings } from "./sweduc-settings";
 import { LGPD_TERM_VERSION } from "@/lib/lgpd-consent";
+import { DomainSettings } from "./domain-settings";
 
 const money = (n: number) => n.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+const defaultDeclarationHeader = `JARDIM ESCOLA JOÃO PAULO I
+
+EDUCAÇÃO INFANTIL - ENSINO FUNDAMENTAL - ENSINO MÉDIO
+
+Rua Baalbeck, 215 - Senador Camará - Rio de Janeiro/RJ CEP: 21833-130 - TELFAX - 2404-5173
+
+Reconhecimento: Parecer 282/90 de 12/10/90 - Portaria 1546/CDCE de 1/4/91
+
+Ensino Médio - Formação Geral - Portaria 2844/CDCE 13/08/92
+Técnico em Processamento de Dados - Portaria 4019/CDCR 29/09/94
+CNPJ: 30.041.545/0001-07`;
+const defaultDeclarationTypes = [
+  { id: "pagas", label: "Mensalidades pagas", title: "DECLARAÇÃO DE MENSALIDADES PAGAS", body: "Declaramos, para os devidos fins, que o(a) aluno(a) @aluno_nome, matrícula @matricula, turma @turma, ano letivo @ano_letivo, possui mensalidades pagas conforme títulos selecionados.\n\nResponsável financeiro: @responsavel_nome.\nEndereço cadastral: @responsavel_endereco.\n\nTítulos selecionados:\n@titulos\n\nTotal informado: @total_titulos.\nData: @data_atual." },
+  { id: "quitacao", label: "Quitação", title: "DECLARAÇÃO DE QUITAÇÃO", body: "Declaramos, para os devidos fins, que o(a) aluno(a) @aluno_nome, matrícula @matricula, turma @turma, ano letivo @ano_letivo, encontra-se com quitação conforme os títulos selecionados abaixo.\n\n@titulos\n\nTotal informado: @total_titulos.\nData: @data_atual." },
+  { id: "debito", label: "Débitos em aberto", title: "DECLARAÇÃO DE DÉBITOS EM ABERTO", body: "Declaramos, para os devidos fins, que o(a) aluno(a) @aluno_nome, matrícula @matricula, turma @turma, ano letivo @ano_letivo, possui os seguintes débitos em aberto conforme títulos selecionados.\n\n@titulos\n\nTotal em aberto informado: @total_titulos.\nData: @data_atual." },
+];
 const onlyDigits = (value: string, limit: number) => value.replace(/\D/g, "").slice(0, limit);
 const maskCnpj = (value: string) =>
   onlyDigits(value, 14)
@@ -439,29 +456,84 @@ type CompanyConfig = {
   branding_updated_at: string;
   updated_at: string;
 };
-type Tab = "Empresa" | "Identidade Visual" | "Certificado A1" | "Integrações" | "Usuários e Permissões";
+type Tab = "Empresa" | "Domínio" | "Declarações" | "Identidade Visual" | "Certificado A1" | "Integrações" | "Comunicados" | "Usuários e Permissões";
 export function SettingsPage({accessToken,onNavigate}:{accessToken:string|null;onNavigate?:(page:AppPage)=>void}) {
-  const {canAny}=useAccess();
+  const {canAny,isMaster}=useAccess();
   const availableTabs=useMemo(()=>[
-    {name:"Empresa" as Tab,label:"Empresa",Icon:Building2,permissions:["settings.company.view","settings.company.edit"]},
-    {name:"Identidade Visual" as Tab,label:"Identidade Visual",Icon:Palette,permissions:["settings.branding.view","settings.branding.edit"]},
-    {name:"Certificado A1" as Tab,label:"Certificado A1",Icon:KeyRound,permissions:["settings.certificate.view","settings.certificate.manage"]},
-    {name:"Integrações" as Tab,label:"Integrações",Icon:Link2,permissions:["settings.integrations.view","settings.integrations.edit"]},
-    {name:"Usuários e Permissões" as Tab,label:"Usuários e Permissões",Icon:UserCog,permissions:["settings.users.view","settings.users.manage"]},
-  ].filter(item=>canAny(item.permissions)),[canAny]);
+    {name:"Empresa" as Tab,label:"Empresa",description:"Dados cadastrais e fiscais da instituição",Icon:Building2,permissions:["settings.company.view","settings.company.edit"]},
+    ...(isMaster?[{name:"Domínio" as Tab,label:"Domínio",description:"Endereço oficial via Locaweb ou Registro.br",Icon:Globe2,permissions:[]}]:[]),
+    {name:"Declarações" as Tab,label:"Declarações",description:"Modelos, textos, logo e assinaturas",Icon:FileText,permissions:["declarations.manage"]},
+    {name:"Identidade Visual" as Tab,label:"Identidade Visual",description:"Marca, cores e aparência do sistema",Icon:Palette,permissions:["settings.branding.view","settings.branding.edit"]},
+    {name:"Certificado A1" as Tab,label:"Certificado A1",description:"Validade e segurança da emissão fiscal",Icon:KeyRound,permissions:["settings.certificate.view","settings.certificate.manage"]},
+    {name:"Integrações" as Tab,label:"Integrações",description:"SWeduc, e-mail e canais conectados",Icon:Link2,permissions:["settings.integrations.view","settings.integrations.edit"]},
+    {name:"Comunicados" as Tab,label:"Comunicados",description:"Avisos gerais e mensagens reservadas",Icon:Mail,permissions:["system.announcements.send","settings.users.manage"]},
+    {name:"Usuários e Permissões" as Tab,label:"Usuários e Permissões",description:"Acessos, perfis e auditoria de usuários",Icon:UserCog,permissions:["settings.users.view","settings.users.manage"]},
+  ].filter(item=>item.name==="Domínio"?isMaster:canAny(item.permissions)),[canAny,isMaster]);
   const [tab,setTab]=useState<Tab>(()=>typeof window==="undefined"?"Empresa":(sessionStorage.getItem("jpi-settings-tab") as Tab)||"Empresa");
   useEffect(()=>{const target=sessionStorage.getItem("jpi-settings-tab") as Tab|null;if(target){sessionStorage.removeItem("jpi-settings-tab");setTab(target)}},[]);
   useEffect(()=>{if(availableTabs.length&&!availableTabs.some(item=>item.name===tab))setTab(availableTabs[0].name)},[availableTabs,tab]);
   if(!availableTabs.length)return <><Heading title="Configurações" desc="Seu perfil não possui módulos de configuração liberados."/><div className="notice warning"><ShieldCheck/><span>Solicite ao Master a liberação das permissões necessárias.</span></div></>;
   return (
     <>
-      <Heading title="Configurações" desc="Acesse somente as áreas liberadas para o seu perfil." />
-      <div className="tabs">
-        {availableTabs.map(({name,label,Icon})=><button key={name} className={tab===name?"active":""} onClick={()=>setTab(name)}><Icon/>{label}</button>)}
+      <Heading title="Configurações" desc="Visão geral dos módulos de administração liberados para o seu perfil." />
+      <div className="settings-overview" aria-label="Módulos de configurações">
+        {availableTabs.map(({name,label,description,Icon})=><button key={name} type="button" className={tab===name?"active":""} onClick={()=>setTab(name)} aria-pressed={tab===name}>
+          <span className="settings-overview-icon"><Icon/></span>
+          <span className="settings-overview-copy"><strong>{label}</strong><small>{description}</small></span>
+          <span className="settings-overview-state">{tab===name?"Em exibição":"Abrir"}</span>
+        </button>)}
       </div>
-      {tab==="Empresa"?<CompanySettings/>:tab==="Identidade Visual"?<BrandingSettings/>:tab==="Certificado A1"?<CertificateSettings/>:tab==="Integrações"?<Integrations accessToken={accessToken} onNavigate={onNavigate}/>:<Permissions/>}
+      <div className="settings-current-module"><span>Módulo selecionado</span><strong>{tab}</strong></div>
+      {tab==="Empresa"?<CompanySettings/>:tab==="Domínio"?<DomainSettings accessToken={accessToken}/>:tab==="Declarações"?<DeclarationSettings/>:tab==="Identidade Visual"?<BrandingSettings/>:tab==="Certificado A1"?<CertificateSettings/>:tab==="Integrações"?<Integrations accessToken={accessToken} onNavigate={onNavigate}/>:tab==="Comunicados"?<SystemAnnouncements/>:<Permissions/>}
     </>
   );
+}
+function DeclarationSettings() {
+  const {can}=useAccess();const canEdit=can("declarations.manage");
+  const supabase=useMemo(()=>createSupabaseBrowserClient(),[]);
+  const [header,setHeader]=useState(defaultDeclarationHeader);
+  const [defaultSigner,setDefaultSigner]=useState("instituicao");
+  const [signerName,setSignerName]=useState("Jardim Escola João Paulo I · Instituição");
+  const profileOptions=["Master","Administrador","Financeiro","Secretaria","Consulta"];
+  const [companySigner,setCompanySigner]=useState({name:"Jardim Escola João Paulo I",document:"30.041.545/0001-07"});
+  const [signers,setSigners]=useState<Array<{id:string;name:string;role:string;document?:string;kind?:"instituicao"|"perfil";active:boolean;profiles:string[]}>>([{id:"instituicao",name:"Jardim Escola João Paulo I",role:"Instituição",document:"30.041.545/0001-07",kind:"instituicao",active:true,profiles:["Master","Administrador","Financeiro","Secretaria"]}]);
+  const [showCpf,setShowCpf]=useState(true);
+  const [logoData,setLogoData]=useState("");
+  const [types,setTypes]=useState(defaultDeclarationTypes);
+  const [newType,setNewType]=useState("");
+  const [message,setMessage]=useState("");
+  const [collapsedTypes,setCollapsedTypes]=useState<Set<string>>(()=>new Set());
+  const readyDeclarationMessages=[
+    {id:"mensalidades-pagas",label:"Mensalidades pagas - completo",body:"Declaramos, para os devidos fins, que o(a) aluno(a) @aluno_nome, matrícula @matricula, turma @turma, ano letivo @ano_letivo, possui mensalidades pagas conforme os títulos selecionados abaixo.\n\n@titulos\n\nTotal informado: @total_titulos.\n\nRio de Janeiro, @data_atual."},
+    {id:"debito-aberto",label:"Débitos em aberto - claro",body:"Declaramos que, conforme registros financeiros selecionados, o(a) aluno(a) @aluno_nome, matrícula @matricula, turma @turma, ano letivo @ano_letivo, possui os seguintes títulos em aberto:\n\n@titulos\n\nTotal informado em aberto: @total_titulos.\n\nRio de Janeiro, @data_atual."},
+    {id:"quitacao",label:"Quitação - formal",body:"Declaramos, para os devidos fins, que o(a) aluno(a) @aluno_nome, matrícula @matricula, turma @turma, ano letivo @ano_letivo, encontra-se com quitação referente aos títulos selecionados abaixo.\n\n@titulos\n\nTotal informado: @total_titulos.\n\nRio de Janeiro, @data_atual."},
+    {id:"ir",label:"Imposto de renda - responsável",body:"Declaramos, para fins de comprovação, que o(a) responsável @responsavel_nome, documento @responsavel_documento, consta vinculado(a) ao(à) aluno(a) @aluno_nome, matrícula @matricula, turma @turma, ano letivo @ano_letivo.\n\nOs pagamentos/títulos selecionados para conferência são:\n\n@titulos\n\nTotal informado: @total_titulos.\n\nRio de Janeiro, @data_atual."},
+    {id:"simples",label:"Texto simples e curto",body:"Declaramos que o(a) aluno(a) @aluno_nome, matrícula @matricula, turma @turma, ano letivo @ano_letivo, possui os registros financeiros selecionados abaixo:\n\n@titulos\n\nTotal: @total_titulos.\nData: @data_atual."}
+  ];
+  const headerEditorRef=useRef<HTMLDivElement|null>(null);
+  useEffect(()=>{if(!supabase)return;void supabase.from("configuracoes_empresa").select("razao_social,cnpj").eq("id",true).maybeSingle().then(({data})=>{if(data)setCompanySigner({name:String(data.razao_social||"Jardim Escola João Paulo I"),document:String(data.cnpj||"30.041.545/0001-07")})})},[supabase]);
+  useEffect(()=>{try{const saved=localStorage.getItem("jpi-declaration-settings");if(saved){const parsed=JSON.parse(saved) as {header?:string;headerHtml?:string;defaultSigner?:string;showCpf?:boolean;logoData?:string;types?:typeof defaultDeclarationTypes;signerName?:string;signers?:Array<{id:string;name:string;role:string;document?:string;kind?:"instituicao"|"perfil";active:boolean;profiles:string[]}>};setHeader(parsed.headerHtml||parsed.header||defaultDeclarationHeader);setDefaultSigner(parsed.defaultSigner||"instituicao");setSignerName(parsed.signerName||"Jardim Escola João Paulo I · Instituição");setSigners(parsed.signers?.length?parsed.signers:[{id:"instituicao",name:parsed.signerName||"Jardim Escola João Paulo I",role:"Instituição",document:"30.041.545/0001-07",kind:"instituicao",active:true,profiles:["Master","Administrador","Financeiro","Secretaria"]}]);setShowCpf(parsed.showCpf!==false);setLogoData(parsed.logoData||"");setTypes(parsed.types?.length?parsed.types:defaultDeclarationTypes)}}catch{}},[]);
+  useEffect(()=>{if(headerEditorRef.current&&headerEditorRef.current.innerHTML!==header)headerEditorRef.current.innerHTML=header},[header]);
+  function formatHeader(command:string,value?:string){if(!canEdit)return;headerEditorRef.current?.focus();document.execCommand(command,false,value);setHeader(headerEditorRef.current?.innerHTML||"")}
+  function formatTypeBody(id:string,tag:"strong"|"em"|"u"|"ul"){if(!canEdit)return;const textarea=document.querySelector<HTMLTextAreaElement>(`textarea[data-declaration-type="${id}"]`);if(!textarea)return;const start=textarea.selectionStart??0;const end=textarea.selectionEnd??0;const current=textarea.value;const selected=current.slice(start,end)||"texto";const formatted=tag==="ul"?`<ul>\n<li>${selected}</li>\n</ul>`:`<${tag}>${selected}</${tag}>`;const next=current.slice(0,start)+formatted+current.slice(end);setTypes(items=>items.map(item=>item.id===id?{...item,body:next}:item));window.setTimeout(()=>{textarea.focus();textarea.setSelectionRange(start,start+formatted.length)},0)}
+  async function save(event:FormEvent<HTMLFormElement>){event.preventDefault();if(!canEdit)return;const invalidSigner=signers.find(item=>item.active&&(!item.name.trim()||!item.document?.trim()||((item.kind||"perfil")==="perfil"&&!item.document.trim())));if(invalidSigner){setMessage((invalidSigner.kind||"perfil")==="instituicao"?"Informe nome e CNPJ da instituição assinante antes de salvar.":"Informe nome e CPF do assinante por perfil antes de salvar.");return}const form=new FormData(event.currentTarget);const logo=form.get("declaration_logo") as File;let nextLogoData=logoData;if(logo?.size){if(!["image/png","image/jpeg","image/webp"].includes(logo.type)){setMessage("Use uma logo nos formatos PNG, JPG ou WEBP.");return}if(logo.size>1024*1024){setMessage("A logo da declaração deve ter no máximo 1 MB.");return}nextLogoData=await new Promise<string>((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>resolve(String(reader.result||""));reader.onerror=()=>reject(reader.error);reader.readAsDataURL(logo)});setLogoData(nextLogoData)}localStorage.setItem("jpi-declaration-settings",JSON.stringify({header,headerHtml:header,defaultSigner,signerName,signers,showCpf,logoData:nextLogoData,types}));window.dispatchEvent(new Event("jpi-declaration-settings-updated"));setMessage("Modelo de declaração salvo neste navegador.")}
+  function addType(){const label=newType.trim();if(!label)return;const id=`custom-${Date.now()}`;setTypes(current=>[...current,{id,label,title:label.toLocaleUpperCase("pt-BR"),body:"Declaramos, para os devidos fins, que o(a) aluno(a) @aluno_nome, matrícula @matricula, turma @turma, ano letivo @ano_letivo, possui os títulos selecionados abaixo.\n\n@titulos\n\nTotal informado: @total_titulos.\nData: @data_atual."}]);setNewType("")}
+  function addSigner(){setSigners(current=>[...current,{id:`signer-${Date.now()}`,name:"Novo assinante",role:"Função",document:"",kind:"perfil",active:true,profiles:["Master"]}])}
+  function applyCompanySigner(id:string){setSigners(current=>current.map(item=>item.id===id?{...item,kind:"instituicao",name:companySigner.name,role:"Instituição",document:companySigner.document}:item))}
+  function toggleSignerProfile(id:string,profile:string){setSigners(current=>current.map(item=>item.id===id?{...item,profiles:item.profiles.includes(profile)?item.profiles.filter(p=>p!==profile):[...item.profiles,profile]}:item))}
+  return <form className="panel data-form declaration-settings-page" onSubmit={save}>
+    <div className="panel-title"><div><h2>Configuração das declarações</h2><p>Centralize o modelo usado nas futuras declarações, antes de liberar no oficial.</p></div><FileText/></div>
+    {message&&<div className="success-box">{message}</div>}
+    <div className="notice compact"><ShieldCheck/><span>Configure aqui os modelos, textos, logos e assinantes usados nas declarações.</span></div>
+    <section className="declaration-config-grid">
+      <div className="declaration-wide declaration-editor-field"><span>Cabeçalho padrão</span><div className="declaration-editor-toolbar" aria-label="Formatação do cabeçalho"><button type="button" disabled={!canEdit} onClick={()=>formatHeader("bold")}>N</button><button type="button" disabled={!canEdit} onClick={()=>formatHeader("italic")}>I</button><button type="button" disabled={!canEdit} onClick={()=>formatHeader("underline")}>S</button><button type="button" disabled={!canEdit} onClick={()=>formatHeader("justifyLeft")}>Esq.</button><button type="button" disabled={!canEdit} onClick={()=>formatHeader("justifyCenter")}>Centro</button><button type="button" disabled={!canEdit} onClick={()=>formatHeader("insertUnorderedList")}>Lista</button><button type="button" disabled={!canEdit} onClick={()=>formatHeader("removeFormat")}>Limpar</button></div><div ref={headerEditorRef} className="declaration-rich-editor" contentEditable={canEdit} suppressContentEditableWarning onInput={event=>setHeader(event.currentTarget.innerHTML)} onBlur={event=>setHeader(event.currentTarget.innerHTML)} /><small>Este texto aparece no topo da prévia da declaração.</small></div>
+      <label className="file-field branding-logo-field declaration-wide"><span>Logomarca da declaração</span><div className={`company-logo-preview ${logoData?"loaded":""}`}>{logoData?<img src={logoData} alt="Logo da declaração"/>:<span className="declaration-logo-empty">Sem logo</span>}<section><strong>{logoData?"Logo da declaração carregada":"Sem logo específica da declaração"}</strong><small>Esta logo é usada apenas nas declarações, separada da logo do sistema.</small></section></div><div><UploadCloud/><input name="declaration_logo" type="file" accept="image/png,image/jpeg,image/webp" disabled={!canEdit}/><small>PNG, JPG ou WEBP — máximo 1 MB</small></div></label>
+      <div className="declaration-signers-manager declaration-wide"><div className="declaration-type-card-head"><strong>Assinantes autorizados pelo Master</strong>{canEdit&&<button type="button" className="secondary mini" onClick={addSigner}>Adicionar assinante</button>}</div><div className="declaration-signer-list">{signers.map(signer=><section key={signer.id} className="declaration-signer-card"><div className="form-row"><label>Tipo do assinante<select value={signer.kind||"perfil"} disabled={!canEdit} onChange={event=>{const kind=event.target.value as "instituicao"|"perfil";setSigners(current=>current.map(item=>item.id===signer.id?{...item,kind}:item));if(kind==="instituicao")applyCompanySigner(signer.id)}}><option value="instituicao">Instituição</option><option value="perfil">Usuário / perfil autorizado</option></select></label><label>{(signer.kind||"perfil")==="instituicao"?"CNPJ da instituição":"CPF do assinante"}<input value={signer.document||""} disabled={!canEdit||(signer.kind||"perfil")==="instituicao"} onChange={event=>setSigners(current=>current.map(item=>item.id===signer.id?{...item,document:event.target.value}:item))} placeholder={(signer.kind||"perfil")==="instituicao"?"CNPJ":"CPF"}/></label></div>{(signer.kind||"perfil")==="instituicao"&&canEdit&&<button type="button" className="secondary mini" onClick={()=>applyCompanySigner(signer.id)}>Usar dados da empresa cadastrada</button>}<div className="form-row"><label>Nome que sai na assinatura<input value={signer.name} disabled={!canEdit||(signer.kind||"perfil")==="instituicao"} onChange={event=>setSigners(current=>current.map(item=>item.id===signer.id?{...item,name:event.target.value}:item))}/></label><label>Função / cargo<input value={signer.role} disabled={!canEdit} onChange={event=>setSigners(current=>current.map(item=>item.id===signer.id?{...item,role:event.target.value}:item))}/></label></div><label className="declaration-check"><input type="checkbox" checked={signer.active} disabled={!canEdit} onChange={event=>setSigners(current=>current.map(item=>item.id===signer.id?{...item,active:event.target.checked}:item))}/>Assinante ativo</label><div className="declaration-profile-list"><span>Perfis autorizados</span>{profileOptions.map(profile=><label key={profile}><input type="checkbox" checked={signer.profiles.includes(profile)} disabled={!canEdit} onChange={()=>toggleSignerProfile(signer.id,profile)}/>{profile}</label>)}</div>{canEdit&&signers.length>1&&<button type="button" className="secondary mini danger-soft" onClick={()=>setSigners(current=>current.filter(item=>item.id!==signer.id))}>Excluir assinante</button>}</section>)}</div><small>Na tela Declarações, cada usuário verá apenas os assinantes ativos liberados para o perfil dele.</small></div>
+      <label className="declaration-check"><input type="checkbox" checked={showCpf} disabled={!canEdit} onChange={event=>setShowCpf(event.target.checked)}/>Mostrar CPF/CNPJ dos responsáveis por padrão</label>
+      <div className="declaration-variable-box declaration-wide"><span>Variáveis disponíveis para usar no texto</span><div>{["@aluno_nome","@matricula","@ano_letivo","@turma","@serie","@responsavel_nome","@responsavel_documento","@responsavel_endereco","@titulos","@total_titulos","@data_atual"].map(item=><code key={item}>{item}</code>)}</div><small>Copie uma variável e cole no texto da declaração. Na prévia ela será trocada pelos dados carregados da SWeduc.</small></div><div className="declaration-type-manager declaration-wide"><span>Tipos de declaração e texto próprio</span><div className="declaration-type-list">{types.map(type=>{const collapsed=collapsedTypes.has(type.id);return <section key={type.id} className={`declaration-type-card ${collapsed?"collapsed":""}`}><div className="declaration-type-card-head"><strong>{type.label||"Tipo de declaração"}</strong><div className="declaration-type-card-actions"><button type="button" className="secondary mini" onClick={()=>setCollapsedTypes(current=>{const next=new Set(current);if(next.has(type.id))next.delete(type.id);else next.add(type.id);return next})}>{collapsed?"Editar":"Recolher"}</button>{canEdit&&<button type="button" className="secondary mini danger-soft" onClick={()=>setTypes(current=>current.filter(item=>item.id!==type.id))}>Excluir declaração</button>}</div></div>{!collapsed&&<><div className="form-row declaration-wide"><label>Nome do tipo<input value={type.label} disabled={!canEdit} onChange={event=>setTypes(current=>current.map(item=>item.id===type.id?{...item,label:event.target.value,title:event.target.value.toLocaleUpperCase("pt-BR")}:item))}/></label><label>Título que sai na declaração<input value={type.title} disabled={!canEdit} onChange={event=>setTypes(current=>current.map(item=>item.id===type.id?{...item,title:event.target.value}:item))}/></label></div><label className="declaration-wide">Assinante padrão desta declaração<select value={(type as {signerId?:string}).signerId||""} disabled={!canEdit} onChange={event=>setTypes(current=>current.map(item=>item.id===type.id?{...item,signerId:event.target.value}:item))}><option value="">Usar primeiro assinante permitido</option>{signers.filter(item=>item.active).map(item=><option key={item.id} value={item.id}>{item.name}{item.role?` · ${item.role}`:""}</option>)}</select><small>Quando o usuário escolher este tipo de declaração, esse assinante já será selecionado automaticamente, se o perfil tiver permissão.</small></label><div className="declaration-wide declaration-ready-message"><label>Banco de mensagens prontas<select value="" disabled={!canEdit} onChange={event=>{const selected=readyDeclarationMessages.find(item=>item.id===event.target.value);if(!selected)return;setTypes(current=>current.map(item=>item.id===type.id?{...item,body:selected.body}:item))}}><option value="">Selecionar mensagem pronta para aplicar</option>{readyDeclarationMessages.map(item=><option key={item.id} value={item.id}>{item.label}</option>)}</select></label><small>Ao selecionar, o texto abaixo é preenchido com o modelo pronto e você pode editar antes de salvar.</small></div><div className="declaration-wide declaration-editor-field"><span>Texto deste tipo de declaração</span><div className="declaration-editor-toolbar"><button type="button" disabled={!canEdit} onClick={()=>formatTypeBody(type.id,"strong")}>N</button><button type="button" disabled={!canEdit} onClick={()=>formatTypeBody(type.id,"em")}>I</button><button type="button" disabled={!canEdit} onClick={()=>formatTypeBody(type.id,"u")}>S</button><button type="button" disabled={!canEdit} onClick={()=>formatTypeBody(type.id,"ul")}>Lista</button></div><textarea data-declaration-type={type.id} rows={8} value={type.body||""} disabled={!canEdit} onChange={event=>setTypes(current=>current.map(item=>item.id===type.id?{...item,body:event.target.value}:item))}/><small>Use as variáveis acima. Exemplo: @aluno_nome, @titulos e @total_titulos.</small></div></>}</section>})}</div>{canEdit&&<div className="declaration-add-type"><input value={newType} onChange={event=>setNewType(event.target.value)} placeholder="Ex.: Declaração para imposto de renda"/><button type="button" className="secondary" onClick={addType}>Adicionar tipo</button></div>}<small>Cada tipo tem texto independente e aparece na combobox da tela Declarações.</small></div>
+    </section>
+    {canEdit&&<div className="form-actions"><button className="primary">Salvar modelo</button></div>}
+  </form>;
 }
 function BrandingSettings() {
   const supabase=useMemo(()=>createSupabaseBrowserClient(),[]);const {can}=useAccess();const canEdit=can("settings.branding.edit");
@@ -573,6 +645,7 @@ function CompanySettings() {
     setError("");
     setMessage("");
     const f = new FormData(e.currentTarget);
+    const logo = f.get("logo") as File;
     const text = (name: string) => String(f.get(name) || "").trim();
     const pisRate = Number(text("pis_aliquota").replace(",", "."));
     const cofinsRate = Number(text("cofins_aliquota").replace(",", "."));
@@ -580,6 +653,24 @@ function CompanySettings() {
       setError("Informe alíquotas válidas de PIS e COFINS entre 0 e 100%.");
       setBusy(false);
       return;
+    }
+    if (logo?.size) {
+      if (!["image/png", "image/jpeg", "image/webp"].includes(logo.type)) {
+        setError("Use uma logo nos formatos PNG, JPG ou WEBP.");
+        setBusy(false);
+        return;
+      }
+      if (logo.size > 2 * 1024 * 1024) {
+        setError("A logo deve ter no máximo 2 MB.");
+        setBusy(false);
+        return;
+      }
+      const { error: logoError } = await supabase.storage.from("logos-empresa").upload("empresa/logo", logo, { contentType: logo.type, cacheControl: "60", upsert: true });
+      if (logoError) {
+        setError(logoError.message);
+        setBusy(false);
+        return;
+      }
     }
     const payload = {
       cnpj: maskCnpj(text("cnpj")),
@@ -610,7 +701,8 @@ function CompanySettings() {
       return;
     }
     setConfig(data as CompanyConfig);
-    setMessage("Dados da empresa salvos com sucesso.");
+    if (logo?.size) window.dispatchEvent(new Event("jpi-branding-updated"));
+    setMessage(logo?.size ? "Dados da empresa e logomarca salvos com sucesso." : "Dados da empresa salvos com sucesso.");
   }
   if (!config) return <div className="panel">{error || "Carregando dados da empresa…"}</div>;
   return (
@@ -1714,6 +1806,7 @@ type ManagedUser = {
   user_id: string | null;
   nome: string | null;
   email: string;
+  cpf: string | null;
   role: ManagedRole;
   active: boolean;
   created_at: string;
@@ -1740,6 +1833,66 @@ const roleLabels:Record<ManagedRole,string>={
   consulta:"Consulta",
 };
 
+type AnnouncementHistory={id:number;subject:string;recipients_count:number;success_count:number;error_count:number;status:string;sent_by_email:string|null;created_at:string;error_message:string|null};
+function SystemAnnouncements(){
+  const {can}=useAccess();const canSend=can("system.announcements.send")||can("settings.users.manage");
+  const [users,setUsers]=useState<ManagedUser[]>([]);const [history,setHistory]=useState<AnnouncementHistory[]>([]);
+  const [mode,setMode]=useState<"all"|"selected">("all");const [selected,setSelected]=useState<Set<number>>(()=>new Set());
+  const [subject,setSubject]=useState("Comunicado importante sobre o uso do JPI Fiscal");const [message,setMessage]=useState("Olá!\n\nInformamos que o sistema JPI Fiscal estará em uso integral amanhã para emissão, conferência e envio das notas fiscais.\n\nPedimos que todos acessem com seu usuário individual e acompanhem os avisos internos do sistema.\n\nAtenciosamente,\nAdministração JPI Fiscal");
+  const [busy,setBusy]=useState(false);const [error,setError]=useState("");const [notice,setNotice]=useState("");
+  const load=useCallback(async()=>{
+    setError("");
+    const [usersResponse,historyResponse]=await Promise.all([
+      authenticatedFetch("/api/manage-users",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({action:"list"})}),
+      authenticatedFetch("/api/admin/announcements",{cache:"no-store"}),
+    ]);
+    const usersData=await usersResponse.json().catch(()=>({}));const historyData=await historyResponse.json().catch(()=>({}));
+    if(usersResponse.ok)setUsers((usersData.users||[]) as ManagedUser[]);else setError(usersData.error||"Não foi possível carregar os usuários.");
+    if(historyResponse.ok)setHistory((historyData.items||[]) as AnnouncementHistory[]);
+  },[]);
+  useEffect(()=>{if(canSend)void load()},[canSend,load]);
+  const activeUsers=users.filter(user=>user.active&&/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(user.email));
+  const selectedUsers=activeUsers.filter(user=>selected.has(user.id));
+  function toggleUser(id:number){setSelected(current=>{const next=new Set(current);if(next.has(id))next.delete(id);else next.add(id);return next})}
+  async function sendAnnouncement(event:FormEvent<HTMLFormElement>){
+    event.preventDefault();if(!canSend)return;setBusy(true);setError("");setNotice("");
+    const recipientIds=mode==="selected"?Array.from(selected):[];
+    if(mode==="selected"&&!recipientIds.length){setBusy(false);setError("Selecione pelo menos um usuário para mensagem reservada.");return}
+    const response=await authenticatedFetch("/api/admin/announcements",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({subject,message,recipientIds,onlyActive:true})});
+    const data=await response.json().catch(()=>({}));
+    setBusy(false);
+    if(!response.ok||data.error){setError(data.error||"Não foi possível enviar o comunicado.");return}
+    setNotice(`Comunicado enviado: ${data.successCount} de ${data.recipients} usuário(s).${data.errorCount?` Falharam: ${data.errorCount}.`:""}`);
+    if(mode==="selected")setSelected(new Set());
+    await load();
+  }
+  if(!canSend)return <div className="notice warning"><ShieldCheck/><span>Seu perfil não possui permissão para enviar comunicados.</span></div>;
+  return <div className="declaration-settings-grid">
+    <section className="settings-card declaration-settings-card">
+      <div className="communication-channel-head"><span className="integration-icon blue"><Mail/></span><div><h3>Comunicados do sistema</h3><small>Envie avisos para todos os usuários ou mensagens reservadas para usuários selecionados.</small></div><Status>{`${activeUsers.length} destinatário(s)`}</Status></div>
+      {error&&<div className="error-box">{error}</div>}{notice&&<div className="success-box">{notice}</div>}
+      <form className="data-form" onSubmit={sendAnnouncement}>
+        <label>Assunto<input value={subject} onChange={event=>setSubject(event.target.value)} minLength={6} maxLength={120} spellCheck lang="pt-BR" required/></label>
+        <label>Mensagem<textarea value={message} onChange={event=>setMessage(event.target.value)} rows={10} minLength={20} maxLength={4000} spellCheck lang="pt-BR" required/><small>O corretor ortográfico do navegador fica ativo neste campo. Revise antes de enviar.</small></label>
+        <div className="profile-permission-selector">
+          <label>Destino<select value={mode} onChange={event=>setMode(event.target.value as "all"|"selected")}><option value="all">Todos os usuários ativos</option><option value="selected">Selecionar usuários específicos</option></select></label>
+          <div className="profile-permission-summary"><span>Vai enviar para</span><strong>{mode==="all"?activeUsers.length:selectedUsers.length}</strong><small>{mode==="all"?"usuário(s) ativo(s)":"usuário(s) selecionado(s)"}</small></div>
+        </div>
+        {mode==="selected"&&<div className="panel compact-panel">
+          <div className="permission-module-title"><strong>Selecionar usuários</strong><span>{selectedUsers.length}/{activeUsers.length}</span></div>
+          {activeUsers.map(user=><label key={user.id} className="checkbox-line"><input type="checkbox" checked={selected.has(user.id)} onChange={()=>toggleUser(user.id)}/><span><strong>{user.nome||user.email}</strong><small>{user.email} · {roleLabels[user.role]}</small></span></label>)}
+        </div>}
+        <div className="notice compact"><ShieldCheck/><span>O envio usa o e-mail oficial configurado na Locaweb. A senha fica protegida no cofre e não aparece para o usuário.</span></div>
+        <div className="form-actions"><button className="primary" disabled={busy}>{busy?"Enviando comunicado…":"Enviar comunicado"}</button></div>
+      </form>
+    </section>
+    <section className="settings-card declaration-settings-card">
+      <h3>Histórico de comunicados</h3>
+      <div className="table-card permission-users-table"><table><thead><tr><th>Data</th><th>Assunto</th><th>Envios</th><th>Status</th></tr></thead><tbody>{history.map(item=><tr key={item.id}><td>{new Date(item.created_at).toLocaleString("pt-BR",{dateStyle:"short",timeStyle:"short"})}</td><td><strong>{item.subject}</strong><span className="subcell">{item.sent_by_email||"Sistema"}</span></td><td>{item.success_count}/{item.recipients_count}</td><td>{item.error_count?<span className="status cancelada">Parcial</span>:<Status>Enviado</Status>}</td></tr>)}</tbody></table>{!history.length&&<div className="empty-row">Nenhum comunicado enviado ainda.</div>}</div>
+    </section>
+  </div>
+}
+
 function Permissions() {
   const supabase=useMemo(()=>createSupabaseBrowserClient(),[]);
   const {isMaster,can}=useAccess();
@@ -1762,7 +1915,9 @@ function Permissions() {
   const loadUsers=useCallback(async()=>{
     if(!supabase||!canViewUsers)return;
     setError("");
-    const {data,error}=await supabase.functions.invoke("manage-users",{body:{action:"list"}});
+    const response=await authenticatedFetch("/api/manage-users",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({action:"list"})});
+    const data=await response.json().catch(()=>({}));
+    const error=response.ok?null:{message:data?.error||"Não foi possível carregar os usuários."};
     if(error||data?.error)setError(data?.error||error?.message||"Não foi possível carregar os usuários.");
     else setRows((data.users||[]) as ManagedUser[]);
   },[supabase,canViewUsers]);
@@ -1807,6 +1962,11 @@ function Permissions() {
     return rolePermissions.find(item=>item.role===role&&item.permission_key===permissionKey)?.allowed===true;
   }
   function lgpdAcceptanceFor(user:ManagedUser){return acceptances[String(user.user_id||"")]||acceptances[user.email.toLowerCase()]||null}
+  function previewAsUser(user:ManagedUser){
+    if(!isMaster||user.role==="master")return;
+    const permissions=rolePermissions.filter(item=>item.role===user.role&&item.allowed).map(item=>item.permission_key);
+    window.dispatchEvent(new CustomEvent("jpi-user-preview-start",{detail:{name:user.nome||user.email,email:user.email,role:roleLabels[user.role],permissions}}));
+  }
 
   async function togglePermission(role:RolePermissionRow["role"],permissionKey:string){
     if(!supabase||!isMaster)return;
@@ -1833,6 +1993,7 @@ function Permissions() {
     const {data,error}=await supabase.functions.invoke("manage-users",{body:{
       action:"invite",
       nome:form.get("nome"),
+      cpf:form.get("cpf"),
       email:String(form.get("email")||"").toLowerCase(),
       role:form.get("role"),
     }});
@@ -1845,7 +2006,9 @@ function Permissions() {
     if(!supabase||!canManageUsers||user.role==="master")return;
     setBusy(true);setError("");setMessage("");
     const next={role:changes.role??user.role,active:changes.active??user.active};
-    const {data,error}=await supabase.functions.invoke("manage-users",{body:{action:"update",id:user.id,...next}});
+    const response=await authenticatedFetch("/api/manage-users",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({action:"update",id:user.id,...next})});
+    const data=await response.json().catch(()=>({}));
+    const error=response.ok?null:{message:data?.error||"Não foi possível atualizar o usuário."};
     setBusy(false);
     if(error||data?.error){setError(data?.error||error?.message||"Não foi possível atualizar o usuário.");return}
     setMessage(changes.active!==undefined?`Usuário ${next.active?"ATIVADO":"BLOQUEADO"} com sucesso.`:`Perfil do usuário alterado para ${roleLabels[next.role]} com sucesso.`);await loadUsers();
@@ -1853,14 +2016,17 @@ function Permissions() {
 
   async function updateIdentity(e:FormEvent<HTMLFormElement>){
     e.preventDefault();
-    if(!supabase||!canManageUsers||!editingUser||editingUser.role==="master")return;
+    if(!supabase||!canManageUsers||!editingUser)return;
     setBusy(true);setError("");setMessage("");
     const form=new FormData(e.currentTarget);
     const nome=String(form.get("nome")||"").trim().toLocaleUpperCase("pt-BR");
+    const cpf=String(form.get("cpf")||"").replace(/\D/g,"").slice(0,11);
     const email=String(form.get("email")||"").trim().toLowerCase();
     const emailChanged=email!==editingUser.email.toLowerCase();
     const invitePending=Boolean(editingUser.invited_at&&!editingUser.confirmed_at);
-    const {data,error}=await supabase.functions.invoke("manage-users",{body:{action:"update_identity",id:editingUser.id,nome,email}});
+    const response=await authenticatedFetch("/api/manage-users",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({action:"update_identity",id:editingUser.id,nome,cpf,email})});
+    const data=await response.json().catch(()=>({}));
+    const error=response.ok?null:{message:data?.error||"Não foi possível alterar os dados do usuário."};
     setBusy(false);
     if(error||data?.error){setError(data?.error||error?.message||"Não foi possível alterar os dados do usuário.");return}
     setEditingUser(null);
@@ -1905,13 +2071,13 @@ function Permissions() {
       <div className="table-card permission-users-table"><table>
         <thead><tr><th>Usuário</th><th>Perfil</th><th>Status</th><th>Último acesso</th><th>Acesso</th></tr></thead>
         <tbody>{rows.map(user=><tr key={user.id} className={user.role==="master"?"master-user-row":""}>
-          <td><div className="name-cell"><div className="avatar soft">{(user.nome||user.email)[0].toUpperCase()}</div><div><strong>{user.nome||"USUÁRIO CONVIDADO"}{user.role==="master"&&<span className="inline-master-tag">MASTER</span>}</strong><span className="subcell">{user.email}</span>{user.invite_resent_at&&<span className="invite-resent-mark" role="status"><Check/>Convite reenviado em {new Date(user.invite_resent_at).toLocaleString("pt-BR",{dateStyle:"short",timeStyle:"short"})}</span>}</div></div></td>
+          <td><div className="name-cell"><div className="avatar soft">{(user.nome||user.email)[0].toUpperCase()}</div><div><strong>{user.nome||"USUÁRIO CONVIDADO"}{user.role==="master"&&<span className="inline-master-tag">MASTER</span>}</strong><span className="subcell">{user.email}</span><span className="subcell">CPF: {user.cpf||"não informado"}</span>{user.invite_resent_at&&<span className="invite-resent-mark" role="status"><Check/>Convite reenviado em {new Date(user.invite_resent_at).toLocaleString("pt-BR",{dateStyle:"short",timeStyle:"short"})}</span>}</div></div></td>
           <td>{user.role==="master"?<span className="role-master-static"><KeyRound/>Master</span>:<select className="role-select" value={user.role} disabled={busy||!canManageUsers} onChange={event=>updateUser(user,{role:event.target.value as ManagedUser["role"]})}>
             <option value="admin">Administrador</option><option value="financeiro">Financeiro</option><option value="secretaria">Secretaria</option><option value="consulta">Consulta</option>
           </select>}</td>
           <td><Status>{user.active&&user.invited_at&&!user.confirmed_at?"Convite pendente":user.active?"Ativo":"Bloqueado"}</Status></td>
           <td>{user.last_sign_in_at?new Date(user.last_sign_in_at).toLocaleString("pt-BR"):user.invited_at?"Convite pendente":"Nunca acessou"}</td>
-          <td>{user.role==="master"?<span className="master-lock"><ShieldCheck/>Protegido</span>:canManageUsers?<div className="user-access-actions"><button type="button" className="secondary edit-user" disabled={busy} onClick={()=>{setError("");setMessage("");setEditingUser(user)}}><UserCog/>Editar dados</button>{user.active&&user.invited_at&&!user.confirmed_at&&<button type="button" className="secondary resend-invite" disabled={busy} onClick={()=>void resendInvite(user)}><Mail/>Reenviar convite</button>}<button className={`access-toggle ${user.active?"active":"blocked"}`} disabled={busy} onClick={()=>updateUser(user,{active:!user.active})}>{user.active?"Bloquear":"Ativar"}</button></div>:<span className="muted">Somente leitura</span>}</td>
+          <td>{canManageUsers?<div className="user-access-actions">{isMaster&&user.role!=="master"&&<button type="button" className="secondary preview-user" disabled={busy||!user.active} onClick={()=>previewAsUser(user)}><Eye/>Visualizar como</button>}<button type="button" className="secondary edit-user" disabled={busy} onClick={()=>{setError("");setMessage("");setEditingUser(user)}}><UserCog/>Editar dados</button>{user.role==="master"?<span className="master-lock"><ShieldCheck/>Protegido</span>:<>{user.active&&user.invited_at&&!user.confirmed_at&&<button type="button" className="secondary resend-invite" disabled={busy} onClick={()=>void resendInvite(user)}><Mail/>Reenviar convite</button>}<button className={`access-toggle ${user.active?"active":"blocked"}`} disabled={busy} onClick={()=>updateUser(user,{active:!user.active})}>{user.active?"Bloquear":"Ativar"}</button></>}</div>:<span className="muted">Somente leitura</span>}</td>
         </tr>)}</tbody>
       </table>{rows.length===0&&!error&&<div className="empty-row">Nenhum usuário encontrado.</div>}</div>
     </>}
@@ -1975,16 +2141,18 @@ function Permissions() {
       <div className="modal-head"><h2>Convidar usuário</h2><button className="icon-button" onClick={()=>setOpen(false)}><X/></button></div>
       <form className="data-form" onSubmit={invite}>
         <label>Nome completo<input name="nome" onInput={upperCompanyInput} required/></label>
+        <label>CPF<input name="cpf" inputMode="numeric" maxLength={14} placeholder="Somente números ou CPF formatado"/></label>
         <label>E-mail<input name="email" type="email" onInput={event=>(event.currentTarget.value=event.currentTarget.value.toLocaleLowerCase("pt-BR"))} required/></label>
         <label>Perfil<select name="role" defaultValue="consulta"><option value="admin">Administrador</option><option value="financeiro">Financeiro</option><option value="secretaria">Secretaria</option><option value="consulta">Consulta</option></select></label>
         <div className="notice compact"><ShieldCheck/><span>O usuário receberá um link seguro para definir sua própria senha. O perfil Master não é criado por convite comum.</span></div>
         <div className="form-actions"><button type="button" className="secondary" onClick={()=>setOpen(false)}>Cancelar</button><button className="primary" disabled={busy}>{busy?"Enviando…":"Enviar convite"}</button></div>
       </form>
     </div></div>}
-    {editingUser&&canManageUsers&&editingUser.role!=="master"&&<div className="modal-backdrop"><div className="modal-card small-modal">
+    {editingUser&&canManageUsers&&<div className="modal-backdrop"><div className="modal-card small-modal">
       <div className="modal-head"><h2>Alterar dados do usuário</h2><button type="button" className="icon-button" aria-label="Fechar" onClick={()=>setEditingUser(null)}><X/></button></div>
       <form className="data-form" onSubmit={updateIdentity}>
         <label>Nome completo<input name="nome" defaultValue={editingUser.nome||""} onInput={upperCompanyInput} required/></label>
+        <label>CPF<input name="cpf" inputMode="numeric" maxLength={14} defaultValue={editingUser.cpf||""} placeholder="Somente números ou CPF formatado"/></label>
         <label>E-mail<input name="email" type="email" defaultValue={editingUser.email} onInput={event=>(event.currentTarget.value=event.currentTarget.value.toLocaleLowerCase("pt-BR"))} required/></label>
         <div className="notice compact"><ShieldCheck/><span>{editingUser.invited_at&&!editingUser.confirmed_at?"Se alterar o e-mail, reenvie o convite para o novo endereço após salvar.":"A alteração é aplicada ao acesso deste usuário. Se trocar o e-mail, ele deverá utilizá-lo no próximo acesso."}</span></div>
         <div className="form-actions"><button type="button" className="secondary" disabled={busy} onClick={()=>setEditingUser(null)}>Cancelar</button><button className="primary" disabled={busy}>{busy?"Salvando…":"Salvar alterações"}</button></div>
@@ -1992,6 +2160,11 @@ function Permissions() {
     </div></div>}
   </>;
 }
+
+
+
+
+
 
 
 
