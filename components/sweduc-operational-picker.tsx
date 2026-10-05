@@ -38,6 +38,16 @@ function uniqueSortedOptions(values:Array<string|null|undefined>){
   }
   return Array.from(options.values()).sort((a,b)=>a.localeCompare(b,"pt-BR",{numeric:true,sensitivity:"base"}));
 }
+function academicReferencesForYear(references:AcademicReference[],selectedYear:number|null){
+  if(!selectedYear)return [];
+  const current=references.filter(reference=>Number(reference.ano_letivo)===Number(selectedYear));
+  const previousYears=Array.from(new Set(references.map(reference=>Number(reference.ano_letivo)).filter(year=>Number.isSafeInteger(year)&&year<selectedYear)));
+  const mostCompletePreviousYear=previousYears
+    .map(year=>({year,count:references.filter(reference=>Number(reference.ano_letivo)===year).length}))
+    .sort((a,b)=>b.count-a.count||b.year-a.year)[0]?.year;
+  if(!mostCompletePreviousYear)return current;
+  return [...current,...references.filter(reference=>Number(reference.ano_letivo)===mostCompletePreviousYear)];
+}
 function sortStudents(students:SweducStudent[]){
   return [...students].sort((a,b)=>
     String(a.nome||"").localeCompare(String(b.nome||""),"pt-BR",{numeric:true,sensitivity:"base"})||
@@ -89,7 +99,7 @@ export function SweducOperationalPicker({onStudentReady}:{onStudentReady:(studen
       setYears(filteredYears);
       setAcademicReferences(data.academicReferences||[]);
       const preferredYear=Number(data.selectedAcademicYear||0);
-      setSelectedYear(filteredYears.some(item=>item.year===preferredYear)?preferredYear:filteredYears[0]?.year||available[0]?.year||null);
+      setSelectedYear(current=>current&&filteredYears.some(item=>item.year===current)?current:filteredYears.some(item=>item.year===preferredYear)?preferredYear:filteredYears[0]?.year||available[0]?.year||null);
       if(!data.config?.credencial_configurada)setMessage("A conexão SWeduc ainda precisa ser configurada pelo Master.");
     }catch(e){setError(e instanceof Error?e.message:"Não foi possível carregar a SWeduc.")}
   },[token]);
@@ -100,7 +110,7 @@ export function SweducOperationalPicker({onStudentReady}:{onStudentReady:(studen
     window.addEventListener("jpi-sweduc-preloaded",refresh);
     return()=>window.removeEventListener("jpi-sweduc-preloaded",refresh);
   },[loadYears]);
-  const yearReferences=useMemo(()=>academicReferences.filter(reference=>Number(reference.ano_letivo)===Number(selectedYear)),[academicReferences,selectedYear]);
+  const yearReferences=useMemo(()=>academicReferencesForYear(academicReferences,selectedYear),[academicReferences,selectedYear]);
   const courseOptions=useMemo(()=>uniqueSortedOptions([...students.map(student=>student.curso),...yearReferences.map(reference=>reference.curso)]),[students,yearReferences]);
   const serieOptions=useMemo(()=>uniqueSortedOptions([
     ...students.filter(student=>!courseFilter||sameOption(student.curso,courseFilter)).map(student=>student.serie),

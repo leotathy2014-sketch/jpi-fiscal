@@ -194,3 +194,10 @@ test("mantém referências acadêmicas SWeduc para filtros sem duplicidade",()=>
   assert.match(operationalPicker,/yearReferences/);
   assert.match(operationalPicker,/uniqueSortedOptions\(\[\.\.\.students\.map\(student=>student\.curso\),\.\.\.yearReferences\.map\(reference=>reference\.curso\)\]\)/);
 });
+
+test("preserva o ano escolhido e completa anos novos com o catálogo acadêmico anterior",()=>{
+  assert.match(operationalPicker,/setSelectedYear\(current=>current&&filteredYears\.some\(item=>item\.year===current\)\?current:/);
+  assert.match(operationalPicker,/function academicReferencesForYear/);
+  assert.match(operationalPicker,/mostCompletePreviousYear/);
+  assert.match(operationalPicker,/academicReferencesForYear\(academicReferences,selectedYear\)/);
+});
