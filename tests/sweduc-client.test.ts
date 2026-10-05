@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import {createSweducAccessToken,currentSweducAcademicYear,filterSweducActiveEnrollments,getSweducStudentDetailsWithToken,inferSweducSegment,isSweducActiveEnrollment,listSweducStudentsWithToken,mapSweducToFiscalStudent,normalizeSweducHost,parseSweducCredentials,resolveSweducEnabledAcademicYear,serializeSweducCredentials} from "../lib/sweduc.ts";
+import {createSweducAccessToken,currentSweducAcademicYear,filterSweducActiveEnrollments,getSweducStudentDetailsWithToken,inferSweducSegment,isSweducActiveEnrollment,listSweducStudentsWithToken,mapSweducToFiscalStudent,mergeSweducTrackedAcademicYears,normalizeSweducHost,parseSweducCredentials,resolveSweducEnabledAcademicYear,serializeSweducCredentials} from "../lib/sweduc.ts";
 
 const credentials={host:"https://joaopauloi.escolarsw.com.br",clientId:"cliente",clientSecret:"segredo"};
 
@@ -87,6 +87,13 @@ test("mantém somente matrículas ativas e rejeita canceladas ou encerradas",()=
   assert.equal(isSweducActiveEnrollment(rows[0]),true);
   assert.equal(isSweducActiveEnrollment(rows[2]),false);
   assert.deepEqual(filterSweducActiveEnrollments(rows).map(row=>row.matricula_id),[1,2]);
+});
+
+test("acrescenta novos anos da SWeduc sem reabrir anos antigos",()=>{
+  assert.deepEqual(
+    mergeSweducTrackedAcademicYears([2026,2027],[{id:37,year:2025},{id:38,year:2026},{id:39,year:2027},{id:40,year:2028}]),
+    [2026,2027,2028],
+  );
 });
 
 test("usa os endpoints oficiais de listagem e detalhes",async()=>{

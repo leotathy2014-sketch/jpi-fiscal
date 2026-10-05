@@ -1,6 +1,6 @@
 import {NextRequest,NextResponse} from "next/server";
 import {createClient,type SupabaseClient} from "@supabase/supabase-js";
-import {createSweducAccessToken,currentSweducAcademicYear,filterSweducActiveEnrollments,getSweducStudentDetailsWithToken,isSweducActiveEnrollment,listSweducStudentsWithToken,mapSweducToFiscalStudent,normalizeSweducHost,parseSweducCredentials,resolveSweducAcademicYear,resolveSweducEnabledAcademicYear,serializeSweducCredentials,type SweducCredentials,type SweducStudentSummary,type SweducTokenGrant} from "@/lib/sweduc";
+import {createSweducAccessToken,currentSweducAcademicYear,filterSweducActiveEnrollments,getSweducStudentDetailsWithToken,isSweducActiveEnrollment,listSweducStudentsWithToken,mapSweducToFiscalStudent,mergeSweducTrackedAcademicYears,normalizeSweducHost,parseSweducCredentials,resolveSweducAcademicYear,resolveSweducEnabledAcademicYear,serializeSweducCredentials,type SweducCredentials,type SweducStudentSummary,type SweducTokenGrant} from "@/lib/sweduc";
 import {hasServerPermission} from "@/lib/server-permissions";
 
 export const runtime="nodejs";export const maxDuration=60;
@@ -284,7 +284,11 @@ export async function GET(request:NextRequest){
   }
   if(!academicYears.length)academicYears=[{id:0,year:activeAcademicYear}];
   const suggestedSyncYears=defaultRecentYears(academicYears,activeAcademicYear);
-  const syncYears=sanitizeSyncYears(config.anos_sincronizacao,suggestedSyncYears);
+  const configuredSyncYears=sanitizeSyncYears(config.anos_sincronizacao,suggestedSyncYears);
+  const syncYears=mergeSweducTrackedAcademicYears(configuredSyncYears,academicYears,suggestedSyncYears);
+  if(JSON.stringify(syncYears)!==JSON.stringify(configuredSyncYears)){
+    await reader.from("sweduc_config").update({anos_sincronizacao:syncYears,updated_at:new Date().toISOString(),updated_by:auth.user.id}).eq("id",true);
+  }
   const syncUnits=sanitizeSyncUnits(config.unidades_sincronizacao);
   const academicReferences=await listSweducAcademicReferences(auth.supabase,syncYears.length?syncYears:academicYears.map(item=>item.year));
   return json({ok:true,config:{...config,anos_sincronizacao:syncYears,unidades_sincronizacao:syncUnits,auth_method:authMethod,usuario_configurado:usuarioConfigurado,ano_letivo_ativo:activeAcademicYear,cofre_configurado:Boolean(process.env.JPI_BACKEND_SECRET)},academicYears,syncYears,syncUnits,suggestedSyncYears,unitOptions:SWEDUC_UNIT_OPTIONS,selectedAcademicYear:activeAcademicYear,students:[],total:0,academicReferences});

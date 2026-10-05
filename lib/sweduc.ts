@@ -72,6 +72,16 @@ export function filterSweducActiveEnrollments<T extends Pick<SweducStudentSummar
   return students.filter(isSweducActiveEnrollment);
 }
 
+export function mergeSweducTrackedAcademicYears(configuredYears:number[],academicYears:SweducAcademicYear[],fallbackYears:number[]=[]){
+  const normalize=(years:number[])=>Array.from(new Set(years.map(Number).filter(year=>Number.isSafeInteger(year)&&year>=2020&&year<=2100)));
+  const configured=normalize(configuredYears);
+  const baseline=configured.length?configured:normalize(fallbackYears);
+  const discovered=normalize(academicYears.map(item=>item.year));
+  if(!baseline.length)return discovered.sort((a,b)=>a-b);
+  const oldestTracked=Math.min(...baseline);
+  return normalize([...baseline,...discovered.filter(year=>year>=oldestTracked)]).sort((a,b)=>a-b);
+}
+
 export async function listSweducAcademicYears(host:string,fetchImpl:FetchLike=fetch):Promise<SweducAcademicYear[]>{
   const response=await fetchImpl(`${normalizeSweducHost(host)}/api/public/v1/academico/anos-letivos`,{headers:{Accept:"application/json"},cache:"no-store",redirect:"error",signal:AbortSignal.timeout(SWEDUC_TIMEOUT_MS)});
   if(!response.ok)throw new Error(await apiMessage(response,"A SWeduc não permitiu consultar os anos letivos."));

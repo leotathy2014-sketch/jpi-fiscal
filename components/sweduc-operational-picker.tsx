@@ -78,12 +78,18 @@ export function SweducOperationalPicker({onStudentReady}:{onStudentReady:(studen
       const response=await authenticatedFetch("/api/integrations/sweduc",{headers:{Authorization:`Bearer ${accessToken}`},cache:"no-store"});
       const data=await response.json().catch(()=>({})) as {academicYears?:AcademicYear[];syncYears?:number[];selectedAcademicYear?:number;academicReferences?:AcademicReference[];config?:{credencial_configurada:boolean};error?:string};
       if(!response.ok)throw new Error(data.error||"Não foi possível carregar os anos letivos da SWeduc.");
-      const allowedYears=(data.syncYears?.length?data.syncYears:[]).sort((a,b)=>b-a);
       const available=data.academicYears||[];
+      const configuredYears=(data.syncYears||[]).map(Number).filter(year=>Number.isSafeInteger(year));
+      const oldestTracked=configuredYears.length?Math.min(...configuredYears):0;
+      const allowedYears=Array.from(new Set([
+        ...configuredYears,
+        ...available.map(item=>item.year).filter(year=>!oldestTracked||year>=oldestTracked),
+      ])).sort((a,b)=>b-a);
       const filteredYears=allowedYears.map(year=>available.find(item=>item.year===year)||{id:0,year});
       setYears(filteredYears);
       setAcademicReferences(data.academicReferences||[]);
-      setSelectedYear(filteredYears[0]?.year||data.selectedAcademicYear||available[0]?.year||null);
+      const preferredYear=Number(data.selectedAcademicYear||0);
+      setSelectedYear(filteredYears.some(item=>item.year===preferredYear)?preferredYear:filteredYears[0]?.year||available[0]?.year||null);
       if(!data.config?.credencial_configurada)setMessage("A conexão SWeduc ainda precisa ser configurada pelo Master.");
     }catch(e){setError(e instanceof Error?e.message:"Não foi possível carregar a SWeduc.")}
   },[token]);
