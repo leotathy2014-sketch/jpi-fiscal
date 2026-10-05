@@ -102,6 +102,7 @@ test("permite buscar aluno SWeduc no cadastro e no assistente sem abrir configur
   assert.match(operationalPicker,/syncYears/);
   assert.match(operationalPicker,/filteredYears/);
   assert.match(operationalPicker,/action:"lookup"/);
+  assert.match(operationalPicker,/mirrorOnly:false/);
   assert.match(operationalPicker,/hasAcademicFilter/);
   assert.match(operationalPicker,/lastAutoConsultRef/);
   assert.match(operationalPicker,/void consult\(\)/);
