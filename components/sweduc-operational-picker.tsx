@@ -94,7 +94,12 @@ export function SweducOperationalPicker({onStudentReady}:{onStudentReady:(studen
     }catch(e){setError(e instanceof Error?e.message:"Não foi possível carregar a SWeduc.")}
   },[token]);
 
-  useEffect(()=>{void loadYears()},[loadYears]);
+  useEffect(()=>{
+    const refresh=()=>void loadYears();
+    void loadYears();
+    window.addEventListener("jpi-sweduc-preloaded",refresh);
+    return()=>window.removeEventListener("jpi-sweduc-preloaded",refresh);
+  },[loadYears]);
   const yearReferences=useMemo(()=>academicReferences.filter(reference=>Number(reference.ano_letivo)===Number(selectedYear)),[academicReferences,selectedYear]);
   const courseOptions=useMemo(()=>uniqueSortedOptions([...students.map(student=>student.curso),...yearReferences.map(reference=>reference.curso)]),[students,yearReferences]);
   const serieOptions=useMemo(()=>uniqueSortedOptions([

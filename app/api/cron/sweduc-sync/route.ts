@@ -129,7 +129,7 @@ export async function GET(request:NextRequest){
       const academicYear=resolved.selected;
       page=1;lastPage=1;let syncedThisYear=0;
       while(page<=lastPage&&page<=MAX_PAGES_PER_RUN){
-        const listing=await listSweducStudentsWithToken(activeCredentials.host,token.accessToken,{page,ano_letivo_id:academicYear.id});
+        const listing=await listSweducStudentsWithToken(activeCredentials.host,token.accessToken,{page,per_page:100,ano_letivo_id:academicYear.id});
         lastPage=Math.max(1,Number(listing.last_page||page));
         const rows=filterRowsByUnits(filterSweducActiveEnrollments(listing.data||[]).map(summary=>mapSummaryToMirror(summary,at)),units);
         if(rows.length){

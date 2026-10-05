@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {createSweducAccessToken,currentSweducAcademicYear,filterSweducActiveEnrollments,getSweducStudentDetailsWithToken,inferSweducSegment,isSweducActiveEnrollment,listSweducStudentsWithToken,mapSweducToFiscalStudent,mergeSweducTrackedAcademicYears,normalizeSweducHost,parseSweducCredentials,resolveSweducEnabledAcademicYear,serializeSweducCredentials} from "../lib/sweduc.ts";
+import {prioritizeSweducAcademicYears} from "../lib/sweduc-years.ts";
 
 const credentials={host:"https://joaopauloi.escolarsw.com.br",clientId:"cliente",clientSecret:"segredo"};
 
@@ -94,6 +95,11 @@ test("acrescenta novos anos da SWeduc sem reabrir anos antigos",()=>{
     mergeSweducTrackedAcademicYears([2026,2027],[{id:37,year:2025},{id:38,year:2026},{id:39,year:2027},{id:40,year:2028}]),
     [2026,2027,2028],
   );
+});
+
+test("prioriza o ano letivo selecionado antes da sincronização dos demais",()=>{
+  assert.deepEqual(prioritizeSweducAcademicYears([2026,2027,2028],2027),[2027,2028,2026]);
+  assert.deepEqual(prioritizeSweducAcademicYears([2026,2027,2027],null),[2027,2026]);
 });
 
 test("usa os endpoints oficiais de listagem e detalhes",async()=>{

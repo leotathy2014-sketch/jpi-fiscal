@@ -20,6 +20,7 @@ const agenda=readFileSync(new URL("../lib/agenda-edu.ts",import.meta.url),"utf8"
 const livePages=readFileSync(new URL("../components/live-pages.tsx",import.meta.url),"utf8");
 const operationalPicker=readFileSync(new URL("../components/sweduc-operational-picker.tsx",import.meta.url),"utf8");
 const appPage=readFileSync(new URL("../app/page.tsx",import.meta.url),"utf8");
+const appShell=readFileSync(new URL("../components/app-shell.tsx",import.meta.url),"utf8");
 
 test("cria uma integração SWeduc separada da Agenda Edu",()=>{
   assert.match(settings,/section==="sweduc"/);assert.match(settings,/Agenda Edu/);
@@ -81,7 +82,7 @@ test("importa dados acadêmicos, responsáveis, contatos e financeiro",()=>{
 
 test("mostra no painel e cadastro a atualização de alunos pela API",()=>{
   assert.match(livePages,/Atualização API alunos/);
-  assert.match(livePages,/atualizado\(s\) pela SWeduc/);
+  assert.match(livePages,/carregado\(s\) do banco SWeduc/);
   assert.match(livePages,/sweduc_atualizado_em/);
   assert.match(livePages,/SweducOperationalPicker/);
   assert.doesNotMatch(livePages,/Manual \/ sem API/);
@@ -139,6 +140,7 @@ test("sincroniza automaticamente o espelho SWeduc sem alterar Agenda Edu nem cad
   assert.match(cronRoute,/filterRowsByUnits/);
   assert.match(cronRoute,/resolveSweducAcademicYear/);
   assert.match(cronRoute,/listSweducStudentsWithToken/);
+  assert.match(cronRoute,/per_page:100/);
   assert.match(cronRoute,/from\("sweduc_alunos"\)\.upsert/);
   assert.doesNotMatch(cronRoute,/from\("alunos"\)\.(insert|update|upsert|delete)/);
   assert.doesNotMatch(cronRoute,/agenda_edu/);
@@ -157,7 +159,15 @@ test("sincroniza automaticamente o espelho SWeduc sem alterar Agenda Edu nem cad
   assert.match(route,/syncUnits/);
   assert.match(route,/sweduc_referencias_academicas/);
   assert.match(route,/upsertSweducAcademicReferences/);
+  assert.match(route,/requiresCompleteCatalog/);
+  assert.match(route,/per_page:100/);
   assert.match(cronRoute,/sweduc_referencias_academicas/);
+  assert.match(appShell,/prioritizeSweducAcademicYears/);
+  assert.match(appShell,/syncUnits:config\.syncUnits\|\|\[\]/);
+  assert.match(appShell,/jpi-sweduc-login-preload-v2/);
+  assert.match(appShell,/window\.dispatchEvent\(new Event\("jpi-sweduc-preloaded"\)\)/);
+  assert.match(appShell,/localStorage\.setItem\(key,String\(Date\.now\(\)\)\)/);
+  assert.match(operationalPicker,/window\.addEventListener\("jpi-sweduc-preloaded",refresh\)/);
   assert.match(ui,/Anos sincronizados no espelho/);
   assert.match(ui,/JPI - Matriz/);
   assert.match(ui,/JPI - Filial/);
