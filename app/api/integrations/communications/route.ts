@@ -439,7 +439,7 @@ export async function POST(request:NextRequest){
     const course=String(body.course||"").replace(/\s+/g," ").trim();
     const serie=String(body.serie||"").replace(/\s+/g," ").trim();
     const turma=String(body.turma||"").replace(/\s+/g," ").trim();
-    let query=auth.supabase.from("sweduc_alunos").select("matricula_id,nome,data_nascimento,numero_matricula,ano_letivo,unidade,curso,serie,turma,responsaveis").limit(1000);
+    let query=auth.supabase.from("sweduc_alunos").select("matricula_id,nome,data_nascimento,numero_matricula,ano_letivo,unidade,curso,serie,turma,responsaveis").or("status.ilike.%matric%,status.ilike.%ativ%").limit(1000);
     if(year)query=query.eq("ano_letivo",year);
     if(unit)query=query.eq("unidade",unit);
     if(course)query=query.eq("curso",course);

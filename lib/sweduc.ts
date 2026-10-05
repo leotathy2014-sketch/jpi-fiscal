@@ -61,6 +61,17 @@ export function currentSweducAcademicYear(referenceDate=new Date()){
   return Number(new Intl.DateTimeFormat("en-US",{timeZone:"America/Sao_Paulo",year:"numeric"}).format(referenceDate));
 }
 
+export function isSweducActiveEnrollment(student:Pick<SweducStudentSummary,"status">|Record<string,unknown>){
+  const status=String(student.status||"").normalize("NFD").replace(/[\u0300-\u036f]/g,"").trim().toLocaleLowerCase("pt-BR");
+  if(!status)return false;
+  if(["cancel","encerrad","inativ","transferid","desist","excluid"].some(value=>status.includes(value)))return false;
+  return status.includes("matric")||status.includes("ativ");
+}
+
+export function filterSweducActiveEnrollments<T extends Pick<SweducStudentSummary,"status">|Record<string,unknown>>(students:T[]){
+  return students.filter(isSweducActiveEnrollment);
+}
+
 export async function listSweducAcademicYears(host:string,fetchImpl:FetchLike=fetch):Promise<SweducAcademicYear[]>{
   const response=await fetchImpl(`${normalizeSweducHost(host)}/api/public/v1/academico/anos-letivos`,{headers:{Accept:"application/json"},cache:"no-store",redirect:"error",signal:AbortSignal.timeout(SWEDUC_TIMEOUT_MS)});
   if(!response.ok)throw new Error(await apiMessage(response,"A SWeduc não permitiu consultar os anos letivos."));
@@ -77,6 +88,26 @@ export async function getSweducActiveAcademicYear(host:string,fetchImpl:FetchLik
   const active=years.find(item=>item.year===currentYear)||years.filter(item=>item.year<=currentYear).sort((a,b)=>b.year-a.year)[0];
   if(!active)throw new Error(`A SWeduc não retornou um ano letivo válido para ${currentYear}.`);
   return active;
+}
+
+export async function resolveSweducEnabledAcademicYear(host:string,accessToken:string,fetchImpl:FetchLike=fetch,referenceDate=new Date()){
+  const years=await listSweducAcademicYears(host,fetchImpl);
+  const currentYear=currentSweducAcademicYear(referenceDate);
+  const candidates=years
+    .filter(item=>item.year>=currentYear-1&&item.year<=currentYear+1)
+    .sort((a,b)=>b.year-a.year);
+  for(const candidate of candidates){
+    let page=1;let lastPage=1;
+    while(page<=lastPage&&page<=3){
+      const listing=await listSweducStudentsWithToken(host,accessToken,{page,ano_letivo_id:candidate.id},fetchImpl);
+      if(filterSweducActiveEnrollments(listing.data||[]).length)return {selected:candidate,years};
+      lastPage=Math.min(Math.max(1,Number(listing.last_page||page)),3);
+      page++;
+    }
+  }
+  const selected=years.find(item=>item.year===currentYear)||years.filter(item=>item.year<=currentYear).sort((a,b)=>b.year-a.year)[0];
+  if(!selected)throw new Error("A SWeduc não retornou um ano letivo habilitado com matrículas ativas.");
+  return {selected,years};
 }
 
 export async function resolveSweducAcademicYear(host:string,year:number|undefined,fetchImpl:FetchLike=fetch,referenceDate=new Date()){

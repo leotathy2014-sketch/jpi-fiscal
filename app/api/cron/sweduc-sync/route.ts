@@ -1,6 +1,6 @@
 import {NextRequest,NextResponse} from "next/server";
 import {createClient} from "@supabase/supabase-js";
-import {createSweducAccessToken,currentSweducAcademicYear,resolveSweducAcademicYear,listSweducStudentsWithToken,getSweducStudentDetailsWithToken,normalizeSweducHost,parseSweducCredentials,type SweducCredentials,type SweducStudentSummary} from "@/lib/sweduc";
+import {createSweducAccessToken,currentSweducAcademicYear,filterSweducActiveEnrollments,getSweducStudentDetailsWithToken,listSweducStudentsWithToken,normalizeSweducHost,parseSweducCredentials,resolveSweducAcademicYear,resolveSweducEnabledAcademicYear,type SweducCredentials,type SweducStudentSummary} from "@/lib/sweduc";
 
 export const runtime="nodejs";export const maxDuration=60;
 const MAX_PAGES_PER_RUN=20;
@@ -12,7 +12,7 @@ function sanitizeSyncYears(value:unknown){
   const fallback=[current-1,current];
   const source=Array.isArray(value)&&value.length?value:fallback;
   const years=source.map(year=>Number(year)).filter(year=>Number.isSafeInteger(year)&&year>=2020&&year<=2100);
-  return Array.from(new Set(years)).sort((a,b)=>a-b);
+  return Array.from(new Set(years)).sort((a,b)=>b-a);
 }
 const DEFAULT_SWEDUC_UNITS=["JPI - Matriz"];
 const SWEDUC_UNIT_OPTIONS=["JPI - Matriz","JPI - Filial"];
@@ -120,8 +120,10 @@ export async function GET(request:NextRequest){
     const token=await createSweducAccessToken(activeCredentials);activeAccessToken=token.accessToken;
     const at=new Date().toISOString();
     await supabase.from("sweduc_config").update({ultimo_status:"sincronizando",ultimo_erro:null,updated_at:at}).eq("id",true);
-    const years=sanitizeSyncYears(configResult.data?.anos_sincronizacao);
+    const enabledYear=(await resolveSweducEnabledAcademicYear(activeCredentials.host,token.accessToken)).selected.year;
+    const years=sanitizeSyncYears([enabledYear,...sanitizeSyncYears(configResult.data?.anos_sincronizacao)]);
     const units=sanitizeSyncUnits(configResult.data?.unidades_sincronizacao);
+    await supabase.from("sweduc_config").update({anos_sincronizacao:years,updated_at:at}).eq("id",true);
     for(const year of years){
       const resolved=await resolveSweducAcademicYear(activeCredentials.host,year);
       const academicYear=resolved.selected;
@@ -129,7 +131,7 @@ export async function GET(request:NextRequest){
       while(page<=lastPage&&page<=MAX_PAGES_PER_RUN){
         const listing=await listSweducStudentsWithToken(activeCredentials.host,token.accessToken,{page,ano_letivo_id:academicYear.id});
         lastPage=Math.max(1,Number(listing.last_page||page));
-        const rows=filterRowsByUnits((listing.data||[]).map(summary=>mapSummaryToMirror(summary,at)),units);
+        const rows=filterRowsByUnits(filterSweducActiveEnrollments(listing.data||[]).map(summary=>mapSummaryToMirror(summary,at)),units);
         if(rows.length){
           const result=await supabase.from("sweduc_alunos").upsert(rows,{onConflict:"matricula_id"});
           if(result.error)throw new Error("Não foi possível atualizar o espelho SWeduc.");
@@ -143,7 +145,7 @@ export async function GET(request:NextRequest){
       }
       if(syncedThisYear||page>lastPage)syncedYears.push(academicYear.year);
     }
-    const detailCandidatesResult=await supabase.from("sweduc_alunos").select("matricula_id,dados_origem,responsaveis,financeiro").in("ano_letivo",years.map(String)).order("sincronizado_em",{ascending:true}).limit(120);
+    const detailCandidatesResult=await supabase.from("sweduc_alunos").select("matricula_id,dados_origem,responsaveis,financeiro,status").in("ano_letivo",years.map(String)).or("status.ilike.%matric%,status.ilike.%ativ%").order("sincronizado_em",{ascending:true}).limit(120);
     if(detailCandidatesResult.error)throw new Error("Não foi possível conferir detalhes pendentes do espelho SWeduc.");
     const detailCandidates=((detailCandidatesResult.data||[]) as Array<Record<string,unknown>>).filter(row=>!hasMirrorDetails(row)).slice(0,MAX_DETAILS_PER_RUN);
     for(const row of detailCandidates){

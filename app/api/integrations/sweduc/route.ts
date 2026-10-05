@@ -1,6 +1,6 @@
 import {NextRequest,NextResponse} from "next/server";
 import {createClient,type SupabaseClient} from "@supabase/supabase-js";
-import {createSweducAccessToken,currentSweducAcademicYear,getSweducActiveAcademicYear,getSweducStudentDetailsWithToken,listSweducStudents,listSweducStudentsWithToken,mapSweducToFiscalStudent,normalizeSweducHost,parseSweducCredentials,resolveSweducAcademicYear,serializeSweducCredentials,type SweducCredentials,type SweducStudentSummary,type SweducTokenGrant} from "@/lib/sweduc";
+import {createSweducAccessToken,currentSweducAcademicYear,filterSweducActiveEnrollments,getSweducStudentDetailsWithToken,isSweducActiveEnrollment,listSweducStudentsWithToken,mapSweducToFiscalStudent,normalizeSweducHost,parseSweducCredentials,resolveSweducAcademicYear,resolveSweducEnabledAcademicYear,serializeSweducCredentials,type SweducCredentials,type SweducStudentSummary,type SweducTokenGrant} from "@/lib/sweduc";
 import {hasServerPermission} from "@/lib/server-permissions";
 
 export const runtime="nodejs";export const maxDuration=60;
@@ -150,11 +150,12 @@ function unitAllowed(row:Record<string,unknown>,units:string[]){
   return units.some(unit=>normalizeSearchText(unit)===unidade);
 }
 function filterRowsByUnits(rows:Array<Record<string,unknown>>,units:string[]){return rows.filter(row=>unitAllowed(row,units))}
+function filterActiveRows(rows:Array<Record<string,unknown>>){return rows.filter(isSweducActiveEnrollment)}
 
-function defaultRecentYears(academicYears:{year:number}[],currentYear:number){
+function defaultRecentYears(academicYears:{year:number}[],activeYear:number){
   const available=academicYears.map(item=>Number(item.year)).filter(year=>Number.isSafeInteger(year));
-  const recent=available.filter(year=>year>=currentYear-1);
-  return sanitizeSyncYears(recent.length?recent:[currentYear-1,currentYear]);
+  const recent=available.filter(year=>year===activeYear-1||year===activeYear);
+  return sanitizeSyncYears(recent.length?recent:[activeYear-1,activeYear]);
 }
 
 function normalizeSearchText(value:unknown){return String(value||"").normalize("NFD").replace(/[\u0300-\u036f]/g,"").replace(/[^\p{L}\p{N}\s]/gu," ").replace(/\s+/g," ").trim().toLocaleLowerCase("pt-BR")}
@@ -273,14 +274,20 @@ export async function GET(request:NextRequest){
   const defaultAcademicYear=currentSweducAcademicYear();
   let academicYears:{id:number;year:number}[]=[];let activeAcademicYear=Number.isSafeInteger(requestedYear)&&requestedYear>1900?requestedYear:defaultAcademicYear;
   if(config.credencial_configurada){
-    try{const saved=await credentials(auth.supabase);const resolved=await resolveSweducAcademicYear(saved.host,activeAcademicYear);academicYears=resolved.years;activeAcademicYear=resolved.selected.year}catch{}
+    try{
+      const saved=await credentials(auth.supabase);
+      const resolved=Number.isSafeInteger(requestedYear)&&requestedYear>1900
+        ?await resolveSweducAcademicYear(saved.host,requestedYear)
+        :await resolveSweducEnabledAcademicYear(saved.host,(await createSweducAccessToken(saved)).accessToken);
+      academicYears=resolved.years;activeAcademicYear=resolved.selected.year;
+    }catch{}
   }
   if(!academicYears.length)academicYears=[{id:0,year:activeAcademicYear}];
-  const suggestedSyncYears=defaultRecentYears(academicYears,defaultAcademicYear);
+  const suggestedSyncYears=defaultRecentYears(academicYears,activeAcademicYear);
   const syncYears=sanitizeSyncYears(config.anos_sincronizacao,suggestedSyncYears);
   const syncUnits=sanitizeSyncUnits(config.unidades_sincronizacao);
   const academicReferences=await listSweducAcademicReferences(auth.supabase,syncYears.length?syncYears:academicYears.map(item=>item.year));
-  return json({ok:true,config:{...config,anos_sincronizacao:syncYears,unidades_sincronizacao:syncUnits,auth_method:authMethod,usuario_configurado:usuarioConfigurado,ano_letivo_ativo:defaultAcademicYear,cofre_configurado:Boolean(process.env.JPI_BACKEND_SECRET)},academicYears,syncYears,syncUnits,suggestedSyncYears,unitOptions:SWEDUC_UNIT_OPTIONS,selectedAcademicYear:activeAcademicYear,students:[],total:0,academicReferences});
+  return json({ok:true,config:{...config,anos_sincronizacao:syncYears,unidades_sincronizacao:syncUnits,auth_method:authMethod,usuario_configurado:usuarioConfigurado,ano_letivo_ativo:activeAcademicYear,cofre_configurado:Boolean(process.env.JPI_BACKEND_SECRET)},academicYears,syncYears,syncUnits,suggestedSyncYears,unitOptions:SWEDUC_UNIT_OPTIONS,selectedAcademicYear:activeAcademicYear,students:[],total:0,academicReferences});
 }
 
 export async function POST(request:NextRequest){
@@ -318,7 +325,7 @@ export async function POST(request:NextRequest){
   }
   if(action==="test"){
     let activeCredentials:SweducCredentials|undefined;
-    try{activeCredentials=await credentials(auth.supabase);const activeYear=await getSweducActiveAcademicYear(activeCredentials.host);const sample=await listSweducStudents(activeCredentials,{page:1,ano_letivo_id:activeYear.id});const at=new Date().toISOString();await auth.supabase.from("sweduc_config").update({host:activeCredentials.host,ultimo_status:"conectado",testada_em:at,ultimo_erro:null,updated_at:at,updated_by:auth.user.id}).eq("id",true);return json({ok:true,academicYear:activeYear.year,message:`Conexão confirmada para o ano letivo ${activeYear.year}. A SWeduc retornou ${Number(sample.total||sample.data?.length||0)} matrícula(s). Nenhum dado foi importado neste teste.`});}catch(error){const message=safeSweducError(error,activeCredentials);await auth.supabase.from("sweduc_config").update({ultimo_status:"erro",ultimo_erro:message,updated_at:new Date().toISOString(),updated_by:auth.user.id}).eq("id",true);return json({error:message},400)}
+    try{activeCredentials=await credentials(auth.supabase);const token=await createSweducAccessToken(activeCredentials);const resolved=await resolveSweducEnabledAcademicYear(activeCredentials.host,token.accessToken);const activeYear=resolved.selected;const sample=await listSweducStudentsWithToken(activeCredentials.host,token.accessToken,{page:1,ano_letivo_id:activeYear.id});const activeCount=filterSweducActiveEnrollments(sample.data||[]).length;const at=new Date().toISOString();await auth.supabase.from("sweduc_config").update({host:activeCredentials.host,ultimo_status:"conectado",testada_em:at,ultimo_erro:null,updated_at:at,updated_by:auth.user.id}).eq("id",true);return json({ok:true,academicYear:activeYear.year,message:`Conexão confirmada para o ano letivo habilitado ${activeYear.year}. A primeira página retornou ${activeCount} matrícula(s) ativa(s). Nenhum dado foi importado neste teste.`});}catch(error){const message=safeSweducError(error,activeCredentials);await auth.supabase.from("sweduc_config").update({ultimo_status:"erro",ultimo_erro:message,updated_at:new Date().toISOString(),updated_by:auth.user.id}).eq("id",true);return json({error:message},400)}
   }
   if(action==="save_years"){
     const syncYears=sanitizeSyncYears(body.syncYears);
@@ -334,34 +341,34 @@ export async function POST(request:NextRequest){
     const rawYear=Number(body.academicYear||0);const search=String(body.search||"").trim();const course=String(body.course||"").trim();const serie=String(body.serie||"").trim();const turma=String(body.turma||"").trim();const page=Math.max(1,Math.min(Number(body.page||1),100));const requestedPageSize=Number(body.pageSize||80);const pageSize=Number.isSafeInteger(requestedPageSize)?Math.max(25,Math.min(requestedPageSize,500)):80;const from=(page-1)*pageSize;const to=from+pageSize-1;const mirrorOnly=body.mirrorOnly===true;
     const {data:mirrorConfig}=await auth.supabase.from("sweduc_config").select("unidades_sincronizacao").eq("id",true).maybeSingle();
     const syncUnits=sanitizeSyncUnits(mirrorConfig?.unidades_sincronizacao);
-    let query=auth.supabase.from("sweduc_alunos").select("matricula_id,aluno_id,nome,data_nascimento,numero_aluno,numero_matricula,status,unidade,curso,serie,turma,ano_letivo,responsaveis,financeiro,dados_origem,sincronizado_em",{count:"exact"}).in("unidade",syncUnits);
+    let query=auth.supabase.from("sweduc_alunos").select("matricula_id,aluno_id,nome,data_nascimento,numero_aluno,numero_matricula,status,unidade,curso,serie,turma,ano_letivo,responsaveis,financeiro,dados_origem,sincronizado_em",{count:"exact"}).in("unidade",syncUnits).or("status.ilike.%matric%,status.ilike.%ativ%");
     if(Number.isSafeInteger(rawYear)&&rawYear>1900)query=query.eq("ano_letivo",String(rawYear));
     if(search)query=query.ilike("nome",`%${search}%`);
     if(course)query=query.eq("curso",course);
     if(serie)query=query.eq("serie",serie);
     if(turma)query=query.eq("turma",turma);
-    const [result,mirrorCount]=await Promise.all([query.order("nome",{ascending:true}).range(from,to),auth.supabase.from("sweduc_alunos").select("matricula_id",{count:"exact",head:true})]);
+    const [result,mirrorCount]=await Promise.all([query.order("nome",{ascending:true}).range(from,to),auth.supabase.from("sweduc_alunos").select("matricula_id",{count:"exact",head:true}).in("unidade",syncUnits).or("status.ilike.%matric%,status.ilike.%ativ%")]);
     if(result.error)return json({error:"Não foi possível consultar o espelho SWeduc no banco."},500);
-    let rows=(result.data||[]) as Array<Record<string,unknown>>;
+    let rows=filterActiveRows((result.data||[]) as Array<Record<string,unknown>>);
     const totalLocal=Number(result.count||0);const mirrorTotal=Number(mirrorCount.count||0);
     if(!rows.length&&mirrorTotal>0&&(course||serie||turma)){
-      let broad=auth.supabase.from("sweduc_alunos").select("matricula_id,aluno_id,nome,data_nascimento,numero_aluno,numero_matricula,status,unidade,curso,serie,turma,ano_letivo,responsaveis,financeiro,dados_origem,sincronizado_em").in("unidade",syncUnits);
+      let broad=auth.supabase.from("sweduc_alunos").select("matricula_id,aluno_id,nome,data_nascimento,numero_aluno,numero_matricula,status,unidade,curso,serie,turma,ano_letivo,responsaveis,financeiro,dados_origem,sincronizado_em").in("unidade",syncUnits).or("status.ilike.%matric%,status.ilike.%ativ%");
       if(Number.isSafeInteger(rawYear)&&rawYear>1900)broad=broad.eq("ano_letivo",String(rawYear));
       const broadResult=await broad.order("nome",{ascending:true}).limit(1000);
       if(broadResult.error)return json({error:"Não foi possível consultar o espelho SWeduc no banco."},500);
-      const normalizedRows=((broadResult.data||[]) as Array<Record<string,unknown>>).filter(row=>matchesAcademic(row,course,serie,turma)&&matchesSearch(row,search));
+      const normalizedRows=filterActiveRows((broadResult.data||[]) as Array<Record<string,unknown>>).filter(row=>matchesAcademic(row,course,serie,turma)&&matchesSearch(row,search));
       rows=normalizedRows.slice(from,to+1);
       if(rows.length)return json({ok:true,students:rows,page,lastPage:Math.max(1,Math.ceil(normalizedRows.length/pageSize)),nextPage:to+1<normalizedRows.length?page+1:null,totalAvailable:normalizedRows.length,message:`Consulta local encontrou ${normalizedRows.length} matrícula(s) pelos filtros selecionados. Nada foi salvo no cadastro fiscal.`});
     }
     if(search&&!rows.length&&mirrorTotal>0){
-      let broad=auth.supabase.from("sweduc_alunos").select("matricula_id,aluno_id,nome,data_nascimento,numero_aluno,numero_matricula,status,unidade,curso,serie,turma,ano_letivo,responsaveis,financeiro,dados_origem,sincronizado_em").in("unidade",syncUnits);
+      let broad=auth.supabase.from("sweduc_alunos").select("matricula_id,aluno_id,nome,data_nascimento,numero_aluno,numero_matricula,status,unidade,curso,serie,turma,ano_letivo,responsaveis,financeiro,dados_origem,sincronizado_em").in("unidade",syncUnits).or("status.ilike.%matric%,status.ilike.%ativ%");
       if(Number.isSafeInteger(rawYear)&&rawYear>1900)broad=broad.eq("ano_letivo",String(rawYear));
       if(course)broad=broad.eq("curso",course);
       if(serie)broad=broad.eq("serie",serie);
       if(turma)broad=broad.eq("turma",turma);
       const broadResult=await broad.order("nome",{ascending:true}).limit(1000);
       if(broadResult.error)return json({error:"Não foi possível consultar o espelho SWeduc no banco."},500);
-      rows=((broadResult.data||[]) as Array<Record<string,unknown>>).filter(row=>matchesSearch(row,search)).slice(from,to+1);
+      rows=filterActiveRows((broadResult.data||[]) as Array<Record<string,unknown>>).filter(row=>matchesSearch(row,search)).slice(from,to+1);
       if(rows.length)return json({ok:true,students:rows,page,lastPage:1,nextPage:null,totalAvailable:rows.length,message:`Consulta local encontrou ${rows.length} matrícula(s) ignorando acentos e caracteres especiais. Nada foi salvo no cadastro fiscal.`});
     }
     if(rows.length||mirrorOnly||(!search&&!course&&!serie&&!turma&&mirrorTotal>0))return json({ok:true,students:rows,page,lastPage:Math.max(1,Math.ceil(totalLocal/pageSize)),nextPage:to+1<totalLocal?page+1:null,totalAvailable:totalLocal,message:rows.length?`Consulta rápida no espelho SWeduc concluída com ${totalLocal} matrícula(s) encontrada(s). Nada foi salvo no cadastro fiscal.`:"Nenhum aluno encontrado no espelho SWeduc para estes filtros. Atualize o espelho nas Configurações se esta turma ainda não apareceu."});
@@ -372,7 +379,7 @@ export async function POST(request:NextRequest){
       while(remotePage<=MAX_SWEDUC_PAGES){
         const listing=await listSweducStudentsWithToken(creds.host,token.accessToken,{page:remotePage,ano_letivo_id:activeYear.id,search:search||undefined});
         lastPage=Math.min(Math.max(1,Number(listing.last_page||remotePage)),MAX_SWEDUC_PAGES);totalApi=Number(listing.total||totalApi||0);
-        const pageRows=filterRowsByUnits((listing.data||[]).map(mapSummaryToGrid),syncUnits);
+        const pageRows=filterRowsByUnits(filterSweducActiveEnrollments(listing.data||[]).map(mapSummaryToGrid),syncUnits);
         if(pageRows.length){await upsertSweducMirror(auth.supabase,pageRows);await upsertSweducAcademicReferences(auth.supabase,pageRows,activeYear.year)}
         collected.push(...pageRows.filter(row=>matchesAcademic(row,course,serie,turma)&&matchesSearch(row,search)));
         if(collected.length>to||remotePage>=lastPage)break;
@@ -390,7 +397,7 @@ export async function POST(request:NextRequest){
       let rows:Array<Record<string,unknown>>=[];
       {
         const listing=await listSweducStudentsWithToken(creds.host,token.accessToken,{page,ano_letivo_id:activeYear.id,search:search||undefined});lastPage=Math.min(Math.max(1,Number(listing.last_page||page)),MAX_SWEDUC_PAGES);totalAvailable=Number(listing.total||0);
-        const summaries=(listing.data||[]).filter((summary:SweducStudentSummary)=>!search||String(summary.nome||"").toLocaleLowerCase("pt-BR").includes(search));
+        const summaries=filterSweducActiveEnrollments(listing.data||[]).filter((summary:SweducStudentSummary)=>!search||String(summary.nome||"").toLocaleLowerCase("pt-BR").includes(search));
         rows=filterRowsByUnits(summaries.map(mapSummaryToGrid),syncUnits);
         await upsertSweducMirror(auth.supabase,rows);
         await upsertSweducAcademicReferences(auth.supabase,rows,activeYear.year);
