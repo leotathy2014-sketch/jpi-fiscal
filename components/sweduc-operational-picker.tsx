@@ -29,6 +29,16 @@ function sameOption(left:unknown,right:unknown){
   const a=normalizeAcademicText(left);const b=normalizeAcademicText(right);
   return !a||!b?false:a===b||a.includes(b)||b.includes(a);
 }
+function canonicalSeriesLabel(value:string|null|undefined){
+  const label=String(value||"").replace(/\s+/g," ").trim();
+  const normalized=normalizeAcademicText(label);
+  const romanByLevel:Record<string,string>={"1":"I","2":"II","3":"III","4":"IV","5":"V"};
+  const maternal=normalized.match(/^(?:matenal|maternal) (\d+)$/);
+  if(maternal&&romanByLevel[maternal[1]])return `Maternal ${romanByLevel[maternal[1]]}`;
+  const preschool=normalized.match(/^pre escola (\d+)$/);
+  if(preschool&&romanByLevel[preschool[1]])return `Pré-Escola ${romanByLevel[preschool[1]]}`;
+  return label;
+}
 function uniqueSortedOptions(values:Array<string|null|undefined>){
   const options=new Map<string,string>();
   for(const value of values){
@@ -47,6 +57,13 @@ function academicReferencesForYear(references:AcademicReference[],selectedYear:n
     .sort((a,b)=>b.count-a.count||b.year-a.year)[0]?.year;
   if(!mostCompletePreviousYear)return current;
   return [...current,...references.filter(reference=>Number(reference.ano_letivo)===mostCompletePreviousYear)];
+}
+function preferredAcademicYear(years:AcademicYear[],configuredYear:number){
+  const availableYears=years.map(item=>Number(item.year)).filter(year=>Number.isSafeInteger(year));
+  const calendarYear=new Date().getFullYear();
+  if(availableYears.includes(calendarYear))return calendarYear;
+  if(availableYears.includes(configuredYear))return configuredYear;
+  return availableYears[0]||null;
 }
 function sortStudents(students:SweducStudent[]){
   return [...students].sort((a,b)=>
@@ -99,7 +116,7 @@ export function SweducOperationalPicker({onStudentReady}:{onStudentReady:(studen
       setYears(filteredYears);
       setAcademicReferences(data.academicReferences||[]);
       const preferredYear=Number(data.selectedAcademicYear||0);
-      setSelectedYear(current=>current&&filteredYears.some(item=>item.year===current)?current:filteredYears.some(item=>item.year===preferredYear)?preferredYear:filteredYears[0]?.year||available[0]?.year||null);
+      setSelectedYear(current=>current&&filteredYears.some(item=>item.year===current)?current:preferredAcademicYear(filteredYears,preferredYear));
       if(!data.config?.credencial_configurada)setMessage("A conexão SWeduc ainda precisa ser configurada pelo Master.");
     }catch(e){setError(e instanceof Error?e.message:"Não foi possível carregar a SWeduc.")}
   },[token]);
@@ -113,8 +130,8 @@ export function SweducOperationalPicker({onStudentReady}:{onStudentReady:(studen
   const yearReferences=useMemo(()=>academicReferencesForYear(academicReferences,selectedYear),[academicReferences,selectedYear]);
   const courseOptions=useMemo(()=>uniqueSortedOptions([...students.map(student=>student.curso),...yearReferences.map(reference=>reference.curso)]),[students,yearReferences]);
   const serieOptions=useMemo(()=>uniqueSortedOptions([
-    ...students.filter(student=>!courseFilter||sameOption(student.curso,courseFilter)).map(student=>student.serie),
-    ...yearReferences.filter(reference=>!courseFilter||sameOption(reference.curso,courseFilter)).map(reference=>reference.serie),
+    ...students.filter(student=>!courseFilter||sameOption(student.curso,courseFilter)).map(student=>canonicalSeriesLabel(student.serie)),
+    ...yearReferences.filter(reference=>!courseFilter||sameOption(reference.curso,courseFilter)).map(reference=>canonicalSeriesLabel(reference.serie)),
   ]),[students,yearReferences,courseFilter]);
   const turmaOptions=useMemo(()=>uniqueSortedOptions([
     ...students.filter(student=>(!courseFilter||sameOption(student.curso,courseFilter))&&(!serieFilter||sameOption(student.serie,serieFilter))).map(student=>student.turma),

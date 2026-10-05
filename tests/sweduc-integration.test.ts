@@ -201,3 +201,17 @@ test("preserva o ano escolhido e completa anos novos com o catálogo acadêmico 
   assert.match(operationalPicker,/mostCompletePreviousYear/);
   assert.match(operationalPicker,/academicReferencesForYear\(academicReferences,selectedYear\)/);
 });
+
+test("prioriza o ano civil atual ao abrir a busca da SWeduc",()=>{
+  assert.match(operationalPicker,/function preferredAcademicYear/);
+  assert.match(operationalPicker,/const calendarYear=new Date\(\)\.getFullYear\(\)/);
+  assert.match(operationalPicker,/if\(availableYears\.includes\(calendarYear\)\)return calendarYear/);
+  assert.match(operationalPicker,/preferredAcademicYear\(filteredYears,preferredYear\)/);
+});
+
+test("padroniza as séries da educação infantil com números romanos",()=>{
+  assert.match(operationalPicker,/function canonicalSeriesLabel/);
+  assert.match(operationalPicker,/return `Maternal \$\{romanByLevel\[maternal\[1\]\]\}`/);
+  assert.match(operationalPicker,/return `Pré-Escola \$\{romanByLevel\[preschool\[1\]\]\}`/);
+  assert.match(operationalPicker,/map\(reference=>canonicalSeriesLabel\(reference\.serie\)\)/);
+});
