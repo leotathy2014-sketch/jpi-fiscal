@@ -1,7 +1,7 @@
 "use client";
 
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Ban, CalendarDays, Check, CircleDollarSign, Clock3, CloudUpload, FileCheck2, FileText, Filter, Mail, MessageCircle, Plus, RefreshCw, Search, Send, ShieldCheck, Trash2, UserCog, UsersRound, WalletCards, X } from "lucide-react";
+import { AlertTriangle, Ban, CalendarDays, Check, ChevronLeft, ChevronRight, CircleDollarSign, Clock3, CloudUpload, Download, FileCheck2, FileText, Filter, Mail, MessageCircle, Plus, Printer, RefreshCw, Search, Send, ShieldCheck, Trash2, TrendingUp, WalletCards, X } from "lucide-react";
 import { createSupabaseBrowserClient } from "@/lib/supabase";
 import { authenticatedFetch } from "@/lib/authenticated-fetch";
 import { buildDpsDraft, isValidCpfCnpj, NFSE_OWN_APP_SERIES } from "@/lib/nfse-dps";
@@ -64,18 +64,501 @@ function ErrorBox({message}:{message:string}) { return message?<div className="e
 
 function Modal({title,onClose,children}:{title:string;onClose:()=>void;children:React.ReactNode}) { return <div className="modal-backdrop"><div className="modal-card"><div className="modal-head"><h2>{title}</h2><button className="icon-button" onClick={onClose}><X/></button></div>{children}</div></div> }
 
-type DeliveryDashboardMetric={canal:"email"|"whatsapp"|"agenda_edu";enviados:number;erros:number;aguardando:number;ultima_atividade:string|null};
-type DashboardPeriod="today"|"7d"|"30d"|"month"|"all";
-function dashboardPeriodBounds(period:DashboardPeriod){const now=new Date();if(period==="all")return {start:null,end:null};let start=new Date(now);if(period==="today"){start.setHours(0,0,0,0)}else if(period==="7d"){start=new Date(now.getTime()-7*86400000)}else if(period==="30d"){start=new Date(now.getTime()-30*86400000)}else{start=new Date(now.getFullYear(),now.getMonth(),1)}return {start:start.toISOString(),end:null};}
+type DeliveryDashboardMetric = {
+  canal: "email" | "whatsapp" | "agenda_edu";
+  enviados: number;
+  erros: number;
+  aguardando: number;
+  ultima_atividade: string | null;
+};
+type DashboardChartType = "line" | "bars" | "distribution";
+type MonthlyClosing={id:number;competence:string;status:"closed"|"reopened";snapshot:Record<string,unknown>;closed_by_name:string;closed_at:string;reopened_by_name:string|null;reopened_at:string|null;reopen_reason:string|null};
+const monthKey = (date: Date) => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
+const competenceKey = (value: string) => {
+  const match = value.match(/^(0[1-9]|1[0-2])\/(20\d{2})$/);
+  return match ? `${match[2]}-${match[1]}` : value;
+};
+const monthLabel = (value: string, short = false) => {
+  const [year, month] = value.split("-").map(Number);
+  return new Intl.DateTimeFormat("pt-BR", {
+    month: short ? "short" : "long",
+    year: "numeric",
+  })
+    .format(new Date(year, month - 1, 1))
+    .replace(" de ", "/");
+};
+const shiftMonth = (value: string, amount: number) => {
+  const [year, month] = value.split("-").map(Number);
+  return monthKey(new Date(year, month - 1 + amount, 1));
+};
+function dashboardMonthBounds(value: string) {
+  const [year, month] = value.split("-").map(Number);
+  return {
+    start: new Date(year, month - 1, 1).toISOString(),
+    end: new Date(year, month, 1).toISOString(),
+  };
+}
+const normalizedStatus = (value: string) =>
+  value
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLocaleLowerCase("pt-BR");
+const isIssuedStatus = (value: string) => {
+  const status = normalizedStatus(value);
+  return Boolean(status.includes("emitid") || status.includes("nfse ativa") || status.includes("autorizad") || status.includes("homologacao emitida")) && !status.includes("cancelad");
+};
+const csvCell = (value: string | number) => `"${String(value).replaceAll('"', '""')}"`;
 
 export function LiveDashboard() {
- const supabase=useMemo(()=>createSupabaseBrowserClient(),[]);const [students,setStudents]=useState(0);const [studentsFromApi,setStudentsFromApi]=useState(0);const [lastStudentApiUpdate,setLastStudentApiUpdate]=useState<string|null>(null);const [payments,setPayments]=useState<Payment[]>([]);const [error,setError]=useState("");const [deliveryMetrics,setDeliveryMetrics]=useState<DeliveryDashboardMetric[]>([]);const [period,setPeriod]=useState<DashboardPeriod>("month");const [updatedAt,setUpdatedAt]=useState<Date|null>(null);const [refreshing,setRefreshing]=useState(false);
- const loadDashboard=useCallback(async(silent=false)=>{if(!supabase)return;if(!silent)setRefreshing(true);const bounds=dashboardPeriodBounds(period);const [a,sw,p,d]=await Promise.all([supabase.from("alunos").select("id,sweduc_atualizado_em"),supabase.from("sweduc_alunos").select("matricula_id,sincronizado_em").or("status.ilike.%matric%,status.ilike.%ativ%"),supabase.from("mensalidades").select("*, alunos(nome,turma,responsavel,segmento,cpf_cnpj,email,cep,logradouro,numero,complemento,bairro,cidade,uf)"),supabase.rpc("get_delivery_dashboard",{p_start:bounds.start,p_end:bounds.end})]);if(a.error||sw.error||p.error||d.error)setError(a.error?.message||sw.error?.message||p.error?.message||d.error?.message||"Não foi possível atualizar o painel.");else{const studentRows=(a.data??[]) as Array<{id:number;sweduc_atualizado_em:string|null}>;const sweducRows=(sw.data??[]) as Array<{matricula_id:number;sincronizado_em:string|null}>;const apiRows=studentRows.filter(student=>student.sweduc_atualizado_em);setError("");setStudents(sweducRows.length||studentRows.length);setStudentsFromApi(sweducRows.length||apiRows.length);setLastStudentApiUpdate((sweducRows.map(student=>student.sincronizado_em).filter(Boolean).sort().at(-1)||apiRows.map(student=>student.sweduc_atualizado_em).filter(Boolean).sort().at(-1))||null);setPayments((p.data??[]) as unknown as Payment[]);setDeliveryMetrics((d.data||[]) as DeliveryDashboardMetric[]);setUpdatedAt(new Date())}setRefreshing(false)},[period,supabase]);
- useEffect(()=>{void loadDashboard();const timer=window.setInterval(()=>void loadDashboard(true),15000);const onFocus=()=>void loadDashboard(true);window.addEventListener("focus",onFocus);return()=>{window.clearInterval(timer);window.removeEventListener("focus",onFocus)}},[loadDashboard]);
- const paid=payments.filter(p=>p.status_pagamento==="Pago").reduce((sum,p)=>sum+Number(p.valor_mensalidade),0);const pending=payments.filter(p=>p.status_pagamento==="Aberto");const prepared=payments.filter(p=>p.status_nfse!=="Pendente").length;
- const metric=(channel:DeliveryDashboardMetric["canal"])=>deliveryMetrics.find(item=>item.canal===channel)||{canal:channel,enviados:0,erros:0,aguardando:0,ultima_atividade:null};
- const emailMetric=metric("email");const whatsappMetric=metric("whatsapp");const agendaMetric=metric("agenda_edu");const totalSent=emailMetric.enviados+whatsappMetric.enviados+agendaMetric.enviados;
- return <><Heading title="Painel" desc="Visão geral dos dados reais da operação escolar e fiscal." action={<div className="dashboard-period-actions"><select value={period} onChange={event=>setPeriod(event.target.value as DashboardPeriod)} aria-label="Período dos envios"><option value="today">Hoje</option><option value="7d">Últimos 7 dias</option><option value="30d">Últimos 30 dias</option><option value="month">Mês atual</option><option value="all">Todo o histórico</option></select><button className="secondary dashboard-refresh-button" onClick={()=>void loadDashboard()} disabled={refreshing}><RefreshCw size={17}/>{refreshing?"Atualizando…":"Atualizar"}</button></div>}/><ErrorBox message={error}/><section className="stat-grid"><article className="stat-card"><span className="stat-icon blue"><UsersRound/></span><div><span>Alunos na SWeduc</span><strong>{students}</strong><small>{studentsFromApi?`${studentsFromApi} carregado(s) do banco SWeduc`:"Dados do Supabase"}</small></div></article><article className="stat-card"><span className="stat-icon purple"><CloudUpload/></span><div><span>Atualização API alunos</span><strong>{lastStudentApiUpdate?new Date(lastStudentApiUpdate).toLocaleDateString("pt-BR"):"—"}</strong><small>{lastStudentApiUpdate?`Última carga ${new Date(lastStudentApiUpdate).toLocaleTimeString("pt-BR",{hour:"2-digit",minute:"2-digit"})}`:"Nenhum aluno carregado da SWeduc"}</small></div></article><article className="stat-card"><span className="stat-icon green"><CircleDollarSign/></span><div><span>Mensalidades pagas</span><strong>{money(paid)}</strong><small>{payments.filter(p=>p.status_pagamento==="Pago").length} pagamentos</small></div></article><article className="stat-card"><span className="stat-icon amber"><Clock3/></span><div><span>Mensalidades em aberto</span><strong>{pending.length}</strong><small>{money(pending.reduce((sum,p)=>sum+Number(p.valor_mensalidade),0))} a receber</small></div></article><article className="stat-card"><span className="stat-icon purple"><FileCheck2/></span><div><span>Notas revisadas</span><strong>{prepared}</strong><small>{payments.length} mensalidades no total</small></div></article></section><section className="panel" style={{marginTop:16}}><div className="panel-title"><div><h2>Envio das notas</h2><p>Histórico filtrado por período e atualizado automaticamente a cada 15 segundos.</p></div><div><strong>{totalSent} enviada(s)</strong>{updatedAt&&<small style={{display:"block"}}>Atualizado {updatedAt.toLocaleTimeString("pt-BR",{hour:"2-digit",minute:"2-digit",second:"2-digit"})}</small>}</div></div><div className="stat-grid"><article className="stat-card"><span className="stat-icon blue"><Mail/></span><div><span>E-mail</span><strong>{emailMetric.enviados}</strong><small>{emailMetric.aguardando} aguardando · {emailMetric.erros} erro(s)</small></div></article><article className="stat-card"><span className="stat-icon green"><MessageCircle/></span><div><span>WhatsApp</span><strong>{whatsappMetric.enviados}</strong><small>{whatsappMetric.aguardando} aguardando · {whatsappMetric.erros} erro(s)</small></div></article><article className="stat-card"><span className="stat-icon purple"><CalendarDays/></span><div><span>Agenda Edu</span><strong>{agendaMetric.enviados}</strong><small>{agendaMetric.aguardando} aguardando · {agendaMetric.erros} erro(s)</small></div></article></div></section>{students===0&&payments.length===0&&<div style={{marginTop:16}}><Empty>Comece cadastrando o primeiro aluno no menu “Alunos e Responsáveis”.</Empty></div>}</>
+  const supabase = useMemo(() => createSupabaseBrowserClient(), []);
+  const {can,isMaster}=useAccess();
+  const [students, setStudents] = useState(0);
+  const [studentsFromApi, setStudentsFromApi] = useState(0);
+  const [lastStudentApiUpdate, setLastStudentApiUpdate] = useState<string | null>(null);
+  const [payments, setPayments] = useState<Payment[]>([]);
+  const [error, setError] = useState("");
+  const [deliveryMetrics, setDeliveryMetrics] = useState<DeliveryDashboardMetric[]>([]);
+  const [competence, setCompetence] = useState(() => monthKey(new Date()));
+  const [chartType, setChartType] = useState<DashboardChartType>("line");
+  const [updatedAt, setUpdatedAt] = useState<Date | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
+  const [closings,setClosings]=useState<MonthlyClosing[]>([]);
+  const [closingBusy,setClosingBusy]=useState(false);
+  const [closingMessage,setClosingMessage]=useState("");
+  const loadDashboard = useCallback(
+    async (silent = false) => {
+      if (!supabase) return;
+      if (!silent) setRefreshing(true);
+      const bounds = dashboardMonthBounds(competence);
+      const [a, sw, p, d, c] = await Promise.all([
+        supabase.from("alunos").select("id,sweduc_atualizado_em"),
+        supabase.from("sweduc_alunos").select("matricula_id,sincronizado_em"),
+        supabase.from("mensalidades").select("*, alunos(nome,turma,responsavel,segmento,cpf_cnpj,email,cep,logradouro,numero,complemento,bairro,cidade,uf)"),
+        supabase.rpc("get_delivery_dashboard", {
+          p_start: bounds.start,
+          p_end: bounds.end,
+        }),
+        supabase.from("monthly_closings").select("id,competence,status,snapshot,closed_by_name,closed_at,reopened_by_name,reopened_at,reopen_reason").eq("competence",competence).order("closed_at",{ascending:false}),
+      ]);
+      if (a.error || sw.error || p.error || d.error || c.error) setError(a.error?.message || sw.error?.message || p.error?.message || d.error?.message || c.error?.message || "Não foi possível atualizar o painel.");
+      else {
+        const studentRows = (a.data ?? []) as Array<{
+          id: number;
+          sweduc_atualizado_em: string | null;
+        }>;
+        const sweducRows = (sw.data ?? []) as Array<{
+          matricula_id: number;
+          sincronizado_em: string | null;
+        }>;
+        const apiRows = studentRows.filter((student) => student.sweduc_atualizado_em);
+        setError("");
+        setStudents(sweducRows.length || studentRows.length);
+        setStudentsFromApi(sweducRows.length || apiRows.length);
+        setLastStudentApiUpdate(
+          sweducRows
+            .map((student) => student.sincronizado_em)
+            .filter(Boolean)
+            .sort()
+            .at(-1) ||
+            apiRows
+              .map((student) => student.sweduc_atualizado_em)
+              .filter(Boolean)
+              .sort()
+              .at(-1) ||
+            null,
+        );
+        setPayments((p.data ?? []) as unknown as Payment[]);
+        setDeliveryMetrics((d.data || []) as DeliveryDashboardMetric[]);
+        setClosings((c.data||[]) as MonthlyClosing[]);
+        setUpdatedAt(new Date());
+      }
+      setRefreshing(false);
+    },
+    [competence, supabase],
+  );
+  useEffect(() => {
+    void loadDashboard();
+    const timer = window.setInterval(() => void loadDashboard(true), 15000);
+    const onFocus = () => void loadDashboard(true);
+    window.addEventListener("focus", onFocus);
+    return () => {
+      window.clearInterval(timer);
+      window.removeEventListener("focus", onFocus);
+    };
+  }, [loadDashboard]);
+  const selectedPayments = useMemo(() => payments.filter((payment) => competenceKey(payment.competencia) === competence), [payments, competence]);
+  const previousPayments = useMemo(() => payments.filter((payment) => competenceKey(payment.competencia) === shiftMonth(competence, -1)), [payments, competence]);
+  const billed = selectedPayments.reduce((sum, p) => sum + Number(p.valor_mensalidade), 0);
+  const paid = selectedPayments.filter((p) => p.status_pagamento === "Pago").reduce((sum, p) => sum + Number(p.valor_mensalidade), 0);
+  const pending = selectedPayments.filter((p) => p.status_pagamento !== "Pago");
+  const pendingValue = pending.reduce((sum, p) => sum + Number(p.valor_mensalidade), 0);
+  const overdue = competence < monthKey(new Date()) ? pending : [];
+  const previousBilled = previousPayments.reduce((sum, p) => sum + Number(p.valor_mensalidade), 0);
+  const comparison = previousBilled ? ((billed - previousBilled) / previousBilled) * 100 : null;
+  const issued = selectedPayments.filter((p) => isIssuedStatus(p.status_nfse));
+  const cancelled = selectedPayments.filter((p) => normalizedStatus(p.status_nfse).includes("cancelad"));
+  const rejected = selectedPayments.filter((p) => normalizedStatus(p.status_nfse).includes("rejeitad"));
+  const fiscalPending = selectedPayments.filter((p) => !isIssuedStatus(p.status_nfse) && !normalizedStatus(p.status_nfse).includes("cancelad") && !normalizedStatus(p.status_nfse).includes("rejeitad"));
+  const chartMonths = useMemo(
+    () =>
+      Array.from({ length: 6 }, (_, index) => shiftMonth(competence, index - 5)).map((month) => {
+        const rows = payments.filter((payment) => competenceKey(payment.competencia) === month);
+        return {
+          month,
+          billed: rows.reduce((sum, row) => sum + Number(row.valor_mensalidade), 0),
+          paid: rows.filter((row) => row.status_pagamento === "Pago").reduce((sum, row) => sum + Number(row.valor_mensalidade), 0),
+        };
+      }),
+    [payments, competence],
+  );
+  const chartMax = Math.max(1, ...chartMonths.flatMap((item) => [item.billed, item.paid]));
+  const chartPoints = (key: "billed" | "paid") => chartMonths.map((item, index) => `${8 + index * 18.4},${92 - (item[key] / chartMax) * 78}`).join(" ");
+  const receivedPercent = billed ? Math.min(100, (paid / billed) * 100) : 0;
+  const metric = (channel: DeliveryDashboardMetric["canal"]) =>
+    deliveryMetrics.find((item) => item.canal === channel) || {
+      canal: channel,
+      enviados: 0,
+      erros: 0,
+      aguardando: 0,
+      ultima_atividade: null,
+    };
+  const emailMetric = metric("email");
+  const whatsappMetric = metric("whatsapp");
+  const agendaMetric = metric("agenda_edu");
+  const totalSent = emailMetric.enviados + whatsappMetric.enviados + agendaMetric.enviados;
+  function exportReport() {
+    const rows = [["Relatório mensal JPI Fiscal"], ["Competência", monthLabel(competence)], ["Faturado", billed.toFixed(2)], ["Recebido", paid.toFixed(2)], ["Em aberto", pendingValue.toFixed(2)], [], ["Aluno", "Competência", "Valor", "Pagamento", "Situação NFS-e"], ...selectedPayments.map((payment) => [payment.alunos?.nome || `Aluno #${payment.aluno_id}`, payment.competencia, Number(payment.valor_mensalidade).toFixed(2), payment.status_pagamento, payment.status_nfse])];
+    const csv = "\uFEFF" + rows.map((row) => row.map(csvCell).join(";")).join("\r\n");
+    const url = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }));
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `fechamento-${competence}.csv`;
+    link.click();
+    URL.revokeObjectURL(url);
+  }
+  const pendencies = [pending.length ? `${pending.length} mensalidade(s) em aberto` : null, fiscalPending.length ? `${fiscalPending.length} nota(s) ainda não emitida(s)` : null, rejected.length ? `${rejected.length} nota(s) rejeitada(s)` : null, emailMetric.erros + whatsappMetric.erros + agendaMetric.erros ? `${emailMetric.erros + whatsappMetric.erros + agendaMetric.erros} erro(s) de envio` : null].filter(Boolean) as string[];
+  const hasMovement = selectedPayments.length > 0;
+  const activeClosing=closings.find(item=>item.status==="closed")||null;
+  async function closeCompetence(){
+    if(!supabase||!hasMovement||pendencies.length||activeClosing)return;
+    if(!window.confirm(`Fechar ${monthLabel(competence)}? Depois disso, somente o Master poderá reabrir.`))return;
+    setClosingBusy(true);setClosingMessage("");
+    const snapshot={payments:selectedPayments.length,pendencies:pendencies.length,billed,paid,pendingValue,issued:issued.length,rejected:rejected.length,cancelled:cancelled.length,fiscalPending:fiscalPending.length,totalSent,closedFrom:"dashboard"};
+    const {error:closeError}=await supabase.rpc("close_monthly_competence",{p_competence:competence,p_snapshot:snapshot});
+    if(closeError)setError(closeError.message);else{setClosingMessage("Competência fechada e fotografia mensal preservada.");await loadDashboard(true)}
+    setClosingBusy(false);
+  }
+  async function reopenCompetence(){
+    if(!supabase||!activeClosing||!isMaster)return;
+    const reason=window.prompt("Informe o motivo da reabertura (mínimo de 10 caracteres):","")?.trim()||"";
+    if(!reason)return;
+    setClosingBusy(true);setClosingMessage("");
+    const {error:reopenError}=await supabase.rpc("reopen_monthly_competence",{p_closing_id:activeClosing.id,p_reason:reason});
+    if(reopenError)setError(reopenError.message);else{setClosingMessage("Competência reaberta pelo Master e registrada no histórico.");await loadDashboard(true)}
+    setClosingBusy(false);
+  }
+  return (
+    <div className="monthly-dashboard">
+      <Heading
+        title="Painel mensal"
+        desc="Acompanhe faturamento, recebimentos, notas e entregas por competência."
+        action={
+          <div className="dashboard-actions">
+            <button className="secondary icon-only" aria-label="Competência anterior" onClick={() => setCompetence((value) => shiftMonth(value, -1))}>
+              <ChevronLeft />
+            </button>
+            <label className="dashboard-month">
+              <CalendarDays />
+              <input type="month" value={competence} onChange={(event) => setCompetence(event.target.value)} />
+            </label>
+            <button className="secondary icon-only" aria-label="Próxima competência" onClick={() => setCompetence((value) => shiftMonth(value, 1))}>
+              <ChevronRight />
+            </button>
+            <button className="secondary" onClick={() => void loadDashboard()} disabled={refreshing}>
+              <RefreshCw size={17} />
+              {refreshing ? "Atualizando…" : "Atualizar"}
+            </button>
+          </div>
+        }
+      />
+      <ErrorBox message={error} />
+      {closingMessage&&<div className="success-box"><Check/>{closingMessage}</div>}
+      <section className="dashboard-summary">
+        <div>
+          <span>Competência analisada</span>
+          <strong>{monthLabel(competence)}</strong>
+          <small>{selectedPayments.length} mensalidade(s) cadastrada(s)</small>
+        </div>
+        <div className={!hasMovement ? "empty" : pendencies.length ? "attention" : "ready"}>
+          <span>Situação do fechamento</span>
+          <strong>{activeClosing?"Competência fechada":!hasMovement ? "Sem movimentação" : pendencies.length ? `${pendencies.length} pendência(s)` : "Pronto para fechamento"}</strong>
+          <small>{activeClosing?`Fechada por ${activeClosing.closed_by_name} em ${new Date(activeClosing.closed_at).toLocaleString("pt-BR")}`:hasMovement ? "Dados atuais sujeitos a atualização" : "Não há dados para fechar neste mês"}</small>
+        </div>
+        <div>
+          <span>Base SWeduc</span>
+          <strong>{students}</strong>
+          <small>{lastStudentApiUpdate ? `Atualizada em ${new Date(lastStudentApiUpdate).toLocaleDateString("pt-BR")}` : `${studentsFromApi} registro(s) sincronizado(s)`}</small>
+        </div>
+        <div className="dashboard-report-actions">
+          <button className="secondary" onClick={exportReport}>
+            <Download />
+            Exportar Excel
+          </button>
+          <button className="secondary" onClick={() => window.print()}>
+            <Printer />
+            Imprimir / PDF
+          </button>
+        </div>
+      </section>
+      <section className="dashboard-kpis">
+        <article>
+          <span className="stat-icon blue">
+            <WalletCards />
+          </span>
+          <div>
+            <span>Total faturado</span>
+            <strong>{money(billed)}</strong>
+            <small>
+              {comparison === null ? (
+                "Sem base no mês anterior"
+              ) : (
+                <>
+                  <TrendingUp />
+                  {comparison >= 0 ? "+" : ""}
+                  {comparison.toFixed(1)}% vs. mês anterior
+                </>
+              )}
+            </small>
+          </div>
+        </article>
+        <article>
+          <span className="stat-icon green">
+            <CircleDollarSign />
+          </span>
+          <div>
+            <span>Total recebido</span>
+            <strong>{money(paid)}</strong>
+            <small>{selectedPayments.filter((p) => p.status_pagamento === "Pago").length} pagamento(s)</small>
+          </div>
+        </article>
+        <article>
+          <span className="stat-icon amber">
+            <Clock3 />
+          </span>
+          <div>
+            <span>Em aberto</span>
+            <strong>{money(pendingValue)}</strong>
+            <small>
+              {pending.length} título(s) · {overdue.length} vencido(s)
+            </small>
+          </div>
+        </article>
+        <article>
+          <span className="stat-icon purple">
+            <FileCheck2 />
+          </span>
+          <div>
+            <span>NFS-e emitidas</span>
+            <strong>{issued.length}</strong>
+            <small>{money(issued.reduce((sum, p) => sum + Number(p.valor_nfse), 0))} em notas</small>
+          </div>
+        </article>
+      </section>
+      <section className="dashboard-main-grid">
+        <article className="panel dashboard-chart">
+          <div className="panel-title">
+            <div>
+              <h2>Faturamento e recebimentos</h2>
+              <p>Comparativo das últimas seis competências.</p>
+            </div>
+            <div className="chart-view-switch" aria-label="Tipo de gráfico">
+              <button className={chartType === "line" ? "active" : ""} onClick={() => setChartType("line")}>
+                Evolução
+              </button>
+              <button className={chartType === "bars" ? "active" : ""} onClick={() => setChartType("bars")}>
+                Barras
+              </button>
+              <button className={chartType === "distribution" ? "active" : ""} onClick={() => setChartType("distribution")}>
+                Distribuição
+              </button>
+            </div>
+          </div>
+          <div className="chart-legend">
+            <span>
+              <i className="billed" />
+              Faturado
+            </span>
+            <span>
+              <i className="received" />
+              Recebido
+            </span>
+          </div>
+          {chartType === "line" ? (
+            <div className="modern-line-chart">
+              <svg viewBox="0 0 100 100" preserveAspectRatio="none" role="img" aria-label="Evolução do faturamento e dos recebimentos">
+                <defs>
+                  <linearGradient id="billedArea" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="#4b8fe8" stopOpacity=".28" />
+                    <stop offset="100%" stopColor="#4b8fe8" stopOpacity=".02" />
+                  </linearGradient>
+                  <linearGradient id="receivedArea" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="#16875f" stopOpacity=".24" />
+                    <stop offset="100%" stopColor="#16875f" stopOpacity=".01" />
+                  </linearGradient>
+                </defs>
+                <polygon points={`8,92 ${chartPoints("billed")} 100,92`} fill="url(#billedArea)" />
+                <polygon points={`8,92 ${chartPoints("paid")} 100,92`} fill="url(#receivedArea)" />
+                <polyline points={chartPoints("billed")} fill="none" stroke="#4b8fe8" strokeWidth="2.2" vectorEffect="non-scaling-stroke" />
+                <polyline points={chartPoints("paid")} fill="none" stroke="#16875f" strokeWidth="2.2" vectorEffect="non-scaling-stroke" />
+                {chartMonths.map((item, index) => (
+                  <g key={item.month}>
+                    <circle cx={8 + index * 18.4} cy={92 - (item.billed / chartMax) * 78} r="1.6" fill="#fff" stroke="#4b8fe8" strokeWidth="1" vectorEffect="non-scaling-stroke" />
+                    <circle cx={8 + index * 18.4} cy={92 - (item.paid / chartMax) * 78} r="1.6" fill="#fff" stroke="#16875f" strokeWidth="1" vectorEffect="non-scaling-stroke" />
+                  </g>
+                ))}
+              </svg>
+              <div className="line-chart-labels">
+                {chartMonths.map((item) => (
+                  <span key={item.month}>
+                    <strong>{monthLabel(item.month, true).split("/")[0]}</strong>
+                    <small>{money(item.billed)}</small>
+                  </span>
+                ))}
+              </div>
+            </div>
+          ) : chartType === "bars" ? (
+            <div className="monthly-bars">
+              {chartMonths.map((item) => (
+                <div className="month-bar" key={item.month}>
+                  <div className="bars">
+                    <i className="billed" style={{ height: `${Math.max(item.billed ? 6 : 0, (item.billed / chartMax) * 100)}%` }} title={`Faturado: ${money(item.billed)}`} />
+                    <i className="received" style={{ height: `${Math.max(item.paid ? 6 : 0, (item.paid / chartMax) * 100)}%` }} title={`Recebido: ${money(item.paid)}`} />
+                  </div>
+                  <strong>{monthLabel(item.month, true).split("/")[0]}</strong>
+                  <small>{money(item.billed)}</small>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="distribution-chart">
+              <div className="donut" style={{ background: `conic-gradient(#16875f 0 ${receivedPercent}%, #f2b84b ${receivedPercent}% 100%)` }}>
+                <div>
+                  <strong>{receivedPercent.toFixed(0)}%</strong>
+                  <span>recebido</span>
+                </div>
+              </div>
+              <div className="distribution-values">
+                <div>
+                  <i className="received" />
+                  <span>Recebido</span>
+                  <strong>{money(paid)}</strong>
+                </div>
+                <div>
+                  <i className="pending" />
+                  <span>Em aberto</span>
+                  <strong>{money(pendingValue)}</strong>
+                </div>
+                <small>Distribuição financeira de {monthLabel(competence)}.</small>
+              </div>
+            </div>
+          )}
+        </article>
+        <article className="panel dashboard-pendencies">
+          <div className="panel-title">
+            <div>
+              <h2>Pendências do mês</h2>
+              <p>Itens que precisam de conferência antes do futuro fechamento.</p>
+            </div>
+            <AlertTriangle />
+          </div>
+          {!hasMovement ? (
+            <div className="dashboard-all-clear neutral">
+              <CalendarDays />
+              <strong>Sem movimentação nesta competência</strong>
+              <span>Selecione outro mês para consultar os dados.</span>
+            </div>
+          ) : pendencies.length ? (
+            <ul>
+              {pendencies.map((item) => (
+                <li key={item}>
+                  <AlertTriangle />
+                  <span>{item}</span>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <div className="dashboard-all-clear">
+              <Check />
+              <strong>Nenhuma pendência identificada</strong>
+              <span>A competência está pronta para conferência.</span>
+            </div>
+          )}
+          <button className="primary" disabled={closingBusy||Boolean(activeClosing)||!hasMovement||Boolean(pendencies.length)||!can("dashboard.close")} onClick={()=>void closeCompetence()} title={pendencies.length?"Resolva as pendências antes de fechar.":!can("dashboard.close")?"Seu perfil não possui permissão para fechar competências.":"Guardar a fotografia mensal desta competência."}>
+            <ShieldCheck />
+            {closingBusy?"Processando…":activeClosing?"Competência fechada":"Fechar competência"}
+          </button>
+          {activeClosing&&isMaster&&<button className="secondary" disabled={closingBusy} onClick={()=>void reopenCompetence()}><RefreshCw/>Reabrir competência</button>}
+          {closings.length>0&&<details className="dashboard-closing-history"><summary>Histórico de fechamentos ({closings.length})</summary>{closings.map(item=><div key={item.id}><strong>{item.status==="closed"?"Fechada":"Reaberta"}</strong><span>{item.closed_by_name} · {new Date(item.closed_at).toLocaleString("pt-BR")}</span>{item.reopened_at&&<small>Reaberta por {item.reopened_by_name} em {new Date(item.reopened_at).toLocaleString("pt-BR")} · {item.reopen_reason}</small>}</div>)}</details>}
+        </article>
+      </section>
+      <section className="panel dashboard-operation">
+        <div className="panel-title">
+          <div>
+            <h2>Operação fiscal e entregas</h2>
+            <p>Situação das notas e dos canais durante {monthLabel(competence)}.</p>
+          </div>
+          <strong>{totalSent} entrega(s)</strong>
+        </div>
+        <div className="operation-grid">
+          <div>
+            <span>Notas pendentes</span>
+            <strong>{fiscalPending.length}</strong>
+          </div>
+          <div>
+            <span>Rejeitadas</span>
+            <strong className="danger-text">{rejected.length}</strong>
+          </div>
+          <div>
+            <span>Canceladas</span>
+            <strong>{cancelled.length}</strong>
+          </div>
+          <div>
+            <Mail />
+            <span>E-mail</span>
+            <strong>{emailMetric.enviados}</strong>
+            <small>{emailMetric.erros} erro(s)</small>
+          </div>
+          <div>
+            <MessageCircle />
+            <span>WhatsApp</span>
+            <strong>{whatsappMetric.enviados}</strong>
+            <small>{whatsappMetric.erros} erro(s)</small>
+          </div>
+          <div>
+            <CalendarDays />
+            <span>Agenda Edu</span>
+            <strong>{agendaMetric.enviados}</strong>
+            <small>{agendaMetric.erros} erro(s)</small>
+          </div>
+        </div>
+        {updatedAt && (
+          <small className="dashboard-updated">
+            Atualizado às{" "}
+            {updatedAt.toLocaleTimeString("pt-BR", {
+              hour: "2-digit",
+              minute: "2-digit",
+              second: "2-digit",
+            })}
+          </small>
+        )}
+      </section>
+      {students === 0 && payments.length === 0 && (
+        <div style={{ marginTop: 16 }}>
+          <Empty>Comece cadastrando o primeiro aluno no menu “Alunos e Responsáveis”.</Empty>
+        </div>
+      )}
+    </div>
+  );
 }
 
 export function LiveStudents({role,onNavigate}:{role:Role;onNavigate:(page:AppPage)=>void}) {

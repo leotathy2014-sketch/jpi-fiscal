@@ -83,8 +83,9 @@ test("importa dados acadêmicos, responsáveis, contatos e financeiro",()=>{
 });
 
 test("mostra no painel e cadastro a atualização de alunos pela API",()=>{
-  assert.match(livePages,/Atualização API alunos/);
-  assert.match(livePages,/carregado\(s\) do banco SWeduc/);
+  assert.match(livePages,/Base SWeduc/);
+  assert.match(livePages,/registro\(s\) sincronizado\(s\)/);
+  assert.match(livePages,/from\("sweduc_alunos"\)/);
   assert.match(livePages,/sweduc_atualizado_em/);
   assert.match(livePages,/SweducOperationalPicker/);
   assert.doesNotMatch(livePages,/Manual \/ sem API/);

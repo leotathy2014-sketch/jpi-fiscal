@@ -11,10 +11,11 @@ test("mantém a fonte Inter mesmo se a classe gerada ficar temporariamente fora 
   assert.match(layoutSource, /style=\{inter\.style\}/);
 });
 
-test("usa controles próprios e alinhados para período e atualização do painel", () => {
-  assert.match(dashboardSource, /className="dashboard-period-actions"/);
-  assert.match(dashboardSource, /className="secondary dashboard-refresh-button"/);
+test("usa controles próprios e alinhados para competência e atualização do painel", () => {
+  assert.match(dashboardSource, /className="dashboard-actions"/);
+  assert.match(dashboardSource, /className="dashboard-month"/);
+  assert.match(dashboardSource, /type="month"/);
   assert.doesNotMatch(dashboardSource, /action=\{<div className="form-actions">/);
-  assert.match(stylesSource, /\.dashboard-period-actions\{display:flex;align-items:center;gap:10px\}/);
-  assert.match(stylesSource, /\.dashboard-refresh-button\{min-height:42px/);
+  assert.match(stylesSource, /\.dashboard-actions\{display:flex;align-items:center;gap:8px/);
+  assert.match(stylesSource, /\.dashboard-month\{height:40px/);
 });
