@@ -22,6 +22,7 @@ const operationalPicker=readFileSync(new URL("../components/sweduc-operational-p
 const appPage=readFileSync(new URL("../app/page.tsx",import.meta.url),"utf8");
 const appShell=readFileSync(new URL("../components/app-shell.tsx",import.meta.url),"utf8");
 const halfHourlySyncMigration=readFileSync(new URL("../supabase/migrations/20261006113631_configurar_sincronizacao_sweduc_30_minutos.sql",import.meta.url),"utf8");
+const syncTimeoutMigration=readFileSync(new URL("../supabase/migrations/20261006114823_ampliar_timeout_sincronizacao_sweduc.sql",import.meta.url),"utf8");
 
 test("cria uma integração SWeduc separada da Agenda Edu",()=>{
   assert.match(settings,/section==="sweduc"/);assert.match(settings,/Agenda Edu/);
@@ -186,6 +187,7 @@ test("sincroniza automaticamente o espelho SWeduc sem alterar Agenda Edu nem cad
   assert.match(halfHourlySyncMigration,/\*\/30 \* \* \* \*/);
   assert.match(halfHourlySyncMigration,/jpi_sweduc_sync_token/);
   assert.match(halfHourlySyncMigration,/net\.http_get/);
+  assert.match(syncTimeoutMigration,/timeout_milliseconds := 300000/);
 });
 
 test("consulta alunos somente no espelho sincronizado do Supabase",()=>{
