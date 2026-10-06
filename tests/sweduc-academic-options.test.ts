@@ -4,7 +4,6 @@ import {isSweducClassCompatibleWithSeries,sameSweducClassOption,sweducClassOptio
 
 test("unifica nomes equivalentes de turmas infantis sem misturar os turnos",()=>{
   assert.equal(sweducClassOptionKey("Mat I / Manhã"),sweducClassOptionKey("MAT-I/M"));
-  assert.equal(sweducClassOptionKey("Mat I / Manhã"),sweducClassOptionKey("z MATERNAL/M"));
   assert.equal(sweducClassOptionKey("Pré-II / Tarde"),sweducClassOptionKey("PRÉ-II/T"));
   assert.notEqual(sweducClassOptionKey("MAT-I/M"),sweducClassOptionKey("MAT-I/T"));
   assert.equal(sameSweducClassOption("PRÉ-I/T ","Pré I / Tarde"),true);
@@ -21,6 +20,7 @@ test("mantém uma opção legível para cada turma e turno",()=>{
     "Mat I / Manhã","Mat I / Tarde","Mat II / Manhã","Mat II / Tarde",
     "Pré I / Manhã","Pré I / Tarde","Pré-II / Manhã","Pré-II / Tarde",
   ]);
+  assert.deepEqual(uniqueSortedSweducClassOptions(["z MATERNAL/M"]),[]);
 });
 
 test("não mistura o nível da turma com outra série infantil",()=>{

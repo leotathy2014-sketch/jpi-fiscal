@@ -25,7 +25,6 @@ export function sweducInfantLevelKey(value:unknown){
     .trim();
   const maternal=normalized.match(/\b(?:mat|matenal|maternal)\s*(\d+)\b/);
   if(maternal)return `maternal ${maternal[1]}`;
-  if(/^(?:z\s+)?(?:mat|matenal|maternal)$/.test(normalized))return "maternal 1";
   const preschool=normalized.match(/\bpre(?:\s+escola)?\s*(\d+)\b/);
   if(preschool)return `pre escola ${preschool[1]}`;
   return "";
@@ -66,6 +65,7 @@ export function uniqueSortedSweducClassOptions(values:Array<string|null|undefine
   const options=new Map<string,string>();
   for(const value of values){
     const label=String(value||"").replace(/\s+/g," ").trim();
+    if(/^z\s+(?:mat|matenal|maternal)(?:\s|$)/.test(normalizedText(label)))continue;
     const key=sweducClassOptionKey(label);
     if(!label||!key)continue;
     const current=options.get(key);
