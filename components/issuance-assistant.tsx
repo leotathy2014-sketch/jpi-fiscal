@@ -938,7 +938,6 @@ export function IssuanceAssistant({onNavigate}:{onNavigate:(page:AppPage)=>void}
       </div>
     </div>
 
-    <div className="notice warning"><ShieldCheck/><div><strong>Implantação segura e não destrutiva</strong><span>As telas atuais de NFS-e e Enviar notas continuam funcionando. O assistente apenas organiza e direciona o processo.</span></div></div>
     {!newEmissionOpen&&error&&<div className="error-box">{error}</div>}
     {!newEmissionOpen&&message&&<div className="success-box" role="status">{message}</div>}
 
