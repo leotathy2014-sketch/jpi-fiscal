@@ -25,6 +25,7 @@ export function sweducInfantLevelKey(value:unknown){
     .trim();
   const maternal=normalized.match(/\b(?:mat|matenal|maternal)\s*(\d+)\b/);
   if(maternal)return `maternal ${maternal[1]}`;
+  if(/^(?:z\s+)?(?:mat|matenal|maternal)$/.test(normalized))return "maternal 1";
   const preschool=normalized.match(/\bpre(?:\s+escola)?\s*(\d+)\b/);
   if(preschool)return `pre escola ${preschool[1]}`;
   return "";
