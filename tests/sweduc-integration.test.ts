@@ -21,6 +21,7 @@ const livePages=readFileSync(new URL("../components/live-pages.tsx",import.meta.
 const operationalPicker=readFileSync(new URL("../components/sweduc-operational-picker.tsx",import.meta.url),"utf8");
 const appPage=readFileSync(new URL("../app/page.tsx",import.meta.url),"utf8");
 const appShell=readFileSync(new URL("../components/app-shell.tsx",import.meta.url),"utf8");
+const halfHourlySyncMigration=readFileSync(new URL("../supabase/migrations/20261006113631_configurar_sincronizacao_sweduc_30_minutos.sql",import.meta.url),"utf8");
 
 test("cria uma integração SWeduc separada da Agenda Edu",()=>{
   assert.match(settings,/section==="sweduc"/);assert.match(settings,/Agenda Edu/);
@@ -141,6 +142,8 @@ test("sincroniza automaticamente o espelho SWeduc sem alterar Agenda Edu nem cad
   assert.match(cronRoute,/unidades_sincronizacao/);
   assert.match(cronRoute,/filterRowsByUnits/);
   assert.match(cronRoute,/resolveSweducAcademicYear/);
+  assert.match(cronRoute,/const years=\[enabledYear\]/);
+  assert.match(cronRoute,/anos_sincronizacao:allYears/);
   assert.match(cronRoute,/listSweducStudentsWithToken/);
   assert.match(cronRoute,/per_page:100/);
   assert.match(cronRoute,/from\("sweduc_alunos"\)\.upsert/);
@@ -178,6 +181,10 @@ test("sincroniza automaticamente o espelho SWeduc sem alterar Agenda Edu nem cad
   assert.match(syncYearsMigration,/add column if not exists anos_sincronizacao/);
   assert.match(syncUnitsMigration,/add column if not exists unidades_sincronizacao/);
   assert.match(syncUnitsMigration,/JPI - Matriz/);
+  assert.match(halfHourlySyncMigration,/jpi-sweduc-sync-every-30-minutes/);
+  assert.match(halfHourlySyncMigration,/\*\/30 \* \* \* \*/);
+  assert.match(halfHourlySyncMigration,/jpi_sweduc_sync_token/);
+  assert.match(halfHourlySyncMigration,/net\.http_get/);
 });
 
 test("consulta alunos somente no espelho sincronizado do Supabase",()=>{

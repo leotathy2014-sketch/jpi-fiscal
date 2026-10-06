@@ -4,7 +4,7 @@ import {createSweducAccessToken,currentSweducAcademicYear,filterSweducActiveEnro
 
 export const runtime="nodejs";export const maxDuration=60;
 const MAX_PAGES_PER_RUN=20;
-const MAX_DETAILS_PER_RUN=20;
+const MAX_DETAILS_PER_RUN=10;
 const json=(body:Record<string,unknown>,status=200)=>NextResponse.json(body,{status,headers:{"Cache-Control":"private, no-store, max-age=0"}});
 
 function sanitizeSyncYears(value:unknown){
@@ -122,9 +122,10 @@ export async function GET(request:NextRequest){
     const at=new Date().toISOString();
     await supabase.from("sweduc_config").update({ultimo_status:"sincronizando",ultimo_erro:null,updated_at:at}).eq("id",true);
     const enabledYear=(await resolveSweducEnabledAcademicYear(activeCredentials.host,token.accessToken)).selected.year;
-    const years=sanitizeSyncYears([enabledYear,...sanitizeSyncYears(configResult.data?.anos_sincronizacao)]);
+    const allYears=sanitizeSyncYears([enabledYear,...sanitizeSyncYears(configResult.data?.anos_sincronizacao)]);
+    const years=[enabledYear];
     const units=sanitizeSyncUnits(configResult.data?.unidades_sincronizacao);
-    await supabase.from("sweduc_config").update({anos_sincronizacao:years,updated_at:at}).eq("id",true);
+    await supabase.from("sweduc_config").update({anos_sincronizacao:allYears,updated_at:at}).eq("id",true);
     for(const year of years){
       const resolved=await resolveSweducAcademicYear(activeCredentials.host,year);
       const academicYear=resolved.selected;
