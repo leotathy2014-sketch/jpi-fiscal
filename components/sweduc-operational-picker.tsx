@@ -3,6 +3,7 @@ import {Fragment,useCallback,useEffect,useMemo,useRef,useState} from "react";
 import {Check,RefreshCw,Search,UserCheck,UsersRound} from "lucide-react";
 import {createSupabaseBrowserClient} from "@/lib/supabase";
 import {authenticatedFetch} from "@/lib/authenticated-fetch";
+import {isSweducClassCompatibleWithSeries,sameSweducClassOption,uniqueSortedSweducClassOptions} from "@/lib/sweduc-academic-options";
 
 type AcademicYear={id:number;year:number};
 type AcademicReference={ano_letivo:number;curso:string|null;serie:string|null;turma:string|null};
@@ -18,6 +19,7 @@ function responsibleRoleText(responsible:SweducResponsible){return `${responsibl
 function normalizeSearchText(value:unknown){return String(value||"").normalize("NFD").replace(/[\u0300-\u036f]/g,"").replace(/[^\p{L}\p{N}\s]/gu," ").replace(/\s+/g," ").trim().toLocaleLowerCase("pt-BR")}
 function normalizeAcademicText(value:unknown){
   return normalizeSearchText(value)
+    .replace(/\bmatenal\b/g,"maternal")
     .replace(/\bii\b/g,"2")
     .replace(/\bi\b/g,"1")
     .replace(/\b(matriz|filial|manha|tarde|noite)\b/g,"")
@@ -133,13 +135,13 @@ export function SweducOperationalPicker({onStudentReady}:{onStudentReady:(studen
     ...students.filter(student=>!courseFilter||sameOption(student.curso,courseFilter)).map(student=>canonicalSeriesLabel(student.serie)),
     ...yearReferences.filter(reference=>!courseFilter||sameOption(reference.curso,courseFilter)).map(reference=>canonicalSeriesLabel(reference.serie)),
   ]),[students,yearReferences,courseFilter]);
-  const turmaOptions=useMemo(()=>uniqueSortedOptions([
-    ...students.filter(student=>(!courseFilter||sameOption(student.curso,courseFilter))&&(!serieFilter||sameOption(student.serie,serieFilter))).map(student=>student.turma),
-    ...yearReferences.filter(reference=>(!courseFilter||sameOption(reference.curso,courseFilter))&&(!serieFilter||sameOption(reference.serie,serieFilter))).map(reference=>reference.turma),
+  const turmaOptions=useMemo(()=>uniqueSortedSweducClassOptions([
+    ...students.filter(student=>(!courseFilter||sameOption(student.curso,courseFilter))&&(!serieFilter||sameOption(student.serie,serieFilter)&&isSweducClassCompatibleWithSeries(student.turma,serieFilter))).map(student=>student.turma),
+    ...yearReferences.filter(reference=>(!courseFilter||sameOption(reference.curso,courseFilter))&&(!serieFilter||sameOption(reference.serie,serieFilter)&&isSweducClassCompatibleWithSeries(reference.turma,serieFilter))).map(reference=>reference.turma),
   ]),[students,yearReferences,courseFilter,serieFilter]);
   const visible=useMemo(()=>{
     const term=normalizeSearchText(query);
-    const source=students.filter(student=>(!courseFilter||sameOption(student.curso,courseFilter))&&(!serieFilter||sameOption(student.serie,serieFilter))&&(!turmaFilter||sameOption(student.turma,turmaFilter)));
+    const source=students.filter(student=>(!courseFilter||sameOption(student.curso,courseFilter))&&(!serieFilter||sameOption(student.serie,serieFilter))&&(!turmaFilter||sameSweducClassOption(student.turma,turmaFilter)));
     const filtered=!term?source:source.filter(student=>[student.nome,student.numero_matricula,String(student.matricula_id),student.turma,student.serie,student.curso].filter(Boolean).some(value=>normalizeSearchText(value).includes(term)));
     return sortStudents(filtered);
   },[students,query,courseFilter,serieFilter,turmaFilter]);

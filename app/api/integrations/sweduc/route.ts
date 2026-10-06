@@ -2,6 +2,7 @@ import {NextRequest,NextResponse} from "next/server";
 import {createClient,type SupabaseClient} from "@supabase/supabase-js";
 import {createSweducAccessToken,currentSweducAcademicYear,filterSweducActiveEnrollments,getSweducStudentDetailsWithToken,isSweducActiveEnrollment,listSweducStudentsWithToken,mapSweducToFiscalStudent,mergeSweducTrackedAcademicYears,normalizeSweducHost,parseSweducCredentials,resolveSweducAcademicYear,resolveSweducEnabledAcademicYear,serializeSweducCredentials,type SweducCredentials,type SweducStudentSummary,type SweducTokenGrant} from "@/lib/sweduc";
 import {hasServerPermission} from "@/lib/server-permissions";
+import {sameSweducClassOption} from "@/lib/sweduc-academic-options";
 
 export const runtime="nodejs";export const maxDuration=60;
 const MAX_SWEDUC_PAGES=1000;
@@ -162,7 +163,7 @@ function normalizeSearchText(value:unknown){return String(value||"").normalize("
 function matchesSearch(row:Record<string,unknown>,term:string){const normalized=normalizeSearchText(term);if(!normalized)return true;return [row.nome,row.numero_matricula,row.matricula_id,row.turma,row.serie,row.curso].some(value=>normalizeSearchText(value).includes(normalized))}
 function looseAcademic(value:unknown){return normalizeAcademicReference(value).replace(/\bii\b/g,"2").replace(/\bi\b/g,"1").replace(/\b(matriz|filial|manha|tarde|noite)\b/g,"").replace(/\bm\b/g,"").replace(/\s+/g," ").trim()}
 function sameAcademic(value:unknown,expected:string){const current=looseAcademic(value);const wanted=looseAcademic(expected);return !wanted||Boolean(current)&&(current===wanted||current.includes(wanted)||wanted.includes(current))}
-function matchesAcademic(row:Record<string,unknown>,course:string,serie:string,turma:string){return sameAcademic(row.curso,course)&&sameAcademic(row.serie,serie)&&sameAcademic(row.turma,turma)}
+function matchesAcademic(row:Record<string,unknown>,course:string,serie:string,turma:string){return sameAcademic(row.curso,course)&&sameAcademic(row.serie,serie)&&sameSweducClassOption(row.turma,turma)}
 function financialText(item:Record<string,unknown>,keys:string[]){for(const key of keys){const value=item[key];if(value!==undefined&&value!==null&&String(value).trim())return String(value)}return ""}
 function parseFinancialNumber(value:string){
   const clean=value.replace(/[^\d.,-]/g,"").trim();
