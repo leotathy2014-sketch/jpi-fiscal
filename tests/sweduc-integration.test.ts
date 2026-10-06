@@ -136,6 +136,7 @@ test("sincroniza automaticamente o espelho SWeduc sem alterar Agenda Edu nem cad
   assert.match(cronRoute,/CRON_SECRET/);
   assert.match(cronRoute,/JPI_SYNC_CRON_SECRET/);
   assert.match(cronRoute,/cronSecrets\.some/);
+  assert.match(cronRoute,/maxDuration=300/);
   assert.match(cronRoute,/SUPABASE_SERVICE_ROLE_KEY/);
   assert.match(cronRoute,/get_sweduc_secret_service/);
   assert.match(cronRoute,/anos_sincronizacao/);

@@ -2,7 +2,7 @@ import {NextRequest,NextResponse} from "next/server";
 import {createClient} from "@supabase/supabase-js";
 import {createSweducAccessToken,currentSweducAcademicYear,filterSweducActiveEnrollments,getSweducStudentDetailsWithToken,listSweducStudentsWithToken,normalizeSweducHost,parseSweducCredentials,resolveSweducAcademicYear,resolveSweducEnabledAcademicYear,type SweducCredentials,type SweducStudentSummary} from "@/lib/sweduc";
 
-export const runtime="nodejs";export const maxDuration=60;
+export const runtime="nodejs";export const maxDuration=300;
 const MAX_PAGES_PER_RUN=20;
 const MAX_DETAILS_PER_RUN=10;
 const json=(body:Record<string,unknown>,status=200)=>NextResponse.json(body,{status,headers:{"Cache-Control":"private, no-store, max-age=0"}});
