@@ -156,21 +156,21 @@ export function SweducOperationalPicker({onStudentReady}:{onStudentReady:(studen
     if(!activeYear)return;
     const term=query.trim();
     if(term.length<2&&!hasAcademicFilter&&students.length>0){setMessage("Listando alunos já carregados. Use os filtros ou digite o nome para refinar.");return}
-    setBusy("consult");setError("");setMessage(term?`Buscando "${term}" em ${activeYear} na SWeduc…`:`Buscando alunos pelos filtros selecionados em ${activeYear}…`);
+    setBusy("consult");setError("");setMessage(term?`Buscando "${term}" em ${activeYear} no banco sincronizado…`:`Consultando os alunos de ${activeYear} no banco sincronizado…`);
     setStudents([]);setSelected(null);setResponsibleIndex(0);setGridPage(1);
     let page=1;let total=0;
     try{
       const accessToken=await token();
       while(page<=1000){
-        const response=await authenticatedFetch("/api/integrations/sweduc",{method:"POST",headers:{Authorization:`Bearer ${accessToken}`,"Content-Type":"application/json"},body:JSON.stringify({action:"lookup",page,pageSize:500,mirrorOnly:false,academicYear:activeYear,search:term,course:yearOverride?"":courseFilter,serie:yearOverride?"":serieFilter,turma:yearOverride?"":turmaFilter}),cache:"no-store"});
+        const response=await authenticatedFetch("/api/integrations/sweduc",{method:"POST",headers:{Authorization:`Bearer ${accessToken}`,"Content-Type":"application/json"},body:JSON.stringify({action:"lookup",page,pageSize:500,mirrorOnly:true,academicYear:activeYear,search:term,course:yearOverride?"":courseFilter,serie:yearOverride?"":serieFilter,turma:yearOverride?"":turmaFilter}),cache:"no-store"});
         const data=await response.json().catch(()=>({})) as {students?:SweducStudent[];nextPage?:number|null;lastPage?:number;academicYear?:number;totalAvailable?:number;error?:string;message?:string};
         if(!response.ok)throw new Error(data.error||"Não foi possível consultar a SWeduc.");
         const loaded=data.students||[];total+=loaded.length;setStudents(current=>sortStudents([...current,...loaded]));
-        setMessage(data.nextPage?`Organizando página ${page} de ${data.lastPage||"…"} · ${total} matrícula(s) na tela.`:"");
+        setMessage(data.nextPage?`Organizando página ${page} de ${data.lastPage||"…"} · ${total} matrícula(s) na tela.`:data.message||"Consulta concluída no banco sincronizado.");
         if(!data.nextPage)break;
         page=data.nextPage;
       }
-    }catch(e){setError(e instanceof Error?e.message:"Não foi possível consultar a SWeduc.")}finally{setBusy("")}
+    }catch(e){setError(e instanceof Error?e.message:"Não foi possível consultar o banco sincronizado da SWeduc.")}finally{setBusy("")}
   }
 
   useEffect(()=>{

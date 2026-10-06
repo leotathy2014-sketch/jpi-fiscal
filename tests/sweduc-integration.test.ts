@@ -103,7 +103,7 @@ test("permite buscar aluno SWeduc no cadastro e no assistente sem abrir configur
   assert.match(operationalPicker,/syncYears/);
   assert.match(operationalPicker,/filteredYears/);
   assert.match(operationalPicker,/action:"lookup"/);
-  assert.match(operationalPicker,/mirrorOnly:false/);
+  assert.match(operationalPicker,/mirrorOnly:true/);
   assert.match(operationalPicker,/hasAcademicFilter/);
   assert.match(operationalPicker,/lastAutoConsultRef/);
   assert.match(operationalPicker,/void consult\(\)/);
@@ -133,6 +133,8 @@ test("sincroniza automaticamente o espelho SWeduc sem alterar Agenda Edu nem cad
   assert.match(vercelConfig,/\/api\/cron\/sweduc-sync/);
   assert.match(vercelConfig,/"schedule": "0 9 \* \* \*"/);
   assert.match(cronRoute,/CRON_SECRET/);
+  assert.match(cronRoute,/JPI_SYNC_CRON_SECRET/);
+  assert.match(cronRoute,/cronSecrets\.some/);
   assert.match(cronRoute,/SUPABASE_SERVICE_ROLE_KEY/);
   assert.match(cronRoute,/get_sweduc_secret_service/);
   assert.match(cronRoute,/anos_sincronizacao/);
@@ -159,7 +161,6 @@ test("sincroniza automaticamente o espelho SWeduc sem alterar Agenda Edu nem cad
   assert.match(route,/syncUnits/);
   assert.match(route,/sweduc_referencias_academicas/);
   assert.match(route,/upsertSweducAcademicReferences/);
-  assert.match(route,/requiresCompleteCatalog/);
   assert.match(route,/per_page:100/);
   assert.match(cronRoute,/sweduc_referencias_academicas/);
   assert.match(appShell,/prioritizeSweducAcademicYears/);
@@ -167,6 +168,7 @@ test("sincroniza automaticamente o espelho SWeduc sem alterar Agenda Edu nem cad
   assert.match(appShell,/jpi-sweduc-login-preload-v2/);
   assert.match(appShell,/window\.dispatchEvent\(new Event\("jpi-sweduc-preloaded"\)\)/);
   assert.match(appShell,/localStorage\.setItem\(key,String\(Date\.now\(\)\)\)/);
+  assert.doesNotMatch(appShell,/window\.setInterval\(refresh,2\*60\*60\*1000\)/);
   assert.match(operationalPicker,/window\.addEventListener\("jpi-sweduc-preloaded",refresh\)/);
   assert.match(ui,/Anos sincronizados no espelho/);
   assert.match(ui,/JPI - Matriz/);
@@ -176,6 +178,14 @@ test("sincroniza automaticamente o espelho SWeduc sem alterar Agenda Edu nem cad
   assert.match(syncYearsMigration,/add column if not exists anos_sincronizacao/);
   assert.match(syncUnitsMigration,/add column if not exists unidades_sincronizacao/);
   assert.match(syncUnitsMigration,/JPI - Matriz/);
+});
+
+test("consulta alunos somente no espelho sincronizado do Supabase",()=>{
+  const lookupBlock=route.slice(route.indexOf('if(action==="lookup")'),route.indexOf('if(action==="sync")'));
+  assert.match(lookupBlock,/from\("sweduc_alunos"\)\.select/);
+  assert.match(lookupBlock,/Consulta no banco sincronizado concluída/);
+  assert.doesNotMatch(lookupBlock,/listSweducStudentsWithToken/);
+  assert.doesNotMatch(lookupBlock,/createSweducAccessToken/);
 });
 
 test("mantém referências acadêmicas SWeduc para filtros sem duplicidade",()=>{

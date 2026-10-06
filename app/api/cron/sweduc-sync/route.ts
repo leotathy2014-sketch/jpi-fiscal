@@ -101,12 +101,13 @@ function academicReferenceRows(rows:Array<Record<string,unknown>>,fallbackYear?:
 }
 
 export async function GET(request:NextRequest){
-  const cronSecret=process.env.CRON_SECRET;
-  if(!cronSecret||request.headers.get("authorization")!==`Bearer ${cronSecret}`)return json({error:"Sincronização automática não autorizada."},401);
+  const cronSecrets=[process.env.CRON_SECRET,process.env.JPI_SYNC_CRON_SECRET].filter((secret):secret is string=>Boolean(secret));
+  const authorization=request.headers.get("authorization");
+  if(!cronSecrets.some(secret=>authorization===`Bearer ${secret}`))return json({error:"Sincronização automática não autorizada."},401);
   const supabaseUrl=process.env.NEXT_PUBLIC_SUPABASE_URL;
   const serviceRoleKey=process.env.SUPABASE_SERVICE_ROLE_KEY;
   const backendSecret=process.env.JPI_BACKEND_SECRET;
-  if(!supabaseUrl||!serviceRoleKey||!backendSecret)return json({error:"Configure SUPABASE_SERVICE_ROLE_KEY, JPI_BACKEND_SECRET e CRON_SECRET na Vercel para ativar a sincronização automática."},503);
+  if(!supabaseUrl||!serviceRoleKey||!backendSecret)return json({error:"Configure SUPABASE_SERVICE_ROLE_KEY, JPI_BACKEND_SECRET e a credencial da rotina automática na Vercel."},503);
   const supabase=createClient(supabaseUrl,serviceRoleKey,{auth:{persistSession:false,autoRefreshToken:false}});
   let activeCredentials:SweducCredentials|undefined;let activeAccessToken="";let synced=0;let detailsSynced=0;let page=1;let lastPage=1;const syncedYears:number[]=[];
   try{

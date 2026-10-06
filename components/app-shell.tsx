@@ -36,6 +36,7 @@ export function AppShell({email,accessToken,role,page,onPageChange,onSignOut,pre
   if(!accessToken||!canAny(["students.view","payments.create","nfse.prepare","settings.integrations.view","declarations.view"]))return;
   let cancelled=false;
   const preload=async()=>{
+   if(cancelled)return;
    try{
     const configResponse=await authenticatedFetch("/api/integrations/sweduc",{headers:{Authorization:`Bearer ${accessToken}`},cache:"no-store"});
     const config=await configResponse.json().catch(()=>({})) as {syncYears?:number[];syncUnits?:string[];selectedAcademicYear?:number;config?:{credencial_configurada?:boolean};error?:string};
