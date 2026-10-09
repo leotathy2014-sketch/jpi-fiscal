@@ -24,3 +24,7 @@ begin
  return request_id;
 end $$;
 revoke all on function private.crm_publish_fiscal_snapshot() from public,anon,authenticated;
+
+-- Enable only after binding the verifier to the intended school and validating the first transfer.
+-- update private.crm_fiscal_bridge set enabled=true where id=true;
+select cron.schedule('jpi-crm-academic-mirror','7,37 * * * *','select private.crm_publish_fiscal_snapshot();');
