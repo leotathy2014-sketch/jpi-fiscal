@@ -4,7 +4,7 @@ import {createClient} from "@supabase/supabase-js";
 import {createSweducAccessToken,currentSweducAcademicYear,filterSweducActiveEnrollments,getSweducStudentDetailsWithToken,listSweducStudentsWithToken,normalizeSweducHost,parseSweducCredentials,resolveSweducAcademicYear,resolveSweducEnabledAcademicYear,type SweducCredentials,type SweducStudentSummary} from "@/lib/sweduc";
 
 export const runtime="nodejs";export const maxDuration=300;
-const MAX_PAGES_PER_RUN=20;
+const MAX_PAGES_PER_RUN=100;
 const MAX_DETAILS_PER_RUN=10;
 const json=(body:Record<string,unknown>,status=200)=>NextResponse.json(body,{status,headers:{"Cache-Control":"private, no-store, max-age=0"}});
 
@@ -110,6 +110,7 @@ export async function GET(request:NextRequest){
   const backendSecret=process.env.JPI_BACKEND_SECRET;
   if(!supabaseUrl||!serviceRoleKey||!backendSecret)return json({error:"Configure SUPABASE_SERVICE_ROLE_KEY, JPI_BACKEND_SECRET e a credencial da rotina automática na Vercel."},503);
   const supabase=createClient(supabaseUrl,serviceRoleKey,{auth:{persistSession:false,autoRefreshToken:false}});
+  const runStartedAt=Date.now();
   let activeCredentials:SweducCredentials|undefined;let activeAccessToken="";let synced=0;let detailsSynced=0;let page=1;let lastPage=1;const syncedYears:number[]=[];let reconciled=0;let allFinished=true;
   try{
     const [secretResult,configResult]=await Promise.all([
@@ -178,6 +179,7 @@ export async function GET(request:NextRequest){
     if(detailCandidatesResult.error)throw new Error("Não foi possível conferir detalhes pendentes do espelho SWeduc.");
     const detailCandidates=((detailCandidatesResult.data||[]) as Array<Record<string,unknown>>).filter(row=>!hasMirrorDetails(row)).slice(0,MAX_DETAILS_PER_RUN);
     for(const row of detailCandidates){
+      if(Date.now()-runStartedAt>240000)break;
       const matriculaId=Number(row.matricula_id||0);
       if(!Number.isSafeInteger(matriculaId)||matriculaId<=0)continue;
       const detail=await getSweducStudentDetailsWithToken(activeCredentials.host,token.accessToken,matriculaId);
@@ -188,7 +190,7 @@ export async function GET(request:NextRequest){
     }
     const finished=allFinished;const doneAt=new Date().toISOString();
     await supabase.from("sweduc_config").update({ultimo_status:"conectado",ultimo_erro:null,sincronizada_em:doneAt,total_sincronizado:synced,updated_at:doneAt}).eq("id",true);
-    return json({ok:true,academicYears:syncedYears,synced,detailsSynced,reconciled,finished,nextPage:finished?null:page,message:finished?`Sincronização automática concluída para ${syncedYears.join(", ")} com ${synced} matrícula(s) e ${detailsSynced} detalhe(s) de responsável/financeiro.`:`Sincronização parcial concluída com ${synced} matrícula(s). Próxima execução continua atualizando.`});
+    return json({ok:true,academicYears:syncedYears,synced,detailsSynced,reconciled,finished,nextPage:finished?null:page,message:finished?`Sincronização automática concluída para ${syncedYears.join(", ")} com ${synced} matrícula(s) e ${detailsSynced} detalhe(s) de responsável/financeiro.`:`Sincronização parcial concluída com ${synced} matrícula(s). Reconciliação dos anos incompletos suspensa.`});
   }catch(error){
     const message=safeSweducError(error,activeCredentials,[activeAccessToken]);
     try{await supabase.from("sweduc_config").update({ultimo_status:"erro",ultimo_erro:message,updated_at:new Date().toISOString()}).eq("id",true)}catch{}
