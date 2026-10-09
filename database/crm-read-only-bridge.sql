@@ -27,4 +27,6 @@ revoke all on function private.crm_publish_fiscal_snapshot() from public,anon,au
 
 -- Enable only after binding the verifier to the intended school and validating the first transfer.
 -- update private.crm_fiscal_bridge set enabled=true where id=true;
-select cron.schedule('jpi-crm-academic-mirror','7,37 * * * *','select private.crm_publish_fiscal_snapshot();');
+select cron.schedule('jpi-crm-academic-mirror','7-57/10 * * * *','select private.crm_publish_fiscal_snapshot();');
+-- Preserve the existing source job and run it every ten minutes.
+select cron.alter_job(job_id := (select jobid from cron.job where jobname='jpi-sweduc-sync-every-30-minutes'), schedule := '*/10 * * * *', active := true);
