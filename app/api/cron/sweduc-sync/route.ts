@@ -151,8 +151,8 @@ export async function GET(request:NextRequest){
         }
         listedCount+=listing.data.length;
         const rows=filterRowsByUnits(filterSweducActiveEnrollments(listing.data).map(summary=>mapSummaryToMirror(summary,at)),units);
-        if(rows.some(row=>Number(row.ano_letivo)!==academicYear.year||!Number.isSafeInteger(row.matricula_id)||row.matricula_id<=0))throw new Error("A SWeduc retornou matrícula fora do ano consultado.");
-        seenIds.push(...rows.map(row=>row.matricula_id));
+        if(rows.some(row=>Number(row.ano_letivo)!==academicYear.year||!Number.isSafeInteger(Number(row.matricula_id))||Number(row.matricula_id)<=0))throw new Error("A SWeduc retornou matrícula fora do ano consultado.");
+        seenIds.push(...rows.map(row=>Number(row.matricula_id)));
         if(rows.length){
           const result=await supabase.from("sweduc_alunos").upsert(rows,{onConflict:"matricula_id"});
           if(result.error)throw new Error("Não foi possível atualizar o espelho SWeduc.");
