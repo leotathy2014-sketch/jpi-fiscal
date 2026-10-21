@@ -50,7 +50,10 @@ function mapSummaryToMirror(summary:SweducStudentSummary,at:string){
     turma:String(summary.turma||"")||null,
     ano_letivo:String(summary.ano_letivo||"")||null,
     dados_origem:{resumo:summary},
-    sincronizado_em:at
+    sincronizado_em:at,
+    ativo:true,
+    ultima_presenca_em:at,
+    inativado_em:null
   };
 }
 
@@ -134,7 +137,7 @@ export async function GET(request:NextRequest){
       page=1;lastPage=1;let listedCount=0;let expectedTotal:number|null=null;const seenIds:number[]=[];
       const existingIds:number[]=[];
       for(let offset=0;;offset+=1000){
-        const existing=await supabase.from("sweduc_alunos").select("matricula_id").eq("ano_letivo",String(academicYear.year)).in("unidade",units).or("status.ilike.%matric%,status.ilike.%ativ%").order("matricula_id").range(offset,offset+999);
+        const existing=await supabase.from("sweduc_alunos").select("matricula_id").eq("ano_letivo",String(academicYear.year)).eq("ativo",true).in("unidade",units).order("matricula_id").range(offset,offset+999);
         if(existing.error)throw new Error("Não foi possível conferir o histórico antes da sincronização.");
         existingIds.push(...(existing.data||[]).map(row=>Number(row.matricula_id)));
         if((existing.data||[]).length<1000)break;
@@ -169,13 +172,13 @@ export async function GET(request:NextRequest){
       if(!complete||expectedTotal===null||listedCount!==expectedTotal)allFinished=false;
       const missingIds=missingSweducEnrollmentIds(existingIds,seenIds,complete,listedCount,expectedTotal);
       for(let offset=0;offset<missingIds.length;offset+=100){
-        const update=await supabase.from("sweduc_alunos").update({status:"Não localizado na origem",sincronizado_em:at}).eq("ano_letivo",String(academicYear.year)).in("unidade",units).in("matricula_id",missingIds.slice(offset,offset+100)).lte("sincronizado_em",at).select("matricula_id");
+        const update=await supabase.from("sweduc_alunos").update({status:"Não localizado na origem",ativo:false,inativado_em:at,sincronizado_em:at}).eq("ano_letivo",String(academicYear.year)).in("unidade",units).in("matricula_id",missingIds.slice(offset,offset+100)).lte("sincronizado_em",at).select("matricula_id");
         if(update.error)throw new Error("Não foi possível preservar as matrículas ausentes no histórico.");
         reconciled+=(update.data||[]).length;
       }
       if(complete&&expectedTotal!==null&&listedCount===expectedTotal)syncedYears.push(academicYear.year);
     }
-    const detailCandidatesResult=await supabase.from("sweduc_alunos").select("matricula_id,dados_origem,responsaveis,financeiro,status").in("ano_letivo",years.map(String)).or("status.ilike.%matric%,status.ilike.%ativ%").order("sincronizado_em",{ascending:true}).limit(120);
+    const detailCandidatesResult=await supabase.from("sweduc_alunos").select("matricula_id,dados_origem,responsaveis,financeiro,status").in("ano_letivo",years.map(String)).eq("ativo",true).order("sincronizado_em",{ascending:true}).limit(120);
     if(detailCandidatesResult.error)throw new Error("Não foi possível conferir detalhes pendentes do espelho SWeduc.");
     const detailCandidates=((detailCandidatesResult.data||[]) as Array<Record<string,unknown>>).filter(row=>!hasMirrorDetails(row)).slice(0,MAX_DETAILS_PER_RUN);
     for(const row of detailCandidates){

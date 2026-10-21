@@ -23,6 +23,9 @@ const appPage=readFileSync(new URL("../app/page.tsx",import.meta.url),"utf8");
 const appShell=readFileSync(new URL("../components/app-shell.tsx",import.meta.url),"utf8");
 const halfHourlySyncMigration=readFileSync(new URL("../supabase/migrations/20261006113631_configurar_sincronizacao_sweduc_30_minutos.sql",import.meta.url),"utf8");
 const syncTimeoutMigration=readFileSync(new URL("../supabase/migrations/20261006114823_ampliar_timeout_sincronizacao_sweduc.sql",import.meta.url),"utf8");
+const inactiveEnrollmentsMigration=readFileSync(new URL("../supabase/migrations/20261009212028_inativar_matriculas_sweduc_ausentes.sql",import.meta.url),"utf8");
+const declarationsPage=readFileSync(new URL("../components/declarations-page.tsx",import.meta.url),"utf8");
+const communicationsRoute=readFileSync(new URL("../app/api/integrations/communications/route.ts",import.meta.url),"utf8");
 
 test("cria uma integração SWeduc separada da Agenda Edu",()=>{
   assert.match(settings,/section==="sweduc"/);assert.match(settings,/Agenda Edu/);
@@ -145,7 +148,7 @@ test("sincroniza automaticamente o espelho SWeduc sem alterar Agenda Edu nem cad
   assert.match(cronRoute,/unidades_sincronizacao/);
   assert.match(cronRoute,/filterRowsByUnits/);
   assert.match(cronRoute,/resolveSweducAcademicYear/);
-  assert.match(cronRoute,/const years=\[enabledYear\]/);
+  assert.match(cronRoute,/const years=allYears/);
   assert.match(cronRoute,/anos_sincronizacao:allYears/);
   assert.match(cronRoute,/listSweducStudentsWithToken/);
   assert.match(cronRoute,/per_page:100/);
@@ -197,6 +200,27 @@ test("consulta alunos somente no espelho sincronizado do Supabase",()=>{
   assert.match(lookupBlock,/Consulta no banco sincronizado concluída/);
   assert.doesNotMatch(lookupBlock,/listSweducStudentsWithToken/);
   assert.doesNotMatch(lookupBlock,/createSweducAccessToken/);
+});
+
+test("sincroniza alterações e inativa ausentes sem apagar o histórico fiscal",()=>{
+  assert.match(inactiveEnrollmentsMigration,/add column if not exists ativo boolean not null default true/);
+  assert.match(inactiveEnrollmentsMigration,/add column if not exists ultima_presenca_em timestamptz/);
+  assert.match(inactiveEnrollmentsMigration,/add column if not exists inativado_em timestamptz/);
+  assert.match(inactiveEnrollmentsMigration,/where ativo/);
+  assert.doesNotMatch(inactiveEnrollmentsMigration,/delete from public\.(alunos|mensalidades|notas_fiscais)/);
+  assert.match(cronRoute,/missingSweducEnrollmentIds/);
+  assert.match(cronRoute,/const complete=page>lastPage/);
+  assert.match(cronRoute,/if\(!complete\|\|expectedTotal===null\|\|listedCount!==expectedTotal\)allFinished=false/);
+  assert.match(cronRoute,/update\(\{status:"Não localizado na origem",ativo:false,inativado_em:at,sincronizado_em:at\}\)/);
+  assert.match(cronRoute,/ativo:true/);
+  assert.match(cronRoute,/ultima_presenca_em:at/);
+  assert.match(cronRoute,/inativado_em:null/);
+  assert.doesNotMatch(cronRoute,/from\("alunos"\)\.(insert|update|upsert|delete)/);
+  assert.match(route,/ativo:true,ultima_presenca_em:at,inativado_em:null/);
+  assert.match(route,/\.eq\("ativo",true\)/);
+  assert.match(livePages,/from\("sweduc_alunos"\)\.select\("matricula_id,sincronizado_em"\)\.eq\("ativo",true\)/);
+  assert.match(declarationsPage,/from\("sweduc_alunos"\).*\.eq\("ativo",true\)/);
+  assert.match(communicationsRoute,/from\("sweduc_alunos"\).*\.eq\("ativo",true\)/);
 });
 
 test("mantém referências acadêmicas SWeduc para filtros sem duplicidade",()=>{

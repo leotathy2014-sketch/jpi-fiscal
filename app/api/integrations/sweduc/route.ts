@@ -47,7 +47,8 @@ function serviceSupabaseClient(){
 }
 
 function mapSummaryToGrid(summary:SweducStudentSummary){
-  return {matricula_id:Number(summary.matricula_id),aluno_id:Number(summary.aluno_id||0)||null,nome:String(summary.nome||"Aluno sem nome"),data_nascimento:String(summary.data_nascimento||"")||null,numero_aluno:String(summary.num_aluno||"")||null,numero_matricula:String(summary.num_matricula||"")||null,status:String(summary.status||"")||null,unidade:String(summary.unidade||"")||null,curso:String(summary.curso||"")||null,serie:String(summary.serie||"")||null,turma:String(summary.turma||"")||null,ano_letivo:String(summary.ano_letivo||"")||null,dados_origem:{resumo:summary},sincronizado_em:new Date().toISOString()};
+  const at=new Date().toISOString();
+  return {matricula_id:Number(summary.matricula_id),aluno_id:Number(summary.aluno_id||0)||null,nome:String(summary.nome||"Aluno sem nome"),data_nascimento:String(summary.data_nascimento||"")||null,numero_aluno:String(summary.num_aluno||"")||null,numero_matricula:String(summary.num_matricula||"")||null,status:String(summary.status||"")||null,unidade:String(summary.unidade||"")||null,curso:String(summary.curso||"")||null,serie:String(summary.serie||"")||null,turma:String(summary.turma||"")||null,ano_letivo:String(summary.ano_letivo||"")||null,dados_origem:{resumo:summary},sincronizado_em:at,ativo:true,ultima_presenca_em:at,inativado_em:null};
 }
 
 async function upsertSweducMirror(supabase:SupabaseClient,rows:Array<Record<string,unknown>>){
@@ -346,18 +347,18 @@ export async function POST(request:NextRequest){
     const rawYear=Number(body.academicYear||0);const search=String(body.search||"").trim();const course=String(body.course||"").trim();const serie=String(body.serie||"").trim();const turma=String(body.turma||"").trim();const page=Math.max(1,Math.min(Number(body.page||1),100));const requestedPageSize=Number(body.pageSize||80);const pageSize=Number.isSafeInteger(requestedPageSize)?Math.max(25,Math.min(requestedPageSize,500)):80;const from=(page-1)*pageSize;const to=from+pageSize-1;
     const {data:mirrorConfig}=await auth.supabase.from("sweduc_config").select("unidades_sincronizacao").eq("id",true).maybeSingle();
     const syncUnits=sanitizeSyncUnits(mirrorConfig?.unidades_sincronizacao);
-    let query=auth.supabase.from("sweduc_alunos").select("matricula_id,aluno_id,nome,data_nascimento,numero_aluno,numero_matricula,status,unidade,curso,serie,turma,ano_letivo,responsaveis,financeiro,dados_origem,sincronizado_em",{count:"exact"}).in("unidade",syncUnits).or("status.ilike.%matric%,status.ilike.%ativ%");
+    let query=auth.supabase.from("sweduc_alunos").select("matricula_id,aluno_id,nome,data_nascimento,numero_aluno,numero_matricula,status,unidade,curso,serie,turma,ano_letivo,responsaveis,financeiro,dados_origem,sincronizado_em",{count:"exact"}).in("unidade",syncUnits).eq("ativo",true);
     if(Number.isSafeInteger(rawYear)&&rawYear>1900)query=query.eq("ano_letivo",String(rawYear));
     if(search)query=query.ilike("nome",`%${search}%`);
     if(course)query=query.eq("curso",course);
     if(serie)query=query.eq("serie",serie);
     if(turma)query=query.eq("turma",turma);
-    const [result,mirrorCount]=await Promise.all([query.order("nome",{ascending:true}).range(from,to),auth.supabase.from("sweduc_alunos").select("matricula_id",{count:"exact",head:true}).in("unidade",syncUnits).or("status.ilike.%matric%,status.ilike.%ativ%")]);
+    const [result,mirrorCount]=await Promise.all([query.order("nome",{ascending:true}).range(from,to),auth.supabase.from("sweduc_alunos").select("matricula_id",{count:"exact",head:true}).in("unidade",syncUnits).eq("ativo",true)]);
     if(result.error)return json({error:"Não foi possível consultar o espelho SWeduc no banco."},500);
     let rows=filterActiveRows((result.data||[]) as Array<Record<string,unknown>>);
     const totalLocal=Number(result.count||0);const mirrorTotal=Number(mirrorCount.count||0);
     if(!rows.length&&mirrorTotal>0&&(course||serie||turma)){
-      let broad=auth.supabase.from("sweduc_alunos").select("matricula_id,aluno_id,nome,data_nascimento,numero_aluno,numero_matricula,status,unidade,curso,serie,turma,ano_letivo,responsaveis,financeiro,dados_origem,sincronizado_em").in("unidade",syncUnits).or("status.ilike.%matric%,status.ilike.%ativ%");
+      let broad=auth.supabase.from("sweduc_alunos").select("matricula_id,aluno_id,nome,data_nascimento,numero_aluno,numero_matricula,status,unidade,curso,serie,turma,ano_letivo,responsaveis,financeiro,dados_origem,sincronizado_em").in("unidade",syncUnits).eq("ativo",true);
       if(Number.isSafeInteger(rawYear)&&rawYear>1900)broad=broad.eq("ano_letivo",String(rawYear));
       const broadResult=await broad.order("nome",{ascending:true}).limit(1000);
       if(broadResult.error)return json({error:"Não foi possível consultar o espelho SWeduc no banco."},500);
@@ -366,7 +367,7 @@ export async function POST(request:NextRequest){
       if(rows.length)return json({ok:true,students:rows,page,lastPage:Math.max(1,Math.ceil(normalizedRows.length/pageSize)),nextPage:to+1<normalizedRows.length?page+1:null,totalAvailable:normalizedRows.length,message:`Consulta local encontrou ${normalizedRows.length} matrícula(s) pelos filtros selecionados. Nada foi salvo no cadastro fiscal.`});
     }
     if(search&&!rows.length&&mirrorTotal>0){
-      let broad=auth.supabase.from("sweduc_alunos").select("matricula_id,aluno_id,nome,data_nascimento,numero_aluno,numero_matricula,status,unidade,curso,serie,turma,ano_letivo,responsaveis,financeiro,dados_origem,sincronizado_em").in("unidade",syncUnits).or("status.ilike.%matric%,status.ilike.%ativ%");
+      let broad=auth.supabase.from("sweduc_alunos").select("matricula_id,aluno_id,nome,data_nascimento,numero_aluno,numero_matricula,status,unidade,curso,serie,turma,ano_letivo,responsaveis,financeiro,dados_origem,sincronizado_em").in("unidade",syncUnits).eq("ativo",true);
       if(Number.isSafeInteger(rawYear)&&rawYear>1900)broad=broad.eq("ano_letivo",String(rawYear));
       if(course)broad=broad.eq("curso",course);
       if(serie)broad=broad.eq("serie",serie);
