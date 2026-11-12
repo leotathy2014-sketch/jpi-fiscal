@@ -163,7 +163,7 @@ export async function GET(request:NextRequest){
           if(existingOriginsResult.error)throw new Error("Não foi possível preservar os detalhes já consultados da SWeduc.");
           const existingOrigins=new Map<number,unknown>((existingOriginsResult.data||[]).map(row=>[Number(row.matricula_id),row.dados_origem] as const));
           for(const row of rows){
-            const previous=existingOrigins.get(row.matricula_id);
+            const previous=existingOrigins.get(Number(row.matricula_id));
             const origin=previous&&typeof previous==="object"?previous as Record<string,unknown>:{};
             const summary=row.dados_origem&&typeof row.dados_origem==="object"?row.dados_origem as Record<string,unknown>:{};
             if(origin.detalhes&&typeof origin.detalhes==="object"&&!Array.isArray(origin.detalhes))row.dados_origem={...summary,detalhes:origin.detalhes};
