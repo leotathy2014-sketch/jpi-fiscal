@@ -159,10 +159,9 @@ export async function GET(request:NextRequest){
         if(rows.some(row=>Number(row.ano_letivo)!==academicYear.year||!Number.isSafeInteger(Number(row.matricula_id))||Number(row.matricula_id)<=0))throw new Error("A SWeduc retornou matrícula fora do ano consultado.");
         seenIds.push(...rows.map(row=>Number(row.matricula_id)));
         if(rows.length){
-          const existingOrigins=new Map((await supabase.from("sweduc_alunos").select("matricula_id,dados_origem").in("matricula_id",rows.map(row=>row.matricula_id)).then(result=>{
-            if(result.error)throw new Error("Não foi possível preservar os detalhes já consultados da SWeduc.");
-            return result.data||[];
-          })).map(row=>[Number(row.matricula_id),row.dados_origem]));
+          const existingOriginsResult=await supabase.from("sweduc_alunos").select("matricula_id,dados_origem").in("matricula_id",rows.map(row=>row.matricula_id));
+          if(existingOriginsResult.error)throw new Error("Não foi possível preservar os detalhes já consultados da SWeduc.");
+          const existingOrigins=new Map<number,unknown>((existingOriginsResult.data||[]).map(row=>[Number(row.matricula_id),row.dados_origem] as const));
           for(const row of rows){
             const previous=existingOrigins.get(row.matricula_id);
             const origin=previous&&typeof previous==="object"?previous as Record<string,unknown>:{};
