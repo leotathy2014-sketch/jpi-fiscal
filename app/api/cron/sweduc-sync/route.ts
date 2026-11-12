@@ -57,8 +57,9 @@ function mapSummaryToMirror(summary:SweducStudentSummary,at:string){
   };
 }
 
-function hasMirrorDetails(row:Record<string,unknown>){
-  return Array.isArray(row.responsaveis)&&row.responsaveis.length>0&&Array.isArray(row.financeiro)&&row.financeiro.length>0;
+function hasApiDetails(row:Record<string,unknown>){
+  const origin=row.dados_origem&&typeof row.dados_origem==="object"?row.dados_origem as Record<string,unknown>:{};
+  return !!origin.detalhes&&typeof origin.detalhes==="object"&&!Array.isArray(origin.detalhes);
 }
 
 function normalizeSearchText(value:unknown){return String(value||"").normalize("NFD").replace(/[\u0300-\u036f]/g,"").replace(/[^\p{L}\p{N}\s]/gu," ").replace(/\s+/g," ").trim().toLocaleLowerCase("pt-BR")}
@@ -137,7 +138,7 @@ export async function GET(request:NextRequest){
       page=1;lastPage=1;let listedCount=0;let expectedTotal:number|null=null;const seenIds:number[]=[];
       const existingIds:number[]=[];
       for(let offset=0;;offset+=1000){
-        const existing=await supabase.from("sweduc_alunos").select("matricula_id").eq("ano_letivo",String(academicYear.year)).eq("ativo",true).in("unidade",units).order("matricula_id").range(offset,offset+999);
+        const existing=await supabase.from("sweduc_alunos").select("matricula_id,dados_origem").eq("ano_letivo",String(academicYear.year)).eq("ativo",true).in("unidade",units).order("matricula_id").range(offset,offset+999);
         if(existing.error)throw new Error("Não foi possível conferir o histórico antes da sincronização.");
         existingIds.push(...(existing.data||[]).map(row=>Number(row.matricula_id)));
         if((existing.data||[]).length<1000)break;
@@ -158,6 +159,16 @@ export async function GET(request:NextRequest){
         if(rows.some(row=>Number(row.ano_letivo)!==academicYear.year||!Number.isSafeInteger(Number(row.matricula_id))||Number(row.matricula_id)<=0))throw new Error("A SWeduc retornou matrícula fora do ano consultado.");
         seenIds.push(...rows.map(row=>Number(row.matricula_id)));
         if(rows.length){
+          const existingOrigins=new Map((await supabase.from("sweduc_alunos").select("matricula_id,dados_origem").in("matricula_id",rows.map(row=>row.matricula_id)).then(result=>{
+            if(result.error)throw new Error("Não foi possível preservar os detalhes já consultados da SWeduc.");
+            return result.data||[];
+          })).map(row=>[Number(row.matricula_id),row.dados_origem]));
+          for(const row of rows){
+            const previous=existingOrigins.get(row.matricula_id);
+            const origin=previous&&typeof previous==="object"?previous as Record<string,unknown>:{};
+            const summary=row.dados_origem&&typeof row.dados_origem==="object"?row.dados_origem as Record<string,unknown>:{};
+            if(origin.detalhes&&typeof origin.detalhes==="object"&&!Array.isArray(origin.detalhes))row.dados_origem={...summary,detalhes:origin.detalhes};
+          }
           const result=await supabase.from("sweduc_alunos").upsert(rows,{onConflict:"matricula_id"});
           if(result.error)throw new Error("Não foi possível atualizar o espelho SWeduc.");
           const references=academicReferenceRows(rows,academicYear.year,at);
@@ -178,9 +189,9 @@ export async function GET(request:NextRequest){
       }
       if(complete&&expectedTotal!==null&&listedCount===expectedTotal)syncedYears.push(academicYear.year);
     }
-    const detailCandidatesResult=await supabase.from("sweduc_alunos").select("matricula_id,dados_origem,responsaveis,financeiro,status").in("ano_letivo",years.map(String)).eq("ativo",true).order("sincronizado_em",{ascending:true}).limit(120);
+    const detailCandidatesResult=await supabase.from("sweduc_alunos").select("matricula_id,dados_origem").in("ano_letivo",years.map(String)).eq("ativo",true).order("matricula_id",{ascending:true}).limit(1000);
     if(detailCandidatesResult.error)throw new Error("Não foi possível conferir detalhes pendentes do espelho SWeduc.");
-    const detailCandidates=((detailCandidatesResult.data||[]) as Array<Record<string,unknown>>).filter(row=>!hasMirrorDetails(row)).slice(0,MAX_DETAILS_PER_RUN);
+    const detailCandidates=((detailCandidatesResult.data||[]) as Array<Record<string,unknown>>).filter(row=>!hasApiDetails(row)).slice(0,MAX_DETAILS_PER_RUN);
     for(const row of detailCandidates){
       if(Date.now()-runStartedAt>240000)break;
       const matriculaId=Number(row.matricula_id||0);
