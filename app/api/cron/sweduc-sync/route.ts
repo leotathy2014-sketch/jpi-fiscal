@@ -1,11 +1,10 @@
 import {missingSweducEnrollmentIds} from "@/lib/sweduc-reconciliation";
 import {NextRequest,NextResponse} from "next/server";
 import {createClient} from "@supabase/supabase-js";
-import {createSweducAccessToken,currentSweducAcademicYear,filterSweducActiveEnrollments,getSweducStudentDetailsWithToken,listSweducStudentsWithToken,normalizeSweducHost,parseSweducCredentials,resolveSweducAcademicYear,resolveSweducEnabledAcademicYear,type SweducCredentials,type SweducStudentSummary} from "@/lib/sweduc";
+import {createSweducAccessToken,currentSweducAcademicYear,filterSweducActiveEnrollments,listSweducStudentsWithToken,normalizeSweducHost,parseSweducCredentials,resolveSweducAcademicYear,resolveSweducEnabledAcademicYear,type SweducCredentials,type SweducStudentSummary} from "@/lib/sweduc";
 
 export const runtime="nodejs";export const maxDuration=300;
 const MAX_PAGES_PER_RUN=100;
-const MAX_DETAILS_PER_RUN=10;
 const json=(body:Record<string,unknown>,status=200)=>NextResponse.json(body,{status,headers:{"Cache-Control":"private, no-store, max-age=0"}});
 
 function sanitizeSyncYears(value:unknown){
@@ -55,11 +54,6 @@ function mapSummaryToMirror(summary:SweducStudentSummary,at:string){
     ultima_presenca_em:at,
     inativado_em:null
   };
-}
-
-function hasApiDetails(row:Record<string,unknown>){
-  const origin=row.dados_origem&&typeof row.dados_origem==="object"?row.dados_origem as Record<string,unknown>:{};
-  return !!origin.detalhes&&typeof origin.detalhes==="object"&&!Array.isArray(origin.detalhes);
 }
 
 function normalizeSearchText(value:unknown){return String(value||"").normalize("NFD").replace(/[\u0300-\u036f]/g,"").replace(/[^\p{L}\p{N}\s]/gu," ").replace(/\s+/g," ").trim().toLocaleLowerCase("pt-BR")}
@@ -115,7 +109,7 @@ export async function GET(request:NextRequest){
   if(!supabaseUrl||!serviceRoleKey||!backendSecret)return json({error:"Configure SUPABASE_SERVICE_ROLE_KEY, JPI_BACKEND_SECRET e a credencial da rotina automática na Vercel."},503);
   const supabase=createClient(supabaseUrl,serviceRoleKey,{auth:{persistSession:false,autoRefreshToken:false}});
   const runStartedAt=Date.now();
-  let activeCredentials:SweducCredentials|undefined;let activeAccessToken="";let synced=0;let detailsSynced=0;let page=1;let lastPage=1;const syncedYears:number[]=[];let reconciled=0;let allFinished=true;
+  let activeCredentials:SweducCredentials|undefined;let activeAccessToken="";let synced=0;let page=1;let lastPage=1;const syncedYears:number[]=[];let reconciled=0;let allFinished=true;
   try{
     const [secretResult,configResult]=await Promise.all([
       supabase.rpc("get_sweduc_secret_service",{p_backend_secret:backendSecret}),
@@ -138,7 +132,7 @@ export async function GET(request:NextRequest){
       page=1;lastPage=1;let listedCount=0;let expectedTotal:number|null=null;const seenIds:number[]=[];
       const existingIds:number[]=[];
       for(let offset=0;;offset+=1000){
-        const existing=await supabase.from("sweduc_alunos").select("matricula_id,dados_origem").eq("ano_letivo",String(academicYear.year)).eq("ativo",true).in("unidade",units).order("matricula_id").range(offset,offset+999);
+        const existing=await supabase.from("sweduc_alunos").select("matricula_id").eq("ano_letivo",String(academicYear.year)).eq("ativo",true).in("unidade",units).order("matricula_id").range(offset,offset+999);
         if(existing.error)throw new Error("Não foi possível conferir o histórico antes da sincronização.");
         existingIds.push(...(existing.data||[]).map(row=>Number(row.matricula_id)));
         if((existing.data||[]).length<1000)break;
@@ -159,15 +153,6 @@ export async function GET(request:NextRequest){
         if(rows.some(row=>Number(row.ano_letivo)!==academicYear.year||!Number.isSafeInteger(Number(row.matricula_id))||Number(row.matricula_id)<=0))throw new Error("A SWeduc retornou matrícula fora do ano consultado.");
         seenIds.push(...rows.map(row=>Number(row.matricula_id)));
         if(rows.length){
-          const existingOriginsResult=await supabase.from("sweduc_alunos").select("matricula_id,dados_origem").in("matricula_id",rows.map(row=>row.matricula_id));
-          if(existingOriginsResult.error)throw new Error("Não foi possível preservar os detalhes já consultados da SWeduc.");
-          const existingOrigins=new Map<number,unknown>((existingOriginsResult.data||[]).map(row=>[Number(row.matricula_id),row.dados_origem] as const));
-          for(const row of rows){
-            const previous=existingOrigins.get(Number(row.matricula_id));
-            const origin=previous&&typeof previous==="object"?previous as Record<string,unknown>:{};
-            const summary=row.dados_origem&&typeof row.dados_origem==="object"?row.dados_origem as Record<string,unknown>:{};
-            if(origin.detalhes&&typeof origin.detalhes==="object"&&!Array.isArray(origin.detalhes))row.dados_origem={...summary,detalhes:origin.detalhes};
-          }
           const result=await supabase.from("sweduc_alunos").upsert(rows,{onConflict:"matricula_id"});
           if(result.error)throw new Error("Não foi possível atualizar o espelho SWeduc.");
           const references=academicReferenceRows(rows,academicYear.year,at);
@@ -188,22 +173,9 @@ export async function GET(request:NextRequest){
       }
       if(complete&&expectedTotal!==null&&listedCount===expectedTotal)syncedYears.push(academicYear.year);
     }
-    const detailCandidatesResult=await supabase.from("sweduc_alunos").select("matricula_id,dados_origem").in("ano_letivo",years.map(String)).eq("ativo",true).order("matricula_id",{ascending:true}).limit(1000);
-    if(detailCandidatesResult.error)throw new Error("Não foi possível conferir detalhes pendentes do espelho SWeduc.");
-    const detailCandidates=((detailCandidatesResult.data||[]) as Array<Record<string,unknown>>).filter(row=>!hasApiDetails(row)).slice(0,MAX_DETAILS_PER_RUN);
-    for(const row of detailCandidates){
-      if(Date.now()-runStartedAt>240000)break;
-      const matriculaId=Number(row.matricula_id||0);
-      if(!Number.isSafeInteger(matriculaId)||matriculaId<=0)continue;
-      const detail=await getSweducStudentDetailsWithToken(activeCredentials.host,token.accessToken,matriculaId);
-      const dados_origem={...((row.dados_origem as Record<string,unknown>|undefined)||{}),detalhes:detail.detalhes};
-      const updateResult=await supabase.from("sweduc_alunos").update({responsaveis:detail.responsaveis,financeiro:detail.financeiro,dados_origem,sincronizado_em:new Date().toISOString()}).eq("matricula_id",matriculaId);
-      if(updateResult.error)throw new Error("Não foi possível salvar detalhes de responsáveis e financeiro no espelho SWeduc.");
-      detailsSynced++;
-    }
     const finished=allFinished;const doneAt=new Date().toISOString();
     await supabase.from("sweduc_config").update({ultimo_status:"conectado",ultimo_erro:null,sincronizada_em:doneAt,total_sincronizado:synced,updated_at:doneAt}).eq("id",true);
-    return json({ok:true,academicYears:syncedYears,synced,detailsSynced,reconciled,finished,nextPage:finished?null:page,message:finished?`Sincronização automática concluída para ${syncedYears.join(", ")} com ${synced} matrícula(s) e ${detailsSynced} detalhe(s) de responsável/financeiro.`:`Sincronização parcial concluída com ${synced} matrícula(s). Reconciliação dos anos incompletos suspensa.`});
+    return json({ok:true,academicYears:syncedYears,synced,reconciled,finished,nextPage:finished?null:page,message:finished?`Sincronização automática concluída para ${syncedYears.join(", ")} com ${synced} matrícula(s).`:`Sincronização parcial concluída com ${synced} matrícula(s). Reconciliação dos anos incompletos suspensa.`});
   }catch(error){
     const message=safeSweducError(error,activeCredentials,[activeAccessToken]);
     try{await supabase.from("sweduc_config").update({ultimo_status:"erro",ultimo_erro:message,updated_at:new Date().toISOString()}).eq("id",true)}catch{}
