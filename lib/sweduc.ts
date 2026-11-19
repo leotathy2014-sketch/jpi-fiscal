@@ -138,7 +138,15 @@ export async function createSweducAccessToken(credentials:SweducCredentials,fetc
     :new URLSearchParams({grant_type:"client_credentials"});
   const headers:Record<string,string>={Accept:"application/json","Content-Type":"application/x-www-form-urlencoded",Authorization:`Basic ${basic}`};
   const response=await fetchImpl(`${normalizeSweducHost(credentials.host)}/oauth/v2/token`,{method:"POST",headers,body,cache:"no-store",redirect:"error",signal:AbortSignal.timeout(SWEDUC_TIMEOUT_MS)});
-  if(!response.ok)throw new Error(await apiMessage(response,"A SWeduc não aceitou as credenciais informadas."));
+  if(!response.ok){
+    const body=await response.json().catch(()=>null) as {error?:unknown}|null;
+    const oauthCode=typeof body?.error==="string"&&[
+      "invalid_request","invalid_client","invalid_grant","unauthorized_client",
+      "unsupported_grant_type","invalid_scope","server_error","temporarily_unavailable"
+    ].includes(body.error)?body.error:null;
+    const details=[`HTTP ${response.status}`,oauthCode].filter(Boolean).join(" · ");
+    throw new Error(`A SWeduc recusou a solicitação do token OAuth (${details}).`);
+  }
   const result=await response.json() as {access_token?:string;expires_in?:number;token_type?:string};
   if(!result.access_token)throw new Error("A SWeduc não retornou o token de acesso esperado.");
   return {accessToken:result.access_token,expiresIn:Number(result.expires_in||0)};
