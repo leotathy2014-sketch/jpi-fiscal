@@ -23,11 +23,14 @@ test("destaca a versão ativa e mantém o histórico visível", () => {
   assert.match(invoicesSource, /Substituída e preservada/);
 });
 
-test("usa uma única verificação de disponibilidade da SEFIN", () => {
-  assert.match(settingsSource, /fetch\("\/api\/nfse\/homologation\/test"/);
-  assert.doesNotMatch(settingsSource, /nfse-teste-conexao-segura/);
+test("usa o monitor da SEFIN sem substituir o teste de conexão fiscal", () => {
+  const monitorSource = readFileSync("components/sefin-monitor.tsx", "utf8");
+  assert.match(settingsSource, /authenticatedFetch\("\/api\/nfse\/homologation\/test"/);
   assert.match(settingsSource, /jpi-sefin-status-updated/);
-  assert.match(appShellSource, /jpi-sefin-status-updated/);
+  assert.match(appShellSource, /<SefinMonitor/);
+  assert.match(monitorSource, /fetch\("\/api\/nfse\/status"/);
+  assert.match(monitorSource, /Verificar novamente/);
+  assert.match(monitorSource, /jpi-sefin-status-updated/);
 });
 
 test("organiza a listagem e os ajustes de NFS-e com os mesmos filtros", () => {

@@ -1,4 +1,5 @@
 "use client";
+import { SefinMonitor } from "./sefin-monitor";
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AlertCircle, ArrowUpRight, BookOpenCheck, Building2, CalendarDays, Check, CircleDollarSign, Clock3, Copy, Eye, EyeOff, FileCheck2, FilePlus2, FileText, Filter, Globe2, KeyRound, Link2, Mail, MessageCircle, MoreHorizontal, Palette, Plus, Search, ShieldCheck, SlidersHorizontal, Trash2, UploadCloud, UserCheck, UserCog, UsersRound, WalletCards, X } from "lucide-react";
 import type { AppPage, Role } from "./app-shell";
@@ -1605,8 +1606,6 @@ function Integrations({accessToken,onNavigate}:{accessToken:string|null;onNaviga
   const {can,isMaster}=useAccess();const canEdit=can("settings.integrations.edit");const canTestFiscal=can("nfse.test_connection");
   const [section,setSection]=useState<IntegrationSection>(()=>typeof window==="undefined"?"overview":(sessionStorage.getItem("jpi-integrations-section") as IntegrationSection)||"overview");
   useEffect(()=>{const target=sessionStorage.getItem("jpi-integrations-section") as IntegrationSection|null;if(target){sessionStorage.removeItem("jpi-integrations-section");setSection(target)}},[]);
-  const [sefinAvailability,setSefinAvailability]=useState<"checking"|"available"|"unstable"|"unavailable"|"unknown"|"session">("checking");
-  const [sefinCheckedAt,setSefinCheckedAt]=useState<Date|null>(null);
   const [productionEnabled,setProductionEnabled]=useState(false);
   const [communicationConfig,setCommunicationConfig]=useState<CommunicationConfig|null>(null);
   const [sweducConfig,setSweducConfig]=useState<{credencial_configurada:boolean;ultimo_status:string}|null>(null);
@@ -1657,37 +1656,6 @@ function Integrations({accessToken,onNavigate}:{accessToken:string|null;onNaviga
   },[supabase]);
 
   useEffect(()=>{
-    if(!accessToken||!canTestFiscal){setSefinAvailability("unknown");return}
-    let active=true;let inFlight=false;let lastCheck=0;
-    const check=async()=>{
-      if(inFlight||document.visibilityState==="hidden")return;
-      inFlight=true;
-      if(lastCheck===0)setSefinAvailability("checking");
-      try{
-        const response=await authenticatedFetch("/api/nfse/homologation/test",{method:"POST",headers:{Authorization:`Bearer ${accessToken}`,"Content-Type":"application/json"},body:JSON.stringify({action:"server-status"}),cache:"no-store"});
-        const data=await response.json().catch(()=>({})) as {ready?:boolean;diagnosticCode?:string};
-        if(!active)return;
-        if(response.status===401){setSefinAvailability("session");window.dispatchEvent(new Event("jpi-session-invalid"));return}
-        if(!response.ok)setSefinAvailability(data.diagnosticCode==="NFSE_HML_SERVIDOR_INSTAVEL"?"unstable":"unknown");
-        else setSefinAvailability(data.ready?"available":"unstable");
-      }catch{
-        if(active)setSefinAvailability("unknown");
-      }finally{
-        lastCheck=Date.now();inFlight=false;
-        if(active)setSefinCheckedAt(new Date());
-      }
-    };
-    const refresh=()=>{if(Date.now()-lastCheck>120000)void check()};
-    const refreshNow=()=>void check();
-    void check();
-    const timer=window.setInterval(()=>void check(),300000);
-    window.addEventListener("focus",refresh);
-    window.addEventListener("online",refresh);
-    window.addEventListener("jpi-sefin-status-updated",refreshNow);
-    return()=>{active=false;window.clearInterval(timer);window.removeEventListener("focus",refresh);window.removeEventListener("online",refresh);window.removeEventListener("jpi-sefin-status-updated",refreshNow)};
-  },[accessToken,canTestFiscal]);
-
-  useEffect(()=>{
     setError("");setMessage("");
   },[section]);
 
@@ -1708,8 +1676,6 @@ function Integrations({accessToken,onNavigate}:{accessToken:string|null;onNaviga
   },[busy]);
 
   const elapsedLabel=`${String(Math.floor(elapsed/60)).padStart(2,"0")}:${String(elapsed%60).padStart(2,"0")}`;
-  const sefinLabel=sefinAvailability==="available"?"SEFIN disponível":sefinAvailability==="unstable"?"SEFIN com oscilação":sefinAvailability==="unavailable"?"SEFIN indisponível":sefinAvailability==="session"?"Sessão expirada":sefinAvailability==="unknown"?"Status não confirmado":"SEFIN verificando";
-  const sefinTone=sefinAvailability==="available"?"available":sefinAvailability==="unstable"?"unstable":sefinAvailability==="unavailable"||sefinAvailability==="session"?"unavailable":sefinAvailability==="unknown"?"unknown":"checking";
   const operationalLabel=productionEnabled?"Pronto e enviando":"Homologação";
 
   async function testHomologation(event:FormEvent<HTMLFormElement>){
@@ -1727,11 +1693,11 @@ function Integrations({accessToken,onNavigate}:{accessToken:string|null;onNaviga
       const data=await response.json().catch(()=>({})) as {ok?:boolean;environment?:string;error?:string;ready?:boolean;issuanceStatus?:number};
       window.dispatchEvent(new Event("jpi-sefin-status-updated"));
       if(!response.ok||!data?.ok){setError(data?.error||"Não foi possível testar a integração.");return}
-      if(!data.ready){setSefinAvailability("unstable");setError("A API de emissão apresentou oscilação. Aguarde alguns instantes e teste novamente antes de enviar.");return}
-      setTested(true);setSefinAvailability("available");setSefinCheckedAt(new Date());setMessage(`Certificado confirmado e servidor da SEFIN respondendo no ambiente de ${data.environment}. Nenhuma nota foi emitida neste teste.`);
+      if(!data.ready){setError("A API de emissão apresentou oscilação. Aguarde alguns instantes e teste novamente antes de enviar.");return}
+      setTested(true);setMessage(`Certificado confirmado e servidor da SEFIN respondendo no ambiente de ${data.environment}. Nenhuma nota foi emitida neste teste.`);
     }catch(requestError){
       const timedOut=requestError instanceof Error&&(requestError.message==="JPI_CONNECTION_TIMEOUT"||requestError.name==="AbortError");
-      setSefinAvailability("unknown");setError(timedOut?"A verificação não respondeu dentro do prazo. O status da SEFIN ficou não confirmado; tente novamente em alguns instantes.":"A verificação foi interrompida. O status da SEFIN ficou não confirmado; teste novamente.");
+      setError(timedOut?"A verificação não respondeu dentro do prazo. O status da SEFIN ficou não confirmado; tente novamente em alguns instantes.":"A verificação foi interrompida. O status da SEFIN ficou não confirmado; teste novamente.");
     }finally{if(timeout)window.clearTimeout(timeout);setBusy(false);setConnectionStage("")}
   }
 
@@ -1740,15 +1706,9 @@ function Integrations({accessToken,onNavigate}:{accessToken:string|null;onNaviga
   const agendaState=integrationState(communicationConfig?.agenda_edu_ultimo_status,Boolean(communicationConfig?.agenda_edu_credencial_configurada));
   const sweducState=integrationState(sweducConfig?.ultimo_status,Boolean(sweducConfig?.credencial_configurada));
   const manualWhatsappState=manualWhatsappReady?{label:"Configurado",tone:"connected" as IntegrationStateTone}:{label:"Pendente",tone:"pending" as IntegrationStateTone};
-  const nfseOverallState=productionEnabled&&sefinAvailability==="available"
-    ? {label:"Pronto e enviando",tone:"connected" as IntegrationStateTone}
-    : sefinAvailability==="unstable"
-      ? {label:"Oscilação",tone:"pending" as IntegrationStateTone}
-      : sefinAvailability==="unavailable"||sefinAvailability==="session"
-        ? {label:"Indisponível",tone:"disconnected" as IntegrationStateTone}
-        : sefinAvailability==="unknown"
-          ? {label:"Não confirmado",tone:"pending" as IntegrationStateTone}
-          : {label:"Homologação",tone:"pending" as IntegrationStateTone};
+  const nfseOverallState=productionEnabled
+    ? {label:"Produção habilitada",tone:"connected" as IntegrationStateTone}
+    : {label:"Homologação",tone:"pending" as IntegrationStateTone};
 
   const integrationItems=[
     {key:"overview" as const,label:"Visão geral",Icon:SlidersHorizontal,status:"",tone:"neutral" as IntegrationStateTone},
@@ -1771,7 +1731,7 @@ function Integrations({accessToken,onNavigate}:{accessToken:string|null;onNaviga
     {section==="overview"&&<div className="integration-overview">
       <div className="integration-overview-heading"><div><h2>Integrações do sistema</h2><p>Escolha uma integração no menu acima para abrir somente as configurações daquele canal.</p></div><Status>{canEdit?"Gerenciável":"Somente leitura"}</Status></div>
       <div className="integration-overview-grid">
-        <button type="button" className="integration-overview-card nfse-overview-card" onClick={()=>setSection("nfse")}><span className="integration-icon blue"><FileCheck2/></span><div><strong>NFS-e / SEFIN</strong><small>Servidor fiscal e situação da liberação de emissão.</small></div><div className="nfse-status-pair"><span className={`nfse-state-badge ${sefinTone}`}><i/>{sefinLabel}</span><span className={`nfse-state-badge ${productionEnabled?"available":"homologation"}`}><i/>{operationalLabel}</span></div></button>
+        <button type="button" className="integration-overview-card nfse-overview-card" onClick={()=>setSection("nfse")}><span className="integration-icon blue"><FileCheck2/></span><div><strong>NFS-e / SEFIN</strong><small>Servidor fiscal e situação da liberação de emissão.</small></div><div className="nfse-status-pair"><span className={`nfse-state-badge ${productionEnabled?"available":"homologation"}`}><i/>{operationalLabel}</span></div></button>
         <button type="button" className="integration-overview-card" onClick={()=>setSection("email")}><span className="integration-icon blue"><Mail/></span><div><strong>E-mail</strong><small>Locaweb, remetente, senha e teste de entrega.</small></div><IntegrationStateBadge label={emailState.label} tone={emailState.tone}/></button>
         <button type="button" className="integration-overview-card" onClick={()=>setSection("whatsapp")}><span className="integration-icon green"><MessageCircle/></span><div><strong>WhatsApp API</strong><small>Meta Cloud API e envio oficial.</small></div><IntegrationStateBadge label={whatsappState.label} tone={whatsappState.tone}/></button>
         <button type="button" className="integration-overview-card" onClick={()=>setSection("manual-whatsapp")}><span className="integration-icon green"><MessageCircle/></span><div><strong>WhatsApps da escola</strong><small>Números manuais e mensagem padrão para responsáveis.</small></div><IntegrationStateBadge label={manualWhatsappState.label} tone={manualWhatsappState.tone}/></button>
@@ -1782,9 +1742,10 @@ function Integrations({accessToken,onNavigate}:{accessToken:string|null;onNaviga
     </div>}
 
     {section==="nfse"&&<div className="integration-detail-panel">
-      <div className="integration-detail-heading"><span className="integration-icon blue"><FileCheck2/></span><div><h2>NFS-e / SEFIN</h2><p>Ambiente fiscal, certificado A1 e situação do servidor de emissão nacional.</p></div><div className="nfse-status-pair detail"><span className={`nfse-state-badge ${sefinTone}`} title={sefinCheckedAt?`Última verificação: ${sefinCheckedAt.toLocaleTimeString("pt-BR",{hour:"2-digit",minute:"2-digit"})}`:"Verificando servidor"}><i/>{sefinLabel}</span><span className={`nfse-state-badge ${productionEnabled?"available":"homologation"}`}><i/>{operationalLabel}</span></div></div>
+      <div className="integration-detail-heading"><span className="integration-icon blue"><FileCheck2/></span><div><h2>NFS-e / SEFIN</h2><p>Ambiente fiscal, certificado A1 e situação do servidor de emissão nacional.</p></div><div className="nfse-status-pair detail"><span className={`nfse-state-badge ${productionEnabled?"available":"homologation"}`}><i/>{operationalLabel}</span></div></div>
       {error&&<div className="error-box">{error}</div>}{message&&<div className="success-box">{message}</div>}
-      <div className="integration-nfse-summary"><div><span>Servidor SEFIN</span><strong className={sefinAvailability==="available"?"green-text":sefinAvailability==="unstable"?"red-text":""}>{sefinLabel}</strong><small>{sefinAvailability==="available"?"Servidor respondendo e apto para emissão.":sefinAvailability==="unstable"?"Não enviar notas até normalizar.":"Aguardando confirmação do servidor."}</small></div><div><span>Situação fiscal</span><strong className={productionEnabled?"green-text":"amber-text"}>{productionEnabled?"Pronto e enviando":"Homologação"}</strong><small>{productionEnabled?"Emissão real oficialmente habilitada.":"Aguardando liberação final da produção."}</small></div><div><span>Segurança</span><strong>Certificado A1 + TLS</strong><small>Autenticação mútua protegida no servidor.</small></div></div>
+      {canTestFiscal&&!can("system.status.view")&&<SefinMonitor accessToken={accessToken}/>}
+      <div className="integration-nfse-summary"><div><span>Situação fiscal</span><strong className={productionEnabled?"green-text":"amber-text"}>{productionEnabled?"Pronto e enviando":"Homologação"}</strong><small>{productionEnabled?"Emissão real oficialmente habilitada.":"Aguardando liberação final da produção."}</small></div><div><span>Segurança</span><strong>Certificado A1 + TLS</strong><small>Autenticação mútua protegida no servidor.</small></div></div>
       {canTestFiscal?<form className="data-form integration-test-form" onSubmit={testHomologation}>
         <div className="notice compact warning"><ShieldCheck/><span>O teste usa o certificado A1 apenas para autenticar a conexão. Nenhuma DPS ou NFS-e será enviada.</span></div>
         {(busy||elapsed>0)&&<div className="connection-timer"><Clock3/><span>{busy?(connectionStage||"Iniciando conexão…"):"Tempo da tentativa"}</span><strong>{elapsedLabel}</strong></div>}
