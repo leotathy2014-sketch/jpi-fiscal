@@ -1156,8 +1156,15 @@
 .user-preview-banner{position:sticky;top:70px;z-index:9;display:flex;align-items:center;gap:10px;padding:10px 32px;background:#fff7e8;border-bottom:1px solid #efc36f;color:#7c4a03}.user-preview-banner>svg{width:20px;flex:none}.user-preview-banner>span{display:grid;gap:2px}.user-preview-banner strong{font-size:13px}.user-preview-banner small{font-size:10px;color:#98610d}.user-preview-banner button{margin-left:auto;min-height:32px;padding:0 12px;border:1px solid #d79a35;border-radius:8px;background:#fff;color:#7c4a03;font-weight:800}.user-preview-active .content{filter:saturate(.96)}.preview-user{color:#7c4a03!important;border-color:#e6bd73!important;background:#fff9ee!important}@media(max-width:760px){.user-preview-banner{top:70px;padding:9px 16px}.user-preview-banner small{display:none}}
 
 
-.sefin-monitor-bar{padding:8px 16px;border-bottom:1px solid var(--line);background:#fff}
 .sefin-monitor,.sefin-monitor-results{display:flex;align-items:center;flex-wrap:wrap;gap:8px;min-width:0}
 .sefin-monitor .sefin-top-status{white-space:normal;max-width:100%}
 .sefin-monitor .sefin-top-status small{font-size:10px}
 .sefin-monitor .sefin-status-dot{flex:none}
+.topbar-with-sefin{height:auto;min-height:70px;padding-block:6px;gap:12px}
+.topbar-with-sefin .sefin-monitor-results{display:grid}
+@media(max-width:1080px){.topbar-with-sefin .top-greeting{display:none}.topbar-with-sefin .topbar-right{margin-left:auto}}
+@media(max-width:620px){
+  .topbar-with-sefin .topbar-right{display:grid;grid-template-columns:minmax(0,1fr) auto}
+  .topbar-with-sefin .certificate-top-alert{display:flex;grid-column:1}
+  .topbar-with-sefin .user-menu{grid-column:2;grid-row:1}
+}

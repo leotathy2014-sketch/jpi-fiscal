@@ -1,13 +1,12 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { SefinCheck, SefinEnvironment } from "@/lib/sefin-status";
+import type { SefinCheck } from "@/lib/sefin-status";
 
-const environments = { production: "Produção", homologation: "Homologação" };
 const dateFormat = new Intl.DateTimeFormat("pt-BR", { dateStyle: "short", timeStyle: "medium", timeZone: "America/Sao_Paulo" });
 
 export function SefinMonitor({ accessToken }: { accessToken: string | null }) {
-  const [checks, setChecks] = useState<Record<SefinEnvironment, SefinCheck> | null>(null);
+  const [production, setProduction] = useState<SefinCheck | null>(null);
   const [checking, setChecking] = useState(false);
   const [error, setError] = useState("");
   const inFlight = useRef<AbortController | null>(null);
@@ -26,10 +25,10 @@ export function SefinMonitor({ accessToken }: { accessToken: string | null }) {
         signal: controller.signal,
       });
       const data = await response.json().catch(() => null);
-      if (!response.ok || !data?.production || !data?.homologation) {
+      if (!response.ok || !data?.production) {
         throw new Error(data?.error || "Não foi possível consultar o monitoramento.");
       }
-      if (inFlight.current === controller) setChecks(data);
+      if (inFlight.current === controller) setProduction(data.production);
     } catch (error) {
       if (inFlight.current !== controller) return;
       setError(controller.signal.aborted ? "A consulta ao monitoramento excedeu o tempo limite."
@@ -64,16 +63,13 @@ export function SefinMonitor({ accessToken }: { accessToken: string | null }) {
 
   return <div className="sefin-monitor">
     <div className="sefin-monitor-results" role="status">
-      {(Object.keys(environments) as SefinEnvironment[]).map(environment => {
-        const result = checks?.[environment];
-        return <div key={environment} className={`sefin-top-status ${result?.tone ?? "unknown"}`}>
-          <span className="sefin-status-dot" aria-hidden="true"/>
-          <div>
-            <strong>SEFIN {environments[environment]} {result?.detail ?? "sem verificação"}</strong>
-            {result && <small>Última verificação <time dateTime={result.checkedAt}>{dateFormat.format(new Date(result.checkedAt))}</time></small>}
-          </div>
-        </div>;
-      })}
+      <div className={`sefin-top-status ${production?.tone ?? "unknown"}`}>
+        <span className="sefin-status-dot" aria-hidden="true"/>
+        <div>
+          <strong>SEFIN Produção {production?.detail ?? "sem verificação"}</strong>
+          {production && <small>Última verificação <time dateTime={production.checkedAt}>{dateFormat.format(new Date(production.checkedAt))}</time></small>}
+        </div>
+      </div>
       {error && <small>{error}</small>}
     </div>
     <button type="button" className="secondary mini" onClick={() => void check()} disabled={!accessToken || checking}>
