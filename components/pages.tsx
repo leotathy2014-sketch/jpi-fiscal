@@ -1,7 +1,7 @@
 "use client";
 import { SefinMonitor } from "./sefin-monitor";
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { AlertCircle, ArrowUpRight, BookOpenCheck, Building2, CalendarDays, Check, CircleDollarSign, Clock3, Copy, Eye, EyeOff, FileCheck2, FilePlus2, FileText, Filter, Globe2, KeyRound, Link2, Mail, MessageCircle, MoreHorizontal, Palette, Plus, Search, ShieldCheck, SlidersHorizontal, Trash2, UploadCloud, UserCheck, UserCog, UsersRound, WalletCards, X } from "lucide-react";
+import { AlertCircle, ArrowUpRight, BookOpenCheck, Building2, CalendarDays, Check, ChevronRight, CircleDollarSign, Clock3, Copy, Eye, EyeOff, FileCheck2, FilePlus2, FileText, Filter, Globe2, KeyRound, Link2, Mail, MessageCircle, MoreHorizontal, Palette, Plus, Search, ShieldCheck, SlidersHorizontal, Trash2, UploadCloud, UserCheck, UserCog, UsersRound, WalletCards, X } from "lucide-react";
 import type { AppPage, Role } from "./app-shell";
 import { createSupabaseBrowserClient } from "@/lib/supabase";
 import { authenticatedFetch } from "@/lib/authenticated-fetch";
@@ -461,14 +461,14 @@ type Tab = "Empresa" | "Domínio" | "Declarações" | "Identidade Visual" | "Cer
 export function SettingsPage({accessToken,onNavigate}:{accessToken:string|null;onNavigate?:(page:AppPage)=>void}) {
   const {canAny,isMaster}=useAccess();
   const availableTabs=useMemo(()=>[
-    {name:"Empresa" as Tab,label:"Empresa",description:"Dados cadastrais e fiscais da instituição",Icon:Building2,permissions:["settings.company.view","settings.company.edit"]},
-    ...(isMaster?[{name:"Domínio" as Tab,label:"Domínio",description:"Endereço oficial via Locaweb ou Registro.br",Icon:Globe2,permissions:[]}]:[]),
-    {name:"Declarações" as Tab,label:"Declarações",description:"Modelos, textos, logo e assinaturas",Icon:FileText,permissions:["declarations.manage"]},
-    {name:"Identidade Visual" as Tab,label:"Identidade Visual",description:"Marca, cores e aparência do sistema",Icon:Palette,permissions:["settings.branding.view","settings.branding.edit"]},
-    {name:"Certificado A1" as Tab,label:"Certificado A1",description:"Validade e segurança da emissão fiscal",Icon:KeyRound,permissions:["settings.certificate.view","settings.certificate.manage"]},
-    {name:"Integrações" as Tab,label:"Integrações",description:"SWeduc, e-mail e canais conectados",Icon:Link2,permissions:["settings.integrations.view","settings.integrations.edit"]},
-    {name:"Comunicados" as Tab,label:"Comunicados",description:"Avisos gerais e mensagens reservadas",Icon:Mail,permissions:["system.announcements.send","settings.users.manage"]},
-    {name:"Usuários e Permissões" as Tab,label:"Usuários e Permissões",description:"Acessos, perfis e auditoria de usuários",Icon:UserCog,permissions:["settings.users.view","settings.users.manage"]},
+    {name:"Empresa" as Tab,label:"Empresa",description:"Dados cadastrais e fiscais da instituição",Icon:Building2,tone:"blue",permissions:["settings.company.view","settings.company.edit"]},
+    ...(isMaster?[{name:"Domínio" as Tab,label:"Domínio",description:"Endereço oficial via Locaweb ou Registro.br",Icon:Globe2,tone:"cyan",permissions:[]}]:[]),
+    {name:"Declarações" as Tab,label:"Declarações",description:"Modelos, textos, logo e assinaturas",Icon:FileText,tone:"violet",permissions:["declarations.manage"]},
+    {name:"Identidade Visual" as Tab,label:"Identidade Visual",description:"Marca, cores e aparência do sistema",Icon:Palette,tone:"pink",permissions:["settings.branding.view","settings.branding.edit"]},
+    {name:"Certificado A1" as Tab,label:"Certificado A1",description:"Validade e segurança da emissão fiscal",Icon:KeyRound,tone:"amber",permissions:["settings.certificate.view","settings.certificate.manage"]},
+    {name:"Integrações" as Tab,label:"Integrações",description:"SWeduc, e-mail e canais conectados",Icon:Link2,tone:"teal",permissions:["settings.integrations.view","settings.integrations.edit"]},
+    {name:"Comunicados" as Tab,label:"Comunicados",description:"Avisos gerais e mensagens reservadas",Icon:Mail,tone:"orange",permissions:["system.announcements.send","settings.users.manage"]},
+    {name:"Usuários e Permissões" as Tab,label:"Usuários e Permissões",description:"Acessos, perfis e auditoria de usuários",Icon:UserCog,tone:"indigo",permissions:["settings.users.view","settings.users.manage"]},
   ].filter(item=>item.name==="Domínio"?isMaster:canAny(item.permissions)),[canAny,isMaster]);
   const [tab,setTab]=useState<Tab>(()=>typeof window==="undefined"?"Empresa":(sessionStorage.getItem("jpi-settings-tab") as Tab)||"Empresa");
   useEffect(()=>{const target=sessionStorage.getItem("jpi-settings-tab") as Tab|null;if(target){sessionStorage.removeItem("jpi-settings-tab");setTab(target)}},[]);
@@ -478,10 +478,10 @@ export function SettingsPage({accessToken,onNavigate}:{accessToken:string|null;o
     <>
       <Heading title="Configurações" desc="Visão geral dos módulos de administração liberados para o seu perfil." />
       <div className="settings-overview" aria-label="Módulos de configurações">
-        {availableTabs.map(({name,label,description,Icon})=><button key={name} type="button" className={tab===name?"active":""} onClick={()=>setTab(name)} aria-pressed={tab===name}>
-          <span className="settings-overview-icon"><Icon/></span>
+        {availableTabs.map(({name,label,description,Icon,tone})=><button key={name} data-tone={tone} type="button" className={tab===name?"active":""} onClick={()=>setTab(name)} aria-pressed={tab===name}>
+          <span className="settings-overview-icon"><Icon aria-hidden="true"/></span>
           <span className="settings-overview-copy"><strong>{label}</strong><small>{description}</small></span>
-          <span className="settings-overview-state">{tab===name?"Em exibição":"Abrir"}</span>
+          <span className="settings-overview-state" aria-hidden="true">{tab===name?<Check size={16}/>:<ChevronRight size={16}/>}</span>
         </button>)}
       </div>
       <div className="settings-current-module"><span>Módulo selecionado</span><strong>{tab}</strong></div>
