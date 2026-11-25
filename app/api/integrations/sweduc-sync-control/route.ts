@@ -6,7 +6,7 @@ export const maxDuration=300;
 const CRM_URL="https://tkcfghalihjkrujfavcn.supabase.co";
 const CRM_PUBLIC_KEY="sb_publishable_8k_cXL0Fv09kLntxhUNcPw_TdyxTPTE";
 const corsHeaders=(origin:string|null)=>{
-  const allowed=origin==="https://crm-matriculas-lovat.vercel.app"||/^https:\/\/crm-matriculas-[a-z0-9-]+\.vercel\.app$/i.test(origin||"");
+  const allowed=origin==="https://crm.novaltsistemas.com.br"||origin==="https://crm-matriculas-lovat.vercel.app"||/^https:\/\/crm-matriculas-[a-z0-9-]+\.vercel\.app$/i.test(origin||"");
   return {"Access-Control-Allow-Origin":allowed&&origin?origin:"https://crm-matriculas-lovat.vercel.app","Access-Control-Allow-Methods":"GET,POST,OPTIONS","Access-Control-Allow-Headers":"Authorization,Content-Type","Cache-Control":"no-store","Vary":"Origin"};
 };
 const json=(body:Record<string,unknown>,status=200,origin:string|null=null)=>NextResponse.json(body,{status,headers:corsHeaders(origin)});
