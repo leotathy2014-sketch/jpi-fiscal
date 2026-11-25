@@ -1168,3 +1168,9 @@
   .topbar-with-sefin .certificate-top-alert{display:flex;grid-column:1}
   .topbar-with-sefin .user-menu{grid-column:2;grid-row:1}
 }
+.sefin-refresh{display:grid;place-items:center;flex:none;width:24px;height:24px;padding:0;border:0;border-radius:5px;background:transparent;color:inherit;cursor:pointer}
+.sefin-refresh:hover:not(:disabled){background:color-mix(in srgb,currentColor 12%,transparent)}
+.sefin-refresh:focus-visible{outline:2px solid currentColor;outline-offset:1px}
+.sefin-refresh:disabled{opacity:.55;cursor:default}
+@media(prefers-reduced-motion:no-preference){.sefin-refresh[aria-busy="true"] svg{animation:sefin-refresh-spin 1s linear infinite}}
+@keyframes sefin-refresh-spin{to{transform:rotate(360deg)}}

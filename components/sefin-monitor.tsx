@@ -1,5 +1,6 @@
 "use client";
 
+import { RefreshCw } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { SefinCheck } from "@/lib/sefin-status";
 
@@ -69,11 +70,19 @@ export function SefinMonitor({ accessToken }: { accessToken: string | null }) {
           <strong>SEFIN Produção {production?.detail ?? "sem verificação"}</strong>
           {production && <small>Última verificação <time dateTime={production.checkedAt}>{dateFormat.format(new Date(production.checkedAt))}</time></small>}
         </div>
+        <button
+          type="button"
+          className="sefin-refresh"
+          aria-label="Verificar novamente"
+          aria-busy={checking}
+          title={checking ? "Verificando…" : "Verificar novamente"}
+          onClick={() => void check()}
+          disabled={!accessToken || checking}
+        >
+          <RefreshCw size={14} aria-hidden="true"/>
+        </button>
       </div>
       {error && <small>{error}</small>}
     </div>
-    <button type="button" className="secondary mini" onClick={() => void check()} disabled={!accessToken || checking}>
-      {checking ? "Verificando…" : "Verificar novamente"}
-    </button>
   </div>;
 }
