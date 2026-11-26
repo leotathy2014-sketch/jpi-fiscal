@@ -65,6 +65,30 @@ async function saveSweducMirrorDetails(supabase:SupabaseClient,matriculaId:numbe
   if(error)throw new Error("A SWeduc retornou os dados, mas não foi possível atualizar o espelho local.");
 }
 
+async function refreshSweducMirrorResponsibilities(supabase:SupabaseClient,host:string,accessToken:string,rows:Array<Record<string,unknown>>){
+  let updated=0;let failed=0;
+  for(let offset=0;offset<rows.length;offset+=4){
+    const batch=rows.slice(offset,offset+4);
+    const results=await Promise.all(batch.map(async row=>{
+      const matriculaId=Number(row.matricula_id);
+      try{
+        const detail=await getSweducStudentDetailsWithToken(host,accessToken,matriculaId,fetch,{includeFinancial:false});
+        if(!detail.responsaveis.length)return false;
+        const writer=serviceSupabaseClient()||supabase;
+        const source=row.dados_origem&&typeof row.dados_origem==="object"?row.dados_origem as Record<string,unknown>:{};
+        const {error}=await writer.from("sweduc_alunos").update({responsaveis:detail.responsaveis,dados_origem:{...source,detalhes:detail.detalhes},sincronizado_em:new Date().toISOString()}).eq("matricula_id",matriculaId);
+        if(error)return null;
+        row.responsaveis=detail.responsaveis;
+        row.dados_origem={...((row.dados_origem as Record<string,unknown>|undefined)||{}),detalhes:detail.detalhes};
+        return true;
+      }catch{return null}
+    }));
+    updated+=results.filter(result=>result===true).length;
+    failed+=results.filter(result=>result===null).length;
+  }
+  return {updated,failed};
+}
+
 function normalizeAcademicReference(value:unknown){
   return normalizeSearchText(value).replace(/\s+/g," ").trim();
 }
@@ -384,17 +408,18 @@ export async function POST(request:NextRequest){
     try{
       const creds=await credentials(auth.supabase);activeCredentials=creds;const rawYear=Number(body.academicYear||0);const resolved=await resolveSweducAcademicYear(creds.host,Number.isSafeInteger(rawYear)&&rawYear>1900?rawYear:undefined);const activeYear=resolved.selected;const token=await createSweducAccessToken(creds);activeAccessToken=token.accessToken;await auth.supabase.from("sweduc_config").update({ultimo_status:"conectado",ultimo_erro:null,updated_at:new Date().toISOString(),updated_by:auth.user.id}).eq("id",true);
       const page=requestedPage;let lastPage=requestedPage;
-      let rows:Array<Record<string,unknown>>=[];
+      let rows:Array<Record<string,unknown>>=[];let responsibleSync={updated:0,failed:0};
       {
         const listing=await listSweducStudentsWithToken(creds.host,token.accessToken,{page,per_page:100,ano_letivo_id:activeYear.id,search:search||undefined});lastPage=Math.min(Math.max(1,Number(listing.last_page||page)),MAX_SWEDUC_PAGES);totalAvailable=Number(listing.total||0);
         const summaries=filterSweducActiveEnrollments(listing.data||[]).filter((summary:SweducStudentSummary)=>!search||String(summary.nome||"").toLocaleLowerCase("pt-BR").includes(search));
         rows=filterRowsByUnits(summaries.map(mapSummaryToGrid),syncUnits);
         await upsertSweducMirror(auth.supabase,rows);
+        responsibleSync=await refreshSweducMirrorResponsibilities(auth.supabase,creds.host,token.accessToken,rows);
         await upsertSweducAcademicReferences(auth.supabase,rows,activeYear.year);
         synced+=rows.length;
       }
       const hasNext=page<lastPage;const at=new Date().toISOString();const statusUpdate:Record<string,unknown>={ultimo_status:"conectado",ultimo_erro:null,updated_at:at,updated_by:auth.user.id};if(!hasNext){statusUpdate.sincronizada_em=at;statusUpdate.total_sincronizado=totalAvailable}await auth.supabase.from("sweduc_config").update(statusUpdate).eq("id",true);
-      return json({ok:true,synced,students:rows,page,lastPage,nextPage:hasNext?page+1:null,academicYear:activeYear.year,totalAvailable,message:hasNext?`Página ${page} de ${lastPage} do ano letivo ${activeYear.year} consultada na SWeduc.`:`Espelho do ano letivo ${activeYear.year} atualizado. Nada foi salvo no banco fiscal.`});
+      return json({ok:true,synced,detailsUpdated:responsibleSync?.updated||0,detailsFailed:responsibleSync?.failed||0,students:rows,page,lastPage,nextPage:hasNext?page+1:null,academicYear:activeYear.year,totalAvailable,message:hasNext?`Página ${page} de ${lastPage} do ano letivo ${activeYear.year} consultada na SWeduc; responsáveis atualizados em ${responsibleSync?.updated||0} matrícula(s).`:`Espelho do ano letivo ${activeYear.year} atualizado; responsáveis atualizados em ${responsibleSync?.updated||0} matrícula(s). Nada foi salvo no banco fiscal.`});
     }catch(error){const message=safeSweducError(error,activeCredentials,[activeAccessToken]);await auth.supabase.from("sweduc_config").update({ultimo_status:"erro",ultimo_erro:message,updated_at:new Date().toISOString(),updated_by:auth.user.id}).eq("id",true);return json({error:message,synced},400)}
   }
   if(action==="details"){
