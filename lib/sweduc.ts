@@ -163,7 +163,7 @@ export async function getSweducStudentDetails(credentials:SweducCredentials,matr
   return getSweducStudentDetailsWithToken(credentials.host,token.accessToken,matriculaId,fetchImpl);
 }
 
-export async function getSweducStudentDetailsWithToken(host:string,accessToken:string,matriculaId:number,fetchImpl:FetchLike=fetch){
+export async function getSweducStudentDetailsWithToken(host:string,accessToken:string,matriculaId:number,fetchImpl:FetchLike=fetch,options:{includeFinancial?:boolean}={}){
   if(!Number.isInteger(matriculaId)||matriculaId<=0)throw new Error("A matrícula informada é inválida.");
   const base=normalizeSweducHost(host);
   const headers={Accept:"application/json",Authorization:`Bearer ${accessToken}`};
@@ -217,7 +217,7 @@ export async function getSweducStudentDetailsWithToken(host:string,accessToken:s
     };
     const detalhes=(result.detalhes&&typeof result.detalhes==="object"?result.detalhes:null)||(result.data&&typeof result.data==="object"?result.data:null)||result;
     const detalheFinanceiro=collectArrays(result,["financeiro","titulos","títulos","titulos_financeiros","mensalidades","parcelas","contas_receber","cobrancas","cobranças"]);
-    const extraFinanceiro=await fetchFinancial();
+    const extraFinanceiro=options.includeFinancial===false?[]:await fetchFinancial();
     return {detalhes:detalhes as Record<string,unknown>,responsaveis:Array.isArray(nested("responsaveis"))?nested("responsaveis") as Array<Record<string,unknown>>:[],financeiro:mergeRecords([...detalheFinanceiro,...extraFinanceiro])};
   }
   throw new Error(lastError||"A SWeduc não permitiu consultar os detalhes da matrícula.");
